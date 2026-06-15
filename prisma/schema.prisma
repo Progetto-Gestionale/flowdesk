@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  clerkId         String   @unique
+  name            String?
+  email           String?
+  niche           String?
+  objectives      String?
+  plan            String   @default("trial")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Settings business
+  nomeLocale      String?
+  descrizioneBot  String?
+  maxCoperti      Int?
+  orariApertura   String?  // JSON: { lun: "12:00-15:00,19:00-23:00", ... }
+  publicId        String?  @unique // slug pubblico per widget es. "ristorante-mario"
+
+  leads            Lead[]
+  contents         Content[]
+  preventivi       Preventivo[]
+  conversazioni    Conversazione[]
+  appuntamenti     Appuntamento[]
+  slotDisponibili  SlotDisponibile[]
+}
+
+model Lead {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  email      String?
+  phone      String?
+  status     String   @default("nuovo")
+  notes      String?
+  cancellato Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Content {
+  id           String    @id @default(cuid())
+  userId       String
+  originalText String
+  channel      String
+  result       String?
+  scheduledAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Appuntamento {
+  id           String   @id @default(cuid())
+  userId       String
+  clienteNome  String?
+  clienteEmail String?
+  servizio     String?
+  data         DateTime
+  durata       Int      @default(60)
+  status       String   @default("confermato") // confermato, cancellato, completato, no_show
+  note         String?
+  coperti      Int      @default(1)
+  allergie     String?
+  occasione    String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model SlotDisponibile {
+  id        String   @id @default(cuid())
+  userId    String
+  data      DateTime // data specifica (non ricorrente)
+  oraInizio String   // "09:00"
+  oraFine   String   // "18:00"
+  durata    Int      @default(60)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Conversazione {
+  id          String   @id @default(cuid())
+  userId      String
+  clienteNome String?
+  clienteEmail String?
+  canale      String   @default("chat")
+  messaggi    String   // JSON array
+  letta       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Preventivo {
+  id           String   @id @default(cuid())
+  userId       String
+  leadId       String?
+  numero       Int
+  tipo         String   @default("preventivo") // appuntamento, tavolo, ordine, servizio, preventivo
+  clienteName  String
+  clienteEmail String?
+  items        String
+  totale       Float
+  status       String   @default("bozza")
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
