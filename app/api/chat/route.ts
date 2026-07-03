@@ -14,7 +14,6 @@ function categorizzaRichiesta(servizio: string): string {
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  fetchOptions: { agent: new (require('https').Agent)({ rejectUnauthorized: false }) },
 })
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

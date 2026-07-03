@@ -5,7 +5,6 @@ import { buildSystemPrompt } from '@/lib/botPrompt'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  fetchOptions: { agent: new (require('https').Agent)({ rejectUnauthorized: false }) },
 })
 
 export async function POST(req: Request) {

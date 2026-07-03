@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  fetchOptions: { agent: new (require('https').Agent)({ rejectUnauthorized: false }) },
 })
 
 const channelPrompts: Record<string, string> = {
