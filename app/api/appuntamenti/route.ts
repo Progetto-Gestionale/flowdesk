@@ -1,6 +1,7 @@
 import { getAuthUser, getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { currentUser } from '@clerk/nextjs/server'
 
 async function getOrCreateUser(clerkId: string) {
   let user = await prisma.user.findUnique({ where: { clerkId } })
