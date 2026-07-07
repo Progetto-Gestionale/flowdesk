@@ -24,8 +24,6 @@ interface Richiesta {
   data: string | null
   dataFine: string | null
   note: string | null
-  oraInizio: string | null
-  oraFine: string | null
   status: string
   createdAt: string
   dipendente: { id: string; nome: string; ruolo: string | null }
@@ -113,8 +111,6 @@ export default function StaffPage() {
   const [inviandoReminder, setInviandoReminder] = useState(false)
   const [reminderOk, setReminderOk] = useState<string | null>(null)
   const [copiando, setCopiando] = useState(false)
-  const [richiestaInfo, setRichiestaInfo] = useState<Richiesta | null>(null)
-  const [giornoMeseModal, setGiornoMeseModal] = useState<string | null>(null)
   const [cancellandoSett, setCancellandoSett] = useState(false)
   const [confirmCancella, setConfirmCancella] = useState(false)
 
@@ -299,11 +295,11 @@ export default function StaffPage() {
     fetchAll()
   }
 
-  async function inviaLink(dipendenteId: string, email: string, nome: string) {
+  async function inviaLink(email: string, nome: string) {
     await fetch('/api/staff/login', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, dipendenteId }),
+      body: JSON.stringify({ email }),
     })
     setLinkInviato(nome)
     setTimeout(() => setLinkInviato(null), 3000)
@@ -583,14 +579,14 @@ export default function StaffPage() {
                         })}
                         {/* Banner avvisi */}
                         {assenza && (
-                          <div onClick={e => { e.stopPropagation(); setRichiestaInfo(assenza) }}
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold truncate uppercase tracking-wide cursor-pointer ${assenza.status === 'approvata' ? 'bg-red-100 text-red-500 hover:bg-red-200' : 'bg-amber-50 text-amber-500 border border-amber-200 hover:bg-amber-100'}`}>
+                          <div className={`rounded px-1.5 py-0.5 text-[10px] font-semibold truncate uppercase tracking-wide ${assenza.status === 'approvata' ? 'bg-red-100 text-red-500' : 'bg-amber-50 text-amber-500 border border-amber-200'}`}
+                            title={assenza.note ?? undefined}>
                             {assenza.status === 'approvata' ? assenza.tipo.replace('_', ' ') : `${assenza.tipo.replace('_', ' ')} ?`}
                           </div>
                         )}
                         {preferenza && (
-                          <div onClick={e => { e.stopPropagation(); setRichiestaInfo(preferenza) }}
-                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-400 truncate uppercase tracking-wide border border-blue-100 cursor-pointer hover:bg-blue-100">
+                          <div className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-400 truncate uppercase tracking-wide border border-blue-100"
+                            title={preferenza.note ?? undefined}>
                             pref. orario
                           </div>
                         )}
@@ -625,53 +621,24 @@ export default function StaffPage() {
                       ? `${meseCal.getFullYear()}-${String(meseCal.getMonth() + 1).padStart(2, '0')}-${String(giornoNum).padStart(2, '0')}`
                       : null
                     const turniGiorno = dataCorrente ? turniMese.filter(t => t.data.split('T')[0] === dataCorrente) : []
-                    const tipiAssenza = ['assenza', 'malattia', 'permesso', 'ferie']
-                    const richiesteGiornoMese = dataCorrente ? richieste.filter(r => {
-                      if (!r.data) return false
-                      const rStart = r.data.split('T')[0]
-                      const rEnd = r.dataFine ? r.dataFine.split('T')[0] : rStart
-                      return dataCorrente >= rStart && dataCorrente <= rEnd
-                    }) : []
-                    const assenzaMese = richiesteGiornoMese.find(r => tipiAssenza.includes(r.tipo))
-                    const preferenzaMese = richiesteGiornoMese.find(r => !tipiAssenza.includes(r.tipo))
                     const isOggi = dataCorrente === toISO(new Date())
                     const isWeekend = idx % 7 >= 5
                     return (
                       <div key={idx} className={`min-h-[80px] p-1.5 border-b border-r border-gray-100
-                        ${!isDelMese ? 'bg-gray-50/60' : isWeekend ? 'bg-indigo-50/20 hover:bg-indigo-50/40' : 'bg-white hover:bg-gray-50'}
-                        ${isDelMese ? 'cursor-pointer' : ''}`}
-                        onClick={() => isDelMese && dataCorrente && setGiornoMeseModal(dataCorrente)}>
+                        ${!isDelMese ? 'bg-gray-50/60' : isWeekend ? 'bg-indigo-50/20' : 'bg-white'}`}>
                         {isDelMese && (
                           <>
                             <p className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full mb-1
                               ${isOggi ? 'bg-indigo-600 text-white' : isWeekend ? 'text-indigo-500' : 'text-gray-700'}`}>
                               {giornoNum}
                             </p>
-                            {turniGiorno.slice(0, 2).map((t, i) => (
+                            {turniGiorno.map((t, i) => (
                               <div key={i}
-                                onClick={e => { e.stopPropagation(); setGiornoMeseModal(dataCorrente) }}
+                                onClick={() => setTurnoDettaglio(turnoDettaglio?.id === t.id ? null : t)}
                                 className={`rounded px-1.5 py-0.5 text-xs font-semibold mb-0.5 cursor-pointer truncate ${colorMap[t.dipendente.id] ?? 'bg-gray-100 text-gray-600'}`}>
                                 {t.dipendente.nome.split(' ')[0]} {t.oraInizio}–{t.oraFine}
                               </div>
                             ))}
-                            {turniGiorno.length > 2 && (
-                              <div onClick={e => { e.stopPropagation(); setGiornoMeseModal(dataCorrente) }}
-                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold mb-0.5 cursor-pointer text-gray-400 bg-gray-50">
-                                +{turniGiorno.length - 2} altri
-                              </div>
-                            )}
-                            {assenzaMese && (
-                              <div onClick={e => { e.stopPropagation(); setGiornoMeseModal(dataCorrente) }}
-                                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold truncate uppercase tracking-wide cursor-pointer ${assenzaMese.status === 'approvata' ? 'bg-red-100 text-red-500 hover:bg-red-200' : 'bg-amber-50 text-amber-500 border border-amber-200 hover:bg-amber-100'}`}>
-                                {assenzaMese.dipendente.nome.split(' ')[0]} · {assenzaMese.tipo.replace('_', ' ')}
-                              </div>
-                            )}
-                            {preferenzaMese && (
-                              <div onClick={e => { e.stopPropagation(); setGiornoMeseModal(dataCorrente) }}
-                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-400 truncate uppercase tracking-wide border border-blue-100 cursor-pointer hover:bg-blue-100">
-                                {preferenzaMese.dipendente.nome.split(' ')[0]} · pref. orario
-                              </div>
-                            )}
                           </>
                         )}
                       </div>
@@ -744,7 +711,7 @@ export default function StaffPage() {
                     className="text-xs px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors font-medium">
                     📆 Disponibilità
                   </button>
-                  <button onClick={() => inviaLink(d.id, d.email, d.nome)}
+                  <button onClick={() => inviaLink(d.email, d.nome)}
                     className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors font-medium">
                     📨 Invia link
                   </button>
@@ -949,99 +916,6 @@ export default function StaffPage() {
         </div>
       )}
 
-      {/* Modal dettaglio richiesta */}
-      {richiestaInfo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setRichiestaInfo(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-bold text-gray-900">{richiestaInfo.dipendente.nome}</p>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">
-                  {richiestaInfo.tipo.replace('_', ' ')}
-                </span>
-              </div>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${richiestaInfo.status === 'approvata' ? 'bg-green-100 text-green-700' : richiestaInfo.status === 'rifiutata' ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-700'}`}>
-                {richiestaInfo.status === 'approvata' ? 'Approvata' : richiestaInfo.status === 'rifiutata' ? 'Rifiutata' : 'In attesa'}
-              </span>
-            </div>
-            {richiestaInfo.data && (
-              <p className="text-sm text-gray-600">
-                {new Date(richiestaInfo.data).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
-                {richiestaInfo.dataFine && richiestaInfo.dataFine !== richiestaInfo.data && ` → ${new Date(richiestaInfo.dataFine).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}`}
-              </p>
-            )}
-            {richiestaInfo.oraInizio && (
-              <p className="text-sm text-gray-600">Orario preferito: {richiestaInfo.oraInizio} – {richiestaInfo.oraFine}</p>
-            )}
-            {richiestaInfo.note && (
-              <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">{richiestaInfo.note}</p>
-            )}
-            <p className="text-xs text-gray-300">Inviata il {new Date(richiestaInfo.createdAt).toLocaleDateString('it-IT')}</p>
-            <button onClick={() => setRichiestaInfo(null)}
-              className="w-full border border-gray-200 text-gray-600 font-medium py-2 rounded-xl text-sm hover:bg-gray-50">
-              Chiudi
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal giorno (vista mese) */}
-      {giornoMeseModal && (() => {
-        const tipiAssenzaM = ['assenza', 'malattia', 'permesso', 'ferie']
-        const turniG = turniMese.filter(t => t.data.split('T')[0] === giornoMeseModal)
-        const richiesteG = richieste.filter(r => {
-          if (!r.data) return false
-          const rStart = r.data.split('T')[0]
-          const rEnd = (r.dataFine ?? r.data).split('T')[0]
-          return giornoMeseModal >= rStart && giornoMeseModal <= rEnd
-        })
-        const dataLabel = new Date(giornoMeseModal + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
-        return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setGiornoMeseModal(null)}>
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-gray-900 capitalize">{dataLabel}</h3>
-                <button onClick={() => setGiornoMeseModal(null)} className="text-gray-400 hover:text-gray-600">✕</button>
-              </div>
-
-              {turniG.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Turni ({turniG.length})</p>
-                  {turniG.map(t => (
-                    <div key={t.id} className={`flex items-center justify-between rounded-xl px-3 py-2 ${colorMap[t.dipendente.id] ?? 'bg-gray-100 text-gray-700'}`}>
-                      <span className="font-semibold text-sm">{t.dipendente.nome}</span>
-                      <span className="text-sm font-bold">{t.oraInizio} – {t.oraFine}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {richiesteG.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Richieste ({richiesteG.length})</p>
-                  {richiesteG.map(r => (
-                    <div key={r.id} className={`rounded-xl px-3 py-2 space-y-0.5 ${tipiAssenzaM.includes(r.tipo) ? (r.status === 'approvata' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200') : 'bg-blue-50 border border-blue-200'}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-sm text-gray-900">{r.dipendente.nome}</span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : r.status === 'rifiutata' ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-700'}`}>
-                          {r.status === 'approvata' ? 'Approvata' : r.status === 'rifiutata' ? 'Rifiutata' : 'In attesa'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600 capitalize">{r.tipo.replace('_', ' ')}{r.oraInizio ? ` · ${r.oraInizio}–${r.oraFine}` : ''}</p>
-                      {r.note && <p className="text-xs text-gray-500">{r.note}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {turniG.length === 0 && richiesteG.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-2">Nessun turno o richiesta per questo giorno</p>
-              )}
-            </div>
-          </div>
-        )
-      })()}
-
       {/* Modal aggiungi turno da cella */}
       {cellModal && (() => {
         const dispCella = (tutteDisp.find(d => d.dipendenteId === cellModal.dipendenteId)?.giorni ?? []).find(gd => gd.data === cellModal.data)
@@ -1166,15 +1040,6 @@ export default function StaffPage() {
         const totCelle = Math.ceil((offset + ultimoG.getDate()) / 7) * 7
         const oggi = toISO(new Date())
         const detSel = dispGiornoSel ? dispGiorni.find(g => g.data === dispGiornoSel) : null
-        const tipiAssenza = ['assenza', 'malattia', 'permesso', 'ferie']
-        const meseIso = `${dispMese.getFullYear()}-${String(dispMese.getMonth() + 1).padStart(2, '0')}`
-        const richiesteDelDip = richieste.filter(r => r.dipendente.id === dispModal.dipendente.id)
-        const getRichiesteGiorno = (dataStr: string) => richiesteDelDip.filter(r => {
-          if (!r.data) return false
-          const rStart = r.data.split('T')[0]
-          const rEnd = (r.dataFine ?? r.data).split('T')[0]
-          return dataStr >= rStart && dataStr <= rEnd
-        })
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
@@ -1217,9 +1082,6 @@ export default function StaffPage() {
                         const hasOrario = !!(dispGiorno?.oraInizio)
                         const isSel = dataStr === dispGiornoSel
                         const isOggi = dataStr === oggi
-                        const richGiorno = dataStr ? getRichiesteGiorno(dataStr) : []
-                        const assenzaG = richGiorno.find(r => tipiAssenza.includes(r.tipo))
-                        const prefG = richGiorno.find(r => r.tipo === 'preferenza_orario')
                         return (
                           <div key={idx}
                             onClick={() => isDelMese && dataStr && isDisp && setDispGiornoSel(isSel ? null : dataStr)}
@@ -1233,19 +1095,6 @@ export default function StaffPage() {
                                   {gNum}
                                 </p>
                                 {hasOrario && <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-0.5" title="Orario specifico"></span>}
-                                {assenzaG && (
-                                  <span onClick={e => { e.stopPropagation(); setRichiestaInfo(assenzaG) }}
-                                    className={`mt-0.5 w-full text-center text-[8px] font-bold truncate rounded cursor-pointer px-0.5
-                                      ${assenzaG.status === 'approvata' ? 'bg-red-200 text-red-700' : 'bg-amber-100 text-amber-600'}`}>
-                                    {assenzaG.tipo.replace('_', ' ')}
-                                  </span>
-                                )}
-                                {prefG && (
-                                  <span onClick={e => { e.stopPropagation(); setRichiestaInfo(prefG) }}
-                                    className="mt-0.5 w-full text-center text-[8px] font-bold truncate rounded cursor-pointer px-0.5 bg-blue-100 text-blue-600">
-                                    pref. orario
-                                  </span>
-                                )}
                               </>
                             )}
                           </div>
@@ -1262,16 +1111,6 @@ export default function StaffPage() {
                       <div className="flex items-center gap-1.5 text-xs text-gray-500">
                         <span className="w-2 h-2 rounded-full bg-red-400"></span>Orario specifico
                       </div>
-                      {richiesteDelDip.length > 0 && (
-                        <>
-                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                            <span className="w-4 h-2.5 rounded bg-amber-100 block"></span>richiesta in attesa
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                            <span className="w-4 h-2.5 rounded bg-red-200 block"></span>assenza approvata
-                          </div>
-                        </>
-                      )}
                     </div>
                   )}
 
