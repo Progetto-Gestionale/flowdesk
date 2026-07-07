@@ -41,7 +41,71 @@ model User {
   preventivi         Preventivo[]
   slotDisponibili    SlotDisponibile[]
   tavoli             Tavolo[]
+  gruppiTavoli       GruppoTavoli[]
   turni              Turno[]
+  menuCategorie      MenuCategoria[]
+  menuPiatti         MenuPiatto[]
+  ordini             Ordine[]
+  // Personalizzazione pagina ordine
+  menuLogoUrl        String?
+  menuColoreP        String?           @default("#4f46e5")
+  menuColoreS        String?           @default("#ffffff")
+  turniServizio      String?           // JSON: [{id, nome, oraInizio, oraFine}]
+  fabbisognoStaff   String?           // JSON: [{giorno: 0-6, ruolo: string, persone: number, oraInizio: string, oraFine: string}]
+}
+
+model MenuCategoria {
+  id        String       @id @default(cuid())
+  userId    String
+  nome      String
+  ordine    Int          @default(0)
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id])
+  piatti    MenuPiatto[]
+}
+
+model MenuPiatto {
+  id          String        @id @default(cuid())
+  userId      String
+  categoriaId String
+  nome        String
+  descrizione String?
+  prezzo      Float
+  immagineUrl String?
+  disponibile Boolean       @default(true)
+  ordine      Int           @default(0)
+  createdAt   DateTime      @default(now())
+  user        User          @relation(fields: [userId], references: [id])
+  categoria   MenuCategoria @relation(fields: [categoriaId], references: [id])
+  righeOrdine RigaOrdine[]
+}
+
+model Ordine {
+  id          String        @id @default(cuid())
+  userId      String
+  tavolo      String
+  tavoloId    String?
+  gruppoId    String?
+  status      String        @default("nuovo")
+  totale      Float
+  note        String?
+  createdAt   DateTime      @default(now())
+  user        User          @relation(fields: [userId], references: [id])
+  tavoloRel   Tavolo?       @relation(fields: [tavoloId], references: [id])
+  gruppoRel   GruppoTavoli? @relation(fields: [gruppoId], references: [id])
+  righe       RigaOrdine[]
+}
+
+model RigaOrdine {
+  id       String     @id @default(cuid())
+  ordineId String
+  piattoId String
+  nome     String
+  prezzo   Float
+  quantita Int
+  note     String?
+  ordine   Ordine     @relation(fields: [ordineId], references: [id])
+  piatto   MenuPiatto @relation(fields: [piattoId], references: [id])
 }
 
 model Lead {
@@ -83,20 +147,35 @@ model Appuntamento {
   allergie     String?
   occasione    String?
   tavoloId     String?
+  tavoliIds    String?
   createdAt    DateTime @default(now())
   tavolo       Tavolo?  @relation(fields: [tavoloId], references: [id])
   user         User     @relation(fields: [userId], references: [id])
+}
+
+model GruppoTavoli {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  tavoli    Tavolo[]
+  ordini    Ordine[]
 }
 
 model Tavolo {
   id           String         @id @default(cuid())
   userId       String
   numero       Int
-  posti        Int
+  etichetta    String?
+  posti        Int            @default(4)
   note         String?
+  gruppoId     String?
   createdAt    DateTime       @default(now())
   appuntamenti Appuntamento[]
+  ordini       Ordine[]
   user         User           @relation(fields: [userId], references: [id])
+  gruppo       GruppoTavoli?  @relation(fields: [gruppoId], references: [id])
 }
 
 model ListaAttesa {
