@@ -22,8 +22,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Con 2+ tavoli non creiamo GruppoTavoli permanente:
     // la fusione vale solo per questo appuntamento/turno
 
-    await prisma.appuntamento.updateMany({
-      where: { id, userId: user.id },
+    await prisma.appuntamento.update({
+      where: { id },
       data: { tavoloId, tavoliIds: tavoliIdsJson },
     })
     return NextResponse.json({ ok: true })
