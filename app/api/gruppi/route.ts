@@ -5,8 +5,18 @@ import { getAuthUser } from '@/lib/getAuthUser'
 export async function GET(req: Request) {
   const user = await getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
+  const { searchParams } = new URL(req.url)
+  const data = searchParams.get('data')
+  const turnoId = searchParams.get('turnoId')
+
+  const where: Record<string, unknown> = { userId: user.id }
+  if (data && turnoId) {
+    where.data = data
+    where.turnoId = turnoId
+  }
+
   const gruppi = await prisma.gruppoTavoli.findMany({
-    where: { userId: user.id },
+    where,
     include: { tavoli: { select: { id: true, numero: true, etichetta: true } } },
     orderBy: { createdAt: 'asc' },
   })
@@ -16,7 +26,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const user = await getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
-  const { tavoliIds } = await req.json()
+  const { tavoliIds, data, turnoId } = await req.json()
   if (!Array.isArray(tavoliIds) || tavoliIds.length < 2)
     return NextResponse.json({ error: 'Servono almeno 2 tavoli' }, { status: 400 })
 
@@ -30,6 +40,8 @@ export async function POST(req: Request) {
     data: {
       userId: user.id,
       label,
+      data: data ?? null,
+      turnoId: turnoId ?? null,
       tavoli: { connect: tavoliIds.map((id: string) => ({ id })) },
     },
     include: { tavoli: { select: { id: true, numero: true, etichetta: true } } },

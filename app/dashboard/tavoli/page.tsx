@@ -406,8 +406,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                     <div style={{ position: 'absolute', inset: -4, borderRadius: isC ? '50%' : 13, border: `2.5px ${isFusoPerTurno ? 'dashed #f97316' : `solid ${isOccupato ? '#ef4444' : '#22c55e'}`}`, pointerEvents: 'none', zIndex: 4, opacity: 0.85 }} />
                   </>
                 )}
-                {/* Bordo gruppo permanente (solo senza turno attivo) */}
-                {gruppo && !isSelected && !tavoloAppMap && (
+                {/* Bordo gruppo manuale (visibile anche con turno attivo, escluso se già auto-fuso) */}
+                {gruppo && !isSelected && !isFusoPerTurno && (
                   <div style={{ position: 'absolute', inset: -4, borderRadius: isC ? '50%' : 13, border: '2.5px dashed #f97316', pointerEvents: 'none', zIndex: 4 }} />
                 )}
                 <div data-drag={editMode && !selectMode ? "1" : undefined}
@@ -488,21 +488,26 @@ export default function TavoliPage() {
     const d = await res.json().catch(() => ({}))
     setTavoli(d.tavoli ?? []); setLoading(false)
   }
-  async function fetchGruppi() {
-    const res = await fetch('/api/gruppi', { credentials: 'include' })
+  async function fetchGruppi(data?: string, turnoId?: string) {
+    const params = data && turnoId ? `?data=${data}&turnoId=${turnoId}` : ''
+    const res = await fetch(`/api/gruppi${params}`, { credentials: 'include' })
     const d = await res.json().catch(() => ({}))
     setGruppi(d.gruppi ?? [])
   }
   useEffect(() => {
-    fetchTavoli(); fetchGruppi()
+    fetchTavoli(); fetchGruppi(giornoSel, turnoSel ?? undefined)
     fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(d => {
       setPublicId(d.user?.publicId ?? null)
       try { const ts = JSON.parse(d.user?.turniServizio ?? '[]'); setTurniServizio(ts); if (ts.length > 0) setTurnoSel(ts[0].id) } catch {}
     }).catch(() => {})
     fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? [])).catch(() => {})
-    const interval = setInterval(() => { fetchTavoli(); fetchGruppi() }, 15000)
+    const interval = setInterval(() => { fetchTavoli(); fetchGruppi(giornoSel, turnoSel ?? undefined) }, 15000)
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (turnoSel !== null) fetchGruppi(giornoSel, turnoSel)
+  }, [giornoSel, turnoSel])
 
   // Appuntamenti filtrati per giorno+turno
   const appTurno: AppuntamentoLight[] = (() => {
@@ -539,16 +544,16 @@ export default function TavoliPage() {
     await fetch('/api/gruppi', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tavoliIds: selectedIds }),
+      body: JSON.stringify({ tavoliIds: selectedIds, data: giornoSel, turnoId: turnoSel }),
     })
     setFondendo(false); setSelectedIds([]); setSelectMode(false)
-    await Promise.all([fetchTavoli(), fetchGruppi()])
+    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel ?? undefined)])
   }
 
   async function sciogliGruppo(gruppoId: string) {
     if (!confirm('Sciogliere questo gruppo di tavoli?')) return
     await fetch(`/api/gruppi/${gruppoId}`, { method: 'DELETE', credentials: 'include' })
-    await Promise.all([fetchTavoli(), fetchGruppi()])
+    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel ?? undefined)])
   }
 
   function apriModifica(t: Tavolo) { setEditTavolo(t); setFormEdit({ numero: t.numero.toString(), etichetta: t.etichetta ?? '', posti: t.posti.toString(), note: t.note ?? '' }) }
