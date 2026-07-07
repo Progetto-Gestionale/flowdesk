@@ -155,5 +155,29 @@ ${dateSettimana.map((d, i) => `- giorno ${i} (${GIORNI[i]}): ${d}`).join('\n')}
     data: dateSettimana[t.giorno] ?? dateSettimana[0],
   }))
 
-  return NextResponse.json({ turni: turniConDate, spiegazione: parsed.spiegazione })
+  // Rimuovi turni sovrapposti sulla stessa persona nello stesso giorno
+  const toMin = (h: string) => { const [hh, mm] = h.split(':').map(Number); return hh * 60 + mm }
+  const turniPuliti: typeof turniConDate = []
+  const carenze: string[] = []
+
+  for (const t of turniConDate) {
+    const conflitto = turniPuliti.find(p =>
+      p.dipendenteId === t.dipendenteId &&
+      p.giorno === t.giorno &&
+      toMin(p.oraInizio) < toMin(t.oraFine) &&
+      toMin(t.oraInizio) < toMin(p.oraFine)
+    )
+    if (conflitto) {
+      carenze.push(`${GIORNI[t.giorno]} ${t.oraInizio}–${t.oraFine}: manca personale (${t.nome} già occupato)`)
+    } else {
+      turniPuliti.push(t)
+    }
+  }
+
+  const spiegazione = [
+    parsed.spiegazione,
+    carenze.length > 0 ? `⚠️ Turni scoperti per mancanza di personale:\n${carenze.map(c => `- ${c}`).join('\n')}` : ''
+  ].filter(Boolean).join('\n\n')
+
+  return NextResponse.json({ turni: turniPuliti, spiegazione })
 }

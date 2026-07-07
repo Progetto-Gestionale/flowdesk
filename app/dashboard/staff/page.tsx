@@ -889,7 +889,7 @@ export default function StaffPage() {
               </div>
               <div className="flex gap-3 pt-1">
                 <button onClick={() => { setTurniGenerati(null); setSpiegazioneAI('') }}
-                  className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">Rigenera</button>
+                  className="flex-1 border border-red-300 text-red-600 font-semibold py-2.5 rounded-xl hover:bg-red-50 text-sm">✕ Annulla proposta</button>
                 <button onClick={salvaTurniGenerati} disabled={salvandoTurni}
                   className="flex-1 bg-green-600 text-white font-semibold py-2.5 rounded-xl hover:bg-green-700 text-sm disabled:opacity-50">
                   {salvandoTurni ? 'Salvataggio...' : '✓ Conferma e salva'}
