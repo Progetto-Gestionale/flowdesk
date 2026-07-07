@@ -488,7 +488,11 @@ function Richieste() {
     }
   }
 
-  useEffect(() => { fetchRichieste() }, [])
+  useEffect(() => {
+    fetchRichieste()
+    const interval = setInterval(fetchRichieste, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   async function handleSave(form: object) {
     try {

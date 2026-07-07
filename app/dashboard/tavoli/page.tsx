@@ -480,6 +480,8 @@ export default function TavoliPage() {
       try { const ts = JSON.parse(d.user?.turniServizio ?? '[]'); setTurniServizio(ts); if (ts.length > 0) setTurnoSel(ts[0].id) } catch {}
     }).catch(() => {})
     fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? [])).catch(() => {})
+    const interval = setInterval(() => { fetchTavoli(); fetchGruppi() }, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   // Appuntamenti filtrati per giorno+turno

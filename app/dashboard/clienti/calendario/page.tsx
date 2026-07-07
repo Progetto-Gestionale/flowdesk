@@ -85,7 +85,11 @@ export default function Calendario() {
     setTavoli(dataTavoli.tavoli ?? [])
   }
 
-  useEffect(() => { fetchAll().finally(() => setLoading(false)) }, [])
+  useEffect(() => {
+    fetchAll().finally(() => setLoading(false))
+    const interval = setInterval(fetchAll, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   function appForDay(day: Date) {
     return appuntamenti

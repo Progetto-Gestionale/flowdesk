@@ -162,7 +162,11 @@ export default function CRM() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchLeads() }, [])
+  useEffect(() => {
+    fetchLeads()
+    const interval = setInterval(fetchLeads, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   async function handleAddLead(form: { name: string; email: string; phone: string; notes: string }) {
     try {
