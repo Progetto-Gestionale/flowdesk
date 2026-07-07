@@ -99,6 +99,7 @@ export default function StaffPage() {
 
   // Fabbisogno (caricato dalle impostazioni, usato come base per la settimana)
   const [fabbisogno, setFabbisogno] = useState<Requisito[]>([])
+  const fabbisognoLoaded = useRef(false)
 
   // Genera turni
   const [fabbisognoSett, setFabbisognoSett] = useState<Requisito[]>([])
@@ -141,6 +142,7 @@ export default function StaffPage() {
     try {
       const parsed: Requisito[] = s.fabbisognoStaff ? JSON.parse(s.fabbisognoStaff) : []
       setFabbisogno(parsed)
+      fabbisognoLoaded.current = true
     } catch { /* mantieni stato corrente */ }
   }
 
@@ -174,8 +176,9 @@ export default function StaffPage() {
 
   useEffect(() => { fetchFabbisogno() }, [])
 
-  // Quando cambia settimana o template: carica da localStorage se esiste, altrimenti usa template
+  // Quando arriva il template dalle impostazioni: carica da localStorage se esiste, altrimenti usa template
   useEffect(() => {
+    if (!fabbisognoLoaded.current) return
     const key = `fabb_${toISO(settimana)}`
     const saved = localStorage.getItem(key)
     if (saved) {
@@ -184,8 +187,9 @@ export default function StaffPage() {
     setFabbisognoSett(fabbisogno)
   }, [settimana, fabbisogno])
 
-  // Salva fabbisognoSett in localStorage ogni volta che cambia
+  // Salva fabbisognoSett in localStorage solo dopo che il template è stato caricato
   useEffect(() => {
+    if (!fabbisognoLoaded.current) return
     const key = `fabb_${toISO(settimana)}`
     localStorage.setItem(key, JSON.stringify(fabbisognoSett))
   }, [fabbisognoSett, settimana])
