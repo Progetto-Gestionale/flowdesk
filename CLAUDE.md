@@ -1,156 +1,104 @@
-# FlowDesk — Contesto Progetto
+# FlowDesk — Guida per Claude
 
 ## Cos'è FlowDesk
-SaaS multi-tenant per freelancer e PMI italiane. Automatizza marketing, lead e gestione clienti in un unico posto. Powered by Claude AI. Made in Italy.
-
-## Moduli
-- **Modulo 1 — Marketing Intelligence**: analytics social, content repurposing AI, piano editoriale, report ROI
-- **Modulo 2 — Lead & Client Hub**: CRM pipeline, inbox messaggi, preventivi, calendario appuntamenti, chatbot AI
-
-## Piani e Prezzi
-- Modulo 1 solo: €39/mese (€390/anno)
-- Modulo 2 solo: €49/mese (€490/anno)
-- Bundle completo: €69/mese (€690/anno)
-- Trial: 30 giorni gratuiti, nessuna carta
+SaaS multi-tenant per ristoranti e locali italiani. Gestione tavoli, prenotazioni, staff, ordini, menu digitale, chatbot AI, CRM clienti.
 
 ## Stack Tecnico
-- **Frontend + Backend**: Next.js 16 (TypeScript), App Router
-- **Stile**: Tailwind CSS
+- **Frontend + Backend**: Next.js 16 App Router, TypeScript, Tailwind CSS
 - **Auth**: Clerk v7
-- **Database**: SQLite locale (Prisma 5) — migrare su PostgreSQL/Supabase al deploy
-- **AI**: Claude API (claude-haiku-4-5-20251001) — Anthropic SDK
-- **Pagamenti**: Stripe (da installare)
-- **Hosting**: Vercel + Hetzner (da fare)
+- **Database**: PostgreSQL su Supabase (Prisma 5)
+- **AI**: Claude API via Anthropic SDK
+- **Hosting**: Vercel + dominio flowest.it
 
-## Struttura Cartelle
-```
-flowdesk/
-├── app/
-│   ├── page.tsx                          ← Landing page con ChatWidget
-│   ├── layout.tsx                        ← ClerkProvider
-│   ├── components/
-│   │   └── ChatWidget.tsx                ← Widget chat floating (landing page)
-│   ├── dashboard/
-│   │   ├── layout.tsx                    ← Layout con Sidebar + TopBar
-│   │   ├── page.tsx                      ← Overview dashboard
-│   │   ├── check/page.tsx                ← Redirect logica (nuovo→onboarding, esistente→dashboard)
-│   │   ├── components/
-│   │   │   ├── Sidebar.tsx
-│   │   │   └── TopBar.tsx
-│   │   ├── marketing/
-│   │   │   ├── analytics/page.tsx        ← Placeholder
-│   │   │   ├── content/page.tsx          ← Content repurposing AI ✅ FUNZIONANTE
-│   │   │   ├── piano/page.tsx            ← Placeholder
-│   │   │   └── roi/page.tsx              ← Placeholder
-│   │   └── clienti/
-│   │       ├── crm/page.tsx              ← Pipeline kanban ✅ FUNZIONANTE
-│   │       ├── inbox/page.tsx            ← Messaggi chatbot ✅ FUNZIONANTE
-│   │       ├── preventivi/page.tsx       ← Preventivi ✅ FUNZIONANTE
-│   │       └── calendario/page.tsx       ← Calendario appuntamenti ✅ FUNZIONANTE
-│   ├── onboarding/page.tsx               ← 3 step (nome, settore, obiettivi)
-│   ├── sign-in/[[...sign-in]]/page.tsx
-│   ├── sign-up/[[...sign-up]]/page.tsx
-│   └── api/
-│       ├── chat/route.ts                 ← Chatbot AI (Claude) — crea lead + preventivo + conversazione
-│       ├── leads/route.ts                ← GET + POST contatti
-│       ├── leads/[id]/route.ts           ← PATCH + DELETE contatto
-│       ├── preventivi/route.ts           ← GET + POST preventivi
-│       ├── preventivi/[id]/route.ts      ← PATCH + DELETE preventivo
-│       ├── conversazioni/route.ts        ← GET conversazioni inbox
-│       ├── conversazioni/[id]/route.ts   ← PATCH (segna letta)
-│       ├── profile/route.ts              ← GET + PATCH profilo utente
-│       └── content/repurpose/route.ts    ← AI content repurposing
-├── lib/
-│   └── prisma.ts                         ← PrismaClient singleton
-├── middleware.ts                         ← Clerk auth + redirect
-├── prisma/
-│   ├── schema.prisma                     ← Schema DB
-│   ├── dev.db                            ← SQLite locale
-│   └── migrations/
-├── prisma.config.ts                      ← Config Prisma 7 (anche se usiamo v5)
-├── .env.local                            ← Chiavi API
-├── .env                                  ← DATABASE_URL per Prisma CLI
-└── CLAUDE.md                             ← Questo file
+## Regole Fondamentali
+1. **Mai usare `sudo`**
+2. **Mai usare `prisma migrate dev`** — usare sempre `prisma db push`
+3. Dopo modifiche allo schema Prisma: `npx prisma generate` + `rm -rf .next` + riavvio server
+4. Params nelle route con [id] sono `Promise` in Next.js 16: `{ params }: { params: Promise<{ id: string }> }` + `const { id } = await params`
+5. Conferma prima di operazioni distruttive
+
+## Comandi Utili
+```bash
+# Avvio server
+cd "/Users/ciccocioppotommaso/Desktop/progetto gestionale/flowdesk"
+npm run dev
+
+# Aggiorna schema DB
+npx prisma db push
+
+# Rigenera client Prisma (dopo modifiche schema)
+npx prisma generate
+
+# Pulisci cache Next.js (dopo prisma generate)
+rm -rf .next
+
+# Push su GitHub (triggera deploy automatico su Vercel)
+git add .
+git commit -m "descrizione"
+git push
 ```
 
-## Schema Database (Prisma)
-```prisma
-model User         { id, clerkId, name, email, niche, objectives, plan }
-model Lead         { id, userId, name, email, phone, status, notes }
-model Content      { id, userId, originalText, channel, result }
-model Preventivo   { id, userId, numero, clienteName, clienteEmail, items(JSON), totale, status, note }
-model Conversazione { id, userId, clienteNome, clienteEmail, canale, messaggi(JSON), letta }
-model Appuntamento  { id, userId, clienteNome, clienteEmail, servizio, data, durata, status, note }
-model SlotDisponibile { id, userId, giornoSettimana, oraInizio, oraFine, durata }
+## Struttura Cartelle Principali
 ```
+app/
+├── dashboard/
+│   ├── tavoli/          ← Gestione tavoli + mappa interattiva
+│   ├── ordini/          ← Ordini in tempo reale
+│   ├── menu/            ← Menu digitale (categorie + piatti)
+│   ├── staff/           ← Dipendenti + turni + AI genera turni
+│   ├── impostazioni/    ← Impostazioni generali + staff fabbisogno
+│   └── clienti/
+│       ├── calendario/  ← Appuntamenti/prenotazioni
+│       ├── inbox/       ← Messaggi chatbot
+│       ├── crm/         ← Pipeline clienti
+│       └── preventivi/  ← Preventivi + richieste
+├── ordina/[publicId]/[tavolo]/  ← Pagina pubblica ordini QR
+├── chat/[publicId]/             ← Widget chatbot pubblico
+└── api/                         ← Tutte le API routes
+
+lib/
+├── prisma.ts       ← PrismaClient singleton
+└── getAuthUser.ts  ← Helper auth Clerk
+
+prisma/
+└── schema.prisma   ← Schema DB
+```
+
+## Database — Modelli Principali
+- `User` — account proprietario locale (ha `fabbisognoStaff`, `turniServizio`, `publicId`, ecc.)
+- `Tavolo` — tavoli del locale
+- `GruppoTavoli` — fusione di tavoli
+- `Appuntamento` — prenotazioni (ha `tavoliIds` JSON per multi-tavolo)
+- `Dipendente` — staff con disponibilità e richieste
+- `Turno` — turni di lavoro generati
+- `DisponibilitaDipendente` — disponibilità per mese (campo `mese` non `settimana`, campo `giorni` non `disponibilita`)
+- `Ordine` / `RigaOrdine` — ordini dal QR
+- `MenuCategoria` / `MenuPiatto` — menu digitale
+- `Conversazione` — messaggi chatbot
+- `Preventivo` — preventivi/richieste clienti
+
+## Note Importanti
+- **Connessioni DB su Vercel**: usare porta `6543` con `?pgbouncer=true` nel DATABASE_URL (transaction mode). In locale va bene porta `5432`.
+- **Polling**: le pagine principali si aggiornano ogni 15 secondi automaticamente.
+- **Multi-tenant**: ogni dato è separato per `userId`.
+- **Middleware**: `proxy.ts` (non `middleware.ts`) gestisce auth Clerk.
+- **fabbisognoStaff**: salvato come JSON in `User.fabbisognoStaff`, gestito da Impostazioni → Staff.
+- **Turni AI**: `app/api/genera-turni/route.ts` usa Claude per generare turni basandosi su disponibilità dipendenti e fabbisogno impostazioni.
 
 ## Variabili d'Ambiente (.env.local)
 ```
+DATABASE_URL="postgresql://...@aws-0-eu-west-3.pooler.supabase.com:5432/postgres"
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard/check
 NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard/check
-DATABASE_URL="file:/Users/ciccocioppotommaso/Desktop/progetto gestionale/flowdesk/prisma/dev.db"
-ANTHROPIC_API_KEY=sk-ant-api03-...
-NEXT_PUBLIC_OWNER_ID=cmqdr185o00007mvo9f5gw6y6
+ANTHROPIC_API_KEY=sk-ant-...
 ```
+> Le chiavi esatte vanno chieste al proprietario del progetto — non vanno mai committate su GitHub.
 
-## Stato Avanzamento
-- [x] Landing page
-- [x] Auth Clerk (login, registrazione, Google OAuth, logout)
-- [x] Onboarding 3 step (solo nuovi utenti)
-- [x] Dashboard con sidebar navigabile
-- [x] Impostazioni profilo (salva nome + settore nel DB)
-- [x] Contatti & Pipeline (CRM kanban, modifica, elimina)
-- [x] Preventivi (crea, modifica, cambia stato, elimina)
-- [x] Content Repurposing AI
-- [x] Chatbot AI sulla landing (crea lead + preventivo + conversazione automaticamente)
-- [x] Inbox messaggi (mostra conversazioni chatbot)
-- [x] Calendario appuntamenti (vista appuntamenti + gestione slot disponibilità)
-- [x] Chatbot aggiornato per proporre slot calendario
-- [ ] Deploy online
-- [ ] Stripe pagamenti
-- [ ] Integrazioni esterne (WhatsApp, Instagram, Google Calendar)
-
-## Prossimo Step
-Costruire la pagina calendario e aggiornare il chatbot per proporre slot liberi.
-1. API slot disponibili (CRUD)
-2. API appuntamenti (CRUD)
-3. Pagina calendario con vista settimanale
-4. Aggiornare /api/chat per leggere slot liberi e prenotare
-
-## Regole di Sviluppo
-1. Mai usare `sudo`
-2. Sempre dalla cartella: `/Users/ciccocioppotommaso/Desktop/progetto gestionale/flowdesk`
-3. Usare Claude Code per modificare file — non far copiare codice a mano
-4. Conferma prima di operazioni distruttive
-5. Permessi ristretti alla cartella progetto
-
-## Comandi Utili
-```bash
-# Avvio server (terminale 1)
-cd "/Users/ciccocioppotommaso/Desktop/progetto gestionale/flowdesk"
-NODE_TLS_REJECT_UNAUTHORIZED=0 npm run dev
-
-# Migrazione DB (terminale 2)
-NODE_TLS_REJECT_UNAUTHORIZED=0 npx prisma migrate dev --name nome-migrazione
-
-# Rigenera client Prisma
-NODE_TLS_REJECT_UNAUTHORIZED=0 npx prisma generate
-```
-
-## Info Ambiente
-- Mac macOS 13 Ventura
-- Node.js v20.20.2 (/usr/local/opt/node@20/bin)
-- Cartella progetto: `/Users/ciccocioppotommaso/Desktop/progetto gestionale/flowdesk`
-- Wireframes: `/Users/ciccocioppotommaso/Desktop/progetto gestionale/FlowDesk Wireframes/`
-
-## Note Architetturali
-- SSL locale disabilitato: tutti i comandi npm/npx con NODE_TLS_REJECT_UNAUTHORIZED=0
-- Anthropic SDK: fetchOptions con rejectUnauthorized:false per stesso motivo
-- Prisma 5 (downgrade da v7 per compatibilità)
-- Multi-tenant: dati separati per userId nel DB
-- ChatWidget usa NEXT_PUBLIC_OWNER_ID per sapere a chi mandare i lead
-- Middleware protegge tutto tranne /, /sign-in, /sign-up, /api/chat
+## Deploy
+- Ogni `git push` su `main` trigera deploy automatico su Vercel
+- Vercel usa le chiavi `pk_live_` di Clerk e porta `6543` di Supabase
+- Se il build fallisce per TypeScript: controllare i log su Vercel → Deployments
