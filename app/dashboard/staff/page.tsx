@@ -548,39 +548,49 @@ export default function StaffPage() {
                       const rEnd = r.dataFine ? r.dataFine.split('T')[0] : rStart
                       return dataStr >= rStart && dataStr <= rEnd
                     })
-                    const assenza = richiesteGiorno.find(r => r.tipo === 'assenza')
-                    const preferenza = richiesteGiorno.find(r => r.tipo !== 'assenza')
+                    const tipiAssenza = ['assenza', 'malattia', 'permesso', 'ferie']
+                    const assenza = richiesteGiorno.find(r => tipiAssenza.includes(r.tipo))
+                    const preferenza = richiesteGiorno.find(r => !tipiAssenza.includes(r.tipo))
                     return (
                       <div key={i}
                         onClick={() => setCellModal({ dipendenteId: dip.id, nome: dip.nome, data: dataStr, dataLabel: g.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }), oraInizio: '09:00', oraFine: '17:00' })}
-                        className="border-l border-gray-100 min-h-[64px] p-1.5 space-y-1 cursor-pointer hover:bg-indigo-50/40 transition-colors group">
-                        {turniGiorno.map(t => (
-                          <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${colorMap[dip.id]} relative`}
-                            onClick={e => e.stopPropagation()}>
-                            <p className="font-semibold">{t.oraInizio}–{t.oraFine}</p>
-                            {t.ruolo && <p className="opacity-75 truncate">{t.ruolo}</p>}
-                            <button onClick={e => { e.stopPropagation(); eliminaTurno(t.id) }}
-                              className="absolute top-0.5 right-0.5 text-red-400 hover:text-red-600 text-xs leading-none opacity-0 group-hover:opacity-100">✕</button>
-                          </div>
-                        ))}
+                        className={`border-l border-gray-100 min-h-[64px] p-1.5 space-y-1 cursor-pointer transition-colors group ${assenza ? '' : haDisp ? 'bg-green-50/50 hover:bg-green-50' : noDisp ? 'bg-gray-50 hover:bg-gray-100/60' : 'hover:bg-indigo-50/40'}`}>
+                        {/* Indicatore disponibilità */}
+                        {!assenza && haDisp && turniGiorno.length === 0 && (
+                          <span className="inline-block text-[10px] font-medium text-green-500 leading-none">● disp.</span>
+                        )}
+                        {!assenza && noDisp && turniGiorno.length === 0 && (
+                          <span className="inline-block text-[10px] font-medium text-gray-300 leading-none">✕ n.d.</span>
+                        )}
+                        {turniGiorno.map(t => {
+                          const dispGiorno = (tutteDisp.find(d => d.dipendenteId === dip.id)?.giorni ?? []).find(gd => gd.data === dataStr)
+                          const fuoriOrario = dispGiorno?.oraInizio && (t.oraInizio < dispGiorno.oraInizio || t.oraFine > dispGiorno.oraFine)
+                          const warnTurno = noDisp || fuoriOrario
+                          return (
+                            <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${warnTurno ? 'bg-amber-100 text-amber-800' : colorMap[dip.id]} relative`}
+                              onClick={e => e.stopPropagation()}
+                              title={noDisp ? 'Non disponibile questo giorno' : fuoriOrario ? `Disponibile ${dispGiorno?.oraInizio}–${dispGiorno?.oraFine}` : undefined}>
+                              <p className="font-semibold">{warnTurno ? '⚠️ ' : ''}{t.oraInizio}–{t.oraFine}</p>
+                              {t.ruolo && <p className="opacity-75 truncate">{t.ruolo}</p>}
+                              <button onClick={e => { e.stopPropagation(); eliminaTurno(t.id) }}
+                                className="absolute top-0.5 right-0.5 text-red-400 hover:text-red-600 text-xs leading-none opacity-0 group-hover:opacity-100">✕</button>
+                            </div>
+                          )
+                        })}
                         {/* Banner avvisi */}
                         {assenza && (
-                          <div className={`rounded px-1.5 py-0.5 text-xs font-semibold truncate ${assenza.status === 'approvata' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}
+                          <div className={`rounded px-1.5 py-0.5 text-[10px] font-semibold truncate uppercase tracking-wide ${assenza.status === 'approvata' ? 'bg-red-100 text-red-500' : 'bg-amber-50 text-amber-500 border border-amber-200'}`}
                             title={assenza.note ?? undefined}>
-                            🤒 {assenza.status === 'approvata' ? 'Assente' : 'Assenza?'}
+                            {assenza.status === 'approvata' ? assenza.tipo.replace('_', ' ') : `${assenza.tipo.replace('_', ' ')} ?`}
                           </div>
                         )}
                         {preferenza && (
-                          <div className="rounded px-1.5 py-0.5 text-xs font-semibold bg-blue-50 text-blue-600 truncate"
+                          <div className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-400 truncate uppercase tracking-wide border border-blue-100"
                             title={preferenza.note ?? undefined}>
-                            ⭐ Preferenza
+                            pref. orario
                           </div>
                         )}
-                        {noDisp && !assenza && turniGiorno.length === 0 && (
-                          <div className="rounded px-1.5 py-0.5 text-xs text-gray-300 truncate">
-                            — nessuna disp.
-                          </div>
-                        )}
+
                         <p className="text-indigo-200 group-hover:text-indigo-400 text-center text-base leading-none transition-colors">+</p>
                       </div>
                     )
@@ -721,17 +731,16 @@ export default function StaffPage() {
         <div className="space-y-3">
           {richieste.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center shadow-sm">
-              <div className="text-5xl mb-4">📋</div>
-              <p className="text-gray-500 text-sm">Nessuna richiesta ricevuta</p>
+              <p className="text-gray-400 text-sm">Nessuna richiesta ricevuta</p>
             </div>
           ) : richieste.map(r => (
             <div key={r.id} className={`bg-white rounded-2xl border shadow-sm p-4 ${r.status === 'in_attesa' ? 'border-amber-200' : 'border-gray-200'}`}>
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-gray-900">{r.dipendente.nome}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                      {r.tipo === 'assenza' ? '🤒 Assenza' : '⭐ Preferenza'}
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">
+                      {r.tipo.replace('_', ' ')}
                     </span>
                   </div>
                   {r.data && (
@@ -740,23 +749,30 @@ export default function StaffPage() {
                       {r.dataFine && r.dataFine !== r.data && ` → ${new Date(r.dataFine).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}`}
                     </p>
                   )}
-                  {r.note && <p className="text-xs text-gray-400 mt-1">{r.note}</p>}
+                  {r.note && <p className="text-xs text-gray-400 mt-1 truncate">{r.note}</p>}
                   <p className="text-xs text-gray-300 mt-1">{new Date(r.createdAt).toLocaleDateString('it-IT')}</p>
                 </div>
-                <div className="flex gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {r.status === 'in_attesa' && (
                     <>
                       <button onClick={() => aggiornaRichiesta(r.id, 'approvata')}
-                        className="text-xs px-2 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-medium">✓ Approva</button>
+                        className="text-xs px-2.5 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-medium border border-green-200">Approva</button>
                       <button onClick={() => aggiornaRichiesta(r.id, 'rifiutata')}
-                        className="text-xs px-2 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium">✕ Rifiuta</button>
+                        className="text-xs px-2.5 py-1 bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 font-medium border border-gray-200">Rifiuta</button>
                     </>
                   )}
                   {r.status !== 'in_attesa' && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                      {r.status === 'approvata' ? '✓ Approvata' : '✕ Rifiutata'}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {r.status === 'approvata' ? 'Approvata' : 'Rifiutata'}
                     </span>
                   )}
+                  <button onClick={async () => {
+                    if (!confirm('Eliminare questa richiesta?')) return
+                    await fetch(`/api/richieste-staff/${r.id}`, { method: 'DELETE', credentials: 'include' })
+                    fetchAll()
+                  }} className="text-xs px-2 py-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors font-medium">
+                    Elimina
+                  </button>
                 </div>
               </div>
             </div>
@@ -901,13 +917,28 @@ export default function StaffPage() {
       )}
 
       {/* Modal aggiungi turno da cella */}
-      {cellModal && (
+      {cellModal && (() => {
+        const dispCella = (tutteDisp.find(d => d.dipendenteId === cellModal.dipendenteId)?.giorni ?? []).find(gd => gd.data === cellModal.data)
+        const hasDispCella = tutteDisp.some(d => d.dipendenteId === cellModal.dipendenteId)
+        const noDispCella = hasDispCella && !dispCella
+        const fuoriOrarioCella = dispCella?.oraInizio && (cellModal.oraInizio < dispCella.oraInizio || cellModal.oraFine > dispCella.oraFine)
+        return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 space-y-4">
             <div>
               <h3 className="text-base font-bold text-gray-900">{cellModal.nome}</h3>
               <p className="text-sm text-gray-500">{cellModal.dataLabel}</p>
             </div>
+            {noDispCella && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
+                ⚠️ Questo dipendente non ha dichiarato disponibilità per questo giorno.
+              </div>
+            )}
+            {fuoriOrarioCella && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
+                ⚠️ Disponibile solo dalle {dispCella?.oraInizio} alle {dispCella?.oraFine}.
+              </div>
+            )}
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Dalle</label>
@@ -932,7 +963,8 @@ export default function StaffPage() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Modal modifica dipendente */}
       {dipendenteDaModificare && (

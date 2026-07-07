@@ -27,6 +27,21 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   })
   if (!richiesta || richiesta.dipendente.userId !== user.id)
     return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
+
+  // Se era un'assenza approvata, elimina anche i turni nel periodo
+  const tipiAssenza = ['assenza', 'malattia', 'permesso', 'ferie']
+  if (richiesta.status === 'approvata' && tipiAssenza.includes(richiesta.tipo) && richiesta.data) {
+    await prisma.turno.deleteMany({
+      where: {
+        dipendenteId: richiesta.dipendenteId,
+        data: {
+          gte: richiesta.data,
+          lte: richiesta.dataFine ?? richiesta.data,
+        },
+      },
+    })
+  }
+
   await prisma.richiestaDipendente.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }

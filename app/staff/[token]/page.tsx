@@ -17,6 +17,8 @@ interface Richiesta {
   data: string | null
   dataFine: string | null
   note: string | null
+  oraInizio: string | null
+  oraFine: string | null
   status: string
   createdAt: string
 }
@@ -37,13 +39,16 @@ interface GiornoDisponibile {
 }
 
 const TIPO_LABEL: Record<string, string> = {
-  assenza: '🤒 Assenza',
-  preferenza: '⭐ Preferenza orario',
+  assenza: 'Assenza',
+  malattia: 'Malattia',
+  permesso: 'Permesso',
+  ferie: 'Ferie',
+  preferenza_orario: 'Preferenza orario',
 }
 const STATUS_COLOR: Record<string, string> = {
-  in_attesa: 'bg-amber-100 text-amber-700',
-  approvata: 'bg-green-100 text-green-700',
-  rifiutata: 'bg-red-100 text-red-700',
+  in_attesa: 'bg-amber-50 text-amber-600 border border-amber-200',
+  approvata: 'bg-green-50 text-green-600 border border-green-200',
+  rifiutata: 'bg-gray-100 text-gray-500',
 }
 const STATUS_LABEL: Record<string, string> = {
   in_attesa: 'In attesa',
@@ -73,7 +78,8 @@ export default function StaffAreaPage() {
 
   // Form richiesta
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ tipo: 'assenza', data: '', dataFine: '', note: '' })
+  const [form, setForm] = useState({ tipo: 'malattia', data: '', dataFine: '', note: '', oraInizio: '', oraFine: '' })
+  const [editingRichiesta, setEditingRichiesta] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   // Disponibilità
@@ -115,15 +121,45 @@ export default function StaffAreaPage() {
 
   async function inviaRichiesta() {
     setSaving(true)
-    await fetch(`/api/staff/me?token=${token}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    setSaving(false)
-    setShowForm(false)
-    setForm({ tipo: 'assenza', data: '', dataFine: '', note: '' })
+    try {
+      const method = editingRichiesta ? 'PATCH' : 'POST'
+      const body = editingRichiesta ? { id: editingRichiesta, ...form } : form
+      const res = await fetch(`/api/staff/me?token=${token}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Errore durante il salvataggio')
+        return
+      }
+      setShowForm(false)
+      setEditingRichiesta(null)
+      setForm({ tipo: 'malattia', data: '', dataFine: '', note: '', oraInizio: '', oraFine: '' })
+      fetchMe()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function eliminaRichiesta(id: string) {
+    if (!confirm('Rimuovere questa richiesta?')) return
+    await fetch(`/api/staff/me?token=${token}&richiestaId=${id}`, { method: 'DELETE' })
     fetchMe()
+  }
+
+  function apriModifica(r: Richiesta) {
+    setEditingRichiesta(r.id)
+    setForm({
+      tipo: r.tipo,
+      data: r.data ? r.data.split('T')[0] : '',
+      dataFine: r.dataFine ? r.dataFine.split('T')[0] : '',
+      note: r.note ?? '',
+      oraInizio: r.oraInizio ?? '',
+      oraFine: r.oraFine ?? '',
+    })
+    setShowForm(true)
   }
 
   function toggleGiorno(dataStr: string) {
@@ -350,6 +386,15 @@ export default function StaffAreaPage() {
               </div>
             </div>
 
+            {/* Tasto salva — sopra la lista giorni */}
+            <button onClick={salvaDisponibilita} disabled={savingDisp || (!dispModificata && dispSalvata)}
+              className={`w-full font-semibold py-2.5 rounded-xl text-sm transition-colors
+                ${!dispModificata && dispSalvata
+                  ? 'bg-green-100 text-green-700 border border-green-300 cursor-default'
+                  : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'}`}>
+              {savingDisp ? 'Salvataggio...' : (!dispModificata && dispSalvata) ? '✅ Salvato' : 'Salva disponibilità'}
+            </button>
+
             {/* Lista giorni selezionati con banner "Decidi orario" */}
             {giorniDisp.length > 0 && (
               <div className="space-y-2">
@@ -436,15 +481,33 @@ export default function StaffAreaPage() {
             {dipendente.richieste.map(r => (
               <div key={r.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 text-sm">{TIPO_LABEL[r.tipo] || r.tipo}</p>
-                    {r.data && (
-                      <p className="text-gray-500 text-xs mt-0.5">
-                        {new Date(r.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}
-                        {r.dataFine && r.dataFine !== r.data && ` → ${new Date(r.dataFine).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}`}
-                      </p>
+                    {r.tipo === 'preferenza_orario' ? (
+                      r.oraInizio && <p className="text-gray-500 text-xs mt-0.5">{r.oraInizio} – {r.oraFine}{r.data && `, ${new Date(r.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}`}</p>
+                    ) : (
+                      r.data && (
+                        <p className="text-gray-500 text-xs mt-0.5">
+                          {new Date(r.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}
+                          {r.dataFine && r.dataFine !== r.data && ` → ${new Date(r.dataFine).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}`}
+                        </p>
+                      )
                     )}
-                    {r.note && <p className="text-gray-400 text-xs mt-1">{r.note}</p>}
+                    {r.note && <p className="text-gray-400 text-xs mt-1 truncate">{r.note}</p>}
+                    {(r.status === 'in_attesa' || r.tipo === 'preferenza_orario') && (
+                      <div className="flex gap-2 mt-2">
+                        {r.status === 'in_attesa' && (
+                          <button onClick={() => apriModifica(r)}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-medium transition-colors">
+                            Modifica
+                          </button>
+                        )}
+                        <button onClick={() => eliminaRichiesta(r.id)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 font-medium transition-colors">
+                          Rimuovi
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLOR[r.status]}`}>
                     {STATUS_LABEL[r.status]}
@@ -460,28 +523,53 @@ export default function StaffAreaPage() {
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="text-lg font-bold text-gray-900">Nuova richiesta</h3>
+            <h3 className="text-lg font-bold text-gray-900">{editingRichiesta ? 'Modifica richiesta' : 'Nuova richiesta'}</h3>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
                 <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="assenza">🤒 Assenza / Malattia</option>
-                  <option value="preferenza">⭐ Preferenza orario</option>
+                  <option value="malattia">Malattia</option>
+                  <option value="assenza">Assenza</option>
+                  <option value="permesso">Permesso</option>
+                  <option value="ferie">Ferie</option>
+                  <option value="preferenza_orario">Preferenza orario</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dal</label>
-                  <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              {form.tipo === 'preferenza_orario' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Giorno (opzionale)</label>
+                    <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Dalle</label>
+                      <input type="time" value={form.oraInizio} onChange={e => setForm(f => ({ ...f, oraInizio: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Alle</label>
+                      <input type="time" value={form.oraFine} onChange={e => setForm(f => ({ ...f, oraFine: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Al (opzionale)</label>
-                  <input type="date" value={form.dataFine} onChange={e => setForm(f => ({ ...f, dataFine: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Dal</label>
+                    <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Al (opzionale)</label>
+                    <input type="date" value={form.dataFine} onChange={e => setForm(f => ({ ...f, dataFine: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
                 </div>
-              </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
                 <textarea value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
@@ -490,10 +578,11 @@ export default function StaffAreaPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">
+              <button onClick={() => { setShowForm(false); setEditingRichiesta(null); setForm({ tipo: 'malattia', data: '', dataFine: '', note: '', oraInizio: '', oraFine: '' }) }}
+                className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">
                 Annulla
               </button>
-              <button onClick={inviaRichiesta} disabled={saving || !form.data}
+              <button onClick={inviaRichiesta} disabled={saving || (form.tipo !== 'preferenza_orario' && !form.data)}
                 className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50">
                 {saving ? 'Invio...' : 'Invia richiesta'}
               </button>

@@ -231,6 +231,8 @@ model RichiestaDipendente {
   data         DateTime?
   dataFine     DateTime?
   note         String?
+  oraInizio    String?
+  oraFine      String?
   status       String     @default("in_attesa")
   createdAt    DateTime   @default(now())
   dipendente   Dipendente @relation(fields: [dipendenteId], references: [id])
