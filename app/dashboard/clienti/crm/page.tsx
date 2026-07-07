@@ -164,7 +164,7 @@ export default function CRM() {
 
   useEffect(() => {
     fetchLeads()
-    const interval = setInterval(fetchLeads, 5000)
+    const interval = setInterval(fetchLeads, 15000)
     return () => clearInterval(interval)
   }, [])
 

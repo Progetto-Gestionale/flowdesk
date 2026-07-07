@@ -87,7 +87,7 @@ export default function Calendario() {
 
   useEffect(() => {
     fetchAll().finally(() => setLoading(false))
-    const interval = setInterval(fetchAll, 5000)
+    const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
   }, [])
 

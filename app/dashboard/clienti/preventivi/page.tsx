@@ -490,7 +490,7 @@ function Richieste() {
 
   useEffect(() => {
     fetchRichieste()
-    const interval = setInterval(fetchRichieste, 5000)
+    const interval = setInterval(fetchRichieste, 15000)
     return () => clearInterval(interval)
   }, [])
 

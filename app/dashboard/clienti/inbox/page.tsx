@@ -48,7 +48,7 @@ export default function Inbox() {
 
   useEffect(() => {
     fetchConversazioni()
-    const interval = setInterval(fetchConversazioni, 5000)
+    const interval = setInterval(fetchConversazioni, 15000)
     return () => clearInterval(interval)
   }, [])
 
