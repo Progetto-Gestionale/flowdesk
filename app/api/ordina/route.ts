@@ -59,6 +59,7 @@ export async function POST(req: Request) {
     } catch {}
 
     // Cerca il gruppo per oggi + turno attivo che contiene questo tavolo
+    console.log('[ordina] cerca gruppo:', { dataStr, turnoAttivoId, tavoloId })
     const gruppo = await prisma.gruppoTavoli.findFirst({
       where: {
         userId: user.id,
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
         tavoli: { some: { id: tavoloId } },
       },
     })
+    console.log('[ordina] gruppo trovato:', gruppo?.id ?? 'nessuno')
 
     if (gruppo) {
       gruppoId = gruppo.id
