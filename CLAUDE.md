@@ -102,3 +102,25 @@ ANTHROPIC_API_KEY=sk-ant-...
 - Ogni `git push` su `main` trigera deploy automatico su Vercel
 - Vercel usa le chiavi `pk_live_` di Clerk e porta `6543` di Supabase
 - Se il build fallisce per TypeScript: controllare i log su Vercel → Deployments
+
+## Collaborazione in Team
+**Repository:** https://github.com/Progetto-Gestionale/flowdesk
+
+**Prima volta (setup):**
+```bash
+git clone https://github.com/Progetto-Gestionale/flowdesk.git
+cd flowdesk
+npm install
+```
+Poi creare `.env.local` con le chiavi fornite dal proprietario del progetto.
+
+**Flusso di lavoro quotidiano:**
+```bash
+git pull                        # sempre prima di iniziare
+# ...lavora e modifica file...
+git add .
+git commit -m "descrizione"
+git push                        # trigera deploy automatico su Vercel
+```
+
+**Regola fondamentale:** fare sempre `git pull` prima di iniziare a lavorare per evitare conflitti.
