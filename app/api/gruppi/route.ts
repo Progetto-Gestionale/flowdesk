@@ -10,9 +10,9 @@ export async function GET(req: Request) {
   const turnoId = searchParams.get('turnoId')
 
   const where: Record<string, unknown> = { userId: user.id }
-  if (data && turnoId) {
+  if (data) {
     where.data = data
-    where.turnoId = turnoId
+    where.turnoId = turnoId ?? null
   }
 
   const gruppi = await prisma.gruppoTavoli.findMany({

@@ -488,25 +488,42 @@ export default function TavoliPage() {
     const d = await res.json().catch(() => ({}))
     setTavoli(d.tavoli ?? []); setLoading(false)
   }
-  async function fetchGruppi(data?: string, turnoId?: string) {
-    const params = data && turnoId ? `?data=${data}&turnoId=${turnoId}` : ''
-    const res = await fetch(`/api/gruppi${params}`, { credentials: 'include' })
+  const giornoSelRef = useRef(giornoSel)
+  const turnoSelRef = useRef(turnoSel)
+  useEffect(() => { giornoSelRef.current = giornoSel }, [giornoSel])
+  useEffect(() => { turnoSelRef.current = turnoSel }, [turnoSel])
+
+  async function fetchGruppi(data: string, turnoId: string | null) {
+    const params = new URLSearchParams({ data })
+    if (turnoId) params.set('turnoId', turnoId)
+    const res = await fetch(`/api/gruppi?${params}`, { credentials: 'include' })
     const d = await res.json().catch(() => ({}))
     setGruppi(d.gruppi ?? [])
   }
   useEffect(() => {
-    fetchTavoli(); fetchGruppi(giornoSel, turnoSel ?? undefined)
+    fetchTavoli()
     fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(d => {
       setPublicId(d.user?.publicId ?? null)
-      try { const ts = JSON.parse(d.user?.turniServizio ?? '[]'); setTurniServizio(ts); if (ts.length > 0) setTurnoSel(ts[0].id) } catch {}
+      try {
+        const ts = JSON.parse(d.user?.turniServizio ?? '[]')
+        setTurniServizio(ts)
+        const primo = ts.length > 0 ? ts[0].id : null
+        setTurnoSel(primo)
+        fetchGruppi(giornoSelRef.current, primo)
+      } catch {
+        fetchGruppi(giornoSelRef.current, null)
+      }
     }).catch(() => {})
     fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? [])).catch(() => {})
-    const interval = setInterval(() => { fetchTavoli(); fetchGruppi(giornoSel, turnoSel ?? undefined) }, 15000)
+    const interval = setInterval(() => {
+      fetchTavoli()
+      fetchGruppi(giornoSelRef.current, turnoSelRef.current)
+    }, 15000)
     return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
-    if (turnoSel !== null) fetchGruppi(giornoSel, turnoSel)
+    fetchGruppi(giornoSel, turnoSel)
   }, [giornoSel, turnoSel])
 
   // Appuntamenti filtrati per giorno+turno
@@ -547,13 +564,13 @@ export default function TavoliPage() {
       body: JSON.stringify({ tavoliIds: selectedIds, data: giornoSel, turnoId: turnoSel }),
     })
     setFondendo(false); setSelectedIds([]); setSelectMode(false)
-    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel ?? undefined)])
+    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
   }
 
   async function sciogliGruppo(gruppoId: string) {
     if (!confirm('Sciogliere questo gruppo di tavoli?')) return
     await fetch(`/api/gruppi/${gruppoId}`, { method: 'DELETE', credentials: 'include' })
-    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel ?? undefined)])
+    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
   }
 
   function apriModifica(t: Tavolo) { setEditTavolo(t); setFormEdit({ numero: t.numero.toString(), etichetta: t.etichetta ?? '', posti: t.posti.toString(), note: t.note ?? '' }) }
