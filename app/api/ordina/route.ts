@@ -11,16 +11,19 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const publicId = searchParams.get('publicId')
   if (!publicId) return NextResponse.json({ error: 'publicId mancante' }, { status: 400 })
-  const user = await prisma.user.findUnique({ where: { publicId } })
-  if (!user) return NextResponse.json({ error: 'Locale non trovato' }, { status: 404 })
-  const categorie = await prisma.menuCategoria.findMany({
-    where: { userId: user.id },
-    orderBy: { ordine: 'asc' },
+  const user = await prisma.user.findUnique({
+    where: { publicId },
     include: {
-      piatti: { where: { disponibile: true }, orderBy: { ordine: 'asc' } },
+      menuCategorie: {
+        orderBy: { ordine: 'asc' as const },
+        include: {
+          piatti: { where: { disponibile: true }, orderBy: { ordine: 'asc' as const } },
+        },
+      },
     },
   })
-  return NextResponse.json({ categorie, nomeLocale: user.nomeLocale })
+  if (!user) return NextResponse.json({ error: 'Locale non trovato' }, { status: 404 })
+  return NextResponse.json({ user })
 }
 
 // POST — crea ordine
