@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { IconTrash, IconHourglass } from '../../../components/icons'
 
 const GIORNI_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_FULL = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
@@ -44,7 +45,7 @@ function isSameDay(a: Date, b: Date) {
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-  confermato: { bg: 'bg-indigo-100', text: 'text-indigo-700', dot: 'bg-indigo-500' },
+  confermato: { bg: 'bg-electric-blue/15', text: 'text-electric-blue', dot: 'bg-electric-blue' },
   completato: { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   no_show: { bg: 'bg-orange-100', text: 'text-orange-600', dot: 'bg-orange-400' },
   cancellato: { bg: 'bg-red-100', text: 'text-red-500', dot: 'bg-red-400' },
@@ -181,7 +182,7 @@ export default function Calendario() {
       })
       if (!res.ok) {
         const err = await res.json()
-        if (err.conflitto) alert('⚠️ Uno dei tavoli è già occupato in questo orario.')
+        if (err.conflitto) alert('Uno dei tavoli è già occupato in questo orario.')
         else alert('Errore nel salvataggio. Riprova.')
       } else {
         await fetchAll()
@@ -228,7 +229,7 @@ export default function Calendario() {
       {attesaBanner && (
         <div className="mb-4 bg-amber-50 border border-amber-300 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">⏳</span>
+            <span className="w-9 h-9 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center p-2 shrink-0"><IconHourglass /></span>
             <div>
               <p className="font-semibold text-amber-800">
                 {attesaBanner.count === 1 ? '1 persona in lista d\'attesa' : `${attesaBanner.count} persone in lista d'attesa`} per questa data
@@ -249,39 +250,39 @@ export default function Calendario() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Calendario</h1>
-          <p className="text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-ink-navy">Calendario</h1>
+          <p className="text-ink-navy/50 mt-0.5">
             {appProssimi > 0
-              ? <span className="text-indigo-600 font-medium">{appProssimi} prenotazioni in programma</span>
+              ? <span className="text-electric-blue font-medium">{appProssimi} prenotazioni in programma</span>
               : 'Nessuna prenotazione in programma'}
           </p>
         </div>
         <button onClick={() => { setFormApp(f => ({ ...f, data: '' })); setShowNuovo(true) }}
-          className="bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+          className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90 transition-colors">
           + Nuova prenotazione
         </button>
       </div>
 
-      {loading ? <div className="text-center text-gray-400 py-12">Caricamento...</div> : (
+      {loading ? <div className="text-center text-ink-navy/35 py-12">Caricamento...</div> : (
         <div className="flex gap-5">
 
           {/* ── MINI CALENDARIO ── */}
           <div className="w-56 shrink-0 space-y-4">
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
+            <div className="bg-white border border-ink-navy/10 rounded-xl p-3">
               {/* Navigazione mese */}
               <div className="flex items-center justify-between mb-2">
                 <button onClick={() => setMiniMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-                  className="text-gray-400 hover:text-gray-700 text-sm px-1">‹</button>
-                <span className="text-xs font-semibold text-gray-700">
+                  className="text-ink-navy/35 hover:text-ink-navy/70 text-sm px-1">‹</button>
+                <span className="text-xs font-semibold text-ink-navy/70">
                   {MESI[miniMonth.getMonth()].slice(0,3)} {miniMonth.getFullYear()}
                 </span>
                 <button onClick={() => setMiniMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-                  className="text-gray-400 hover:text-gray-700 text-sm px-1">›</button>
+                  className="text-ink-navy/35 hover:text-ink-navy/70 text-sm px-1">›</button>
               </div>
               {/* Giorni della settimana */}
               <div className="grid grid-cols-7 mb-1">
                 {GIORNI_SHORT.map(g => (
-                  <div key={g} className="text-center text-[10px] font-semibold text-gray-400">{g[0]}</div>
+                  <div key={g} className="text-center text-[10px] font-semibold text-ink-navy/35">{g[0]}</div>
                 ))}
               </div>
               {/* Griglia giorni */}
@@ -294,13 +295,13 @@ export default function Calendario() {
                   return (
                     <button key={i} onClick={() => jumpToDay(day)}
                       className={`relative flex flex-col items-center justify-center h-7 rounded-md text-xs font-medium transition-colors ${
-                        isToday ? 'bg-indigo-600 text-white' :
-                        isInWeek ? 'bg-indigo-50 text-indigo-700' :
-                        'text-gray-600 hover:bg-gray-100'
+                        isToday ? 'bg-electric-blue text-white' :
+                        isInWeek ? 'bg-electric-blue/10 text-electric-blue' :
+                        'text-ink-navy/60 hover:bg-mist'
                       }`}>
                       {day.getDate()}
                       {hasDot && !isToday && (
-                        <span className={`absolute bottom-0.5 w-1 h-1 rounded-full ${isInWeek ? 'bg-indigo-400' : 'bg-indigo-300'}`} />
+                        <span className={`absolute bottom-0.5 w-1 h-1 rounded-full ${isInWeek ? 'bg-electric-blue' : 'bg-electric-blue/40'}`} />
                       )}
                     </button>
                   )
@@ -309,23 +310,23 @@ export default function Calendario() {
               {/* Torna ad oggi */}
               <div className="flex gap-1.5 mt-2">
                 <button onClick={() => { setWeekStart(getMonday(today)); setMiniMonth(new Date(today.getFullYear(), today.getMonth(), 1)) }}
-                  className="flex-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1 border border-indigo-200 rounded-lg hover:bg-indigo-50">
+                  className="flex-1 text-xs text-electric-blue hover:text-ink-navy font-medium py-1 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
                   Oggi
                 </button>
                 <button onClick={() => setVistaMensile(true)}
-                  className="flex-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1 border border-indigo-200 rounded-lg hover:bg-indigo-50">
+                  className="flex-1 text-xs text-electric-blue hover:text-ink-navy font-medium py-1 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
                   Espandi
                 </button>
               </div>
             </div>
 
             {/* Legenda */}
-            <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-1.5">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Legenda</p>
+            <div className="bg-white border border-ink-navy/10 rounded-xl p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Legenda</p>
               {Object.entries(STATUS_COLORS).map(([key, c]) => (
                 <div key={key} className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
-                  <span className="text-xs text-gray-600 capitalize">{key === 'no_show' ? 'No-show' : key}</span>
+                  <span className="text-xs text-ink-navy/60 capitalize">{key === 'no_show' ? 'No-show' : key}</span>
                 </div>
               ))}
             </div>
@@ -336,12 +337,12 @@ export default function Calendario() {
             {/* Navigazione settimana */}
             <div className="flex items-center justify-between mb-3">
               <button onClick={() => setWeekStart(d => addDays(d, -7))}
-                className="text-sm text-gray-500 hover:text-gray-900 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                className="text-sm text-ink-navy/50 hover:text-ink-navy px-3 py-1.5 border border-ink-navy/10 rounded-lg hover:bg-mist transition-colors">
                 ← Prec.
               </button>
-              <span className="text-sm font-semibold text-gray-700">{weekLabel}</span>
+              <span className="text-sm font-semibold text-ink-navy/70">{weekLabel}</span>
               <button onClick={() => setWeekStart(d => addDays(d, 7))}
-                className="text-sm text-gray-500 hover:text-gray-900 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                className="text-sm text-ink-navy/50 hover:text-ink-navy px-3 py-1.5 border border-ink-navy/10 rounded-lg hover:bg-mist transition-colors">
                 Succ. →
               </button>
             </div>
@@ -360,15 +361,15 @@ export default function Calendario() {
                     <div
                       onClick={() => openNuovoConData(day)}
                       className={`rounded-t-xl px-2 py-2 text-center cursor-pointer transition-colors mb-1 ${
-                        isT ? 'bg-indigo-600 text-white' :
-                        isPast ? 'bg-gray-100 text-gray-400' :
-                        'bg-gray-100 text-gray-700 hover:bg-indigo-50 hover:text-indigo-700'
+                        isT ? 'bg-electric-blue text-white' :
+                        isPast ? 'bg-mist text-ink-navy/35' :
+                        'bg-mist text-ink-navy/70 hover:bg-electric-blue/10 hover:text-electric-blue'
                       }`}>
                       <p className="text-[10px] font-semibold uppercase tracking-wider">{GIORNI_SHORT[di]}</p>
                       <p className={`text-lg font-bold leading-tight ${isT ? 'text-white' : ''}`}>{day.getDate()}</p>
                       {totaleCoperti > 0 && (
-                        <p className={`text-[9px] font-semibold mt-0.5 ${isT ? 'text-indigo-200' : 'text-orange-500'}`}>
-                          🪑 {totaleCoperti}
+                        <p className={`text-[9px] font-semibold mt-0.5 ${isT ? 'text-electric-blue/50' : 'text-orange-500'}`}>
+                          {totaleCoperti}
                         </p>
                       )}
                     </div>
@@ -386,7 +387,7 @@ export default function Calendario() {
                             <p className="text-[11px] font-bold leading-tight truncate">{ora}</p>
                             <p className="text-[11px] font-semibold truncate leading-tight">{a.clienteNome || 'Cliente'}</p>
                             <div className="flex gap-1.5 flex-wrap mt-0.5">
-                              {(a.coperti ?? 1) > 1 && <p className="text-[10px] opacity-70">🪑 {a.coperti}</p>}
+                              {(a.coperti ?? 1) > 1 && <p className="text-[10px] opacity-70">{a.coperti}</p>}
                               {tavoliApp.length > 0 && <p className="text-[10px] opacity-70">T{tavoliApp.map(t=>t.numero).join('+')}</p>}
                             </div>
                           </div>
@@ -395,7 +396,7 @@ export default function Calendario() {
                       {/* Bottone aggiungi */}
                       {!isPast && (
                         <button onClick={() => openNuovoConData(day)}
-                          className="w-full text-[11px] text-gray-300 hover:text-indigo-400 py-1 text-center border border-dashed border-gray-200 hover:border-indigo-300 rounded-lg transition-colors">
+                          className="w-full text-[11px] text-ink-navy/25 hover:text-electric-blue py-1 text-center border border-dashed border-ink-navy/10 hover:border-electric-blue/40 rounded-lg transition-colors">
                           +
                         </button>
                       )}
@@ -424,13 +425,13 @@ export default function Calendario() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden">
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-ink-navy/8">
                 <button onClick={() => setMiniMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-                  className="text-gray-400 hover:text-gray-700 text-lg px-2">‹</button>
-                <h2 className="text-lg font-bold text-gray-900">{MESI[mese]} {anno}</h2>
+                  className="text-ink-navy/35 hover:text-ink-navy/70 text-lg px-2">‹</button>
+                <h2 className="text-lg font-bold text-ink-navy">{MESI[mese]} {anno}</h2>
                 <button onClick={() => setMiniMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-                  className="text-gray-400 hover:text-gray-700 text-lg px-2">›</button>
-                <button onClick={() => setVistaMensile(false)} className="text-gray-400 hover:text-gray-600 text-xl ml-4">✕</button>
+                  className="text-ink-navy/35 hover:text-ink-navy/70 text-lg px-2">›</button>
+                <button onClick={() => setVistaMensile(false)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl ml-4">✕</button>
               </div>
 
               {/* Griglia */}
@@ -438,7 +439,7 @@ export default function Calendario() {
                 {/* Header giorni */}
                 <div className="grid grid-cols-7 mb-2">
                   {GIORNI_SHORT.map(g => (
-                    <div key={g} className="text-center text-xs font-semibold text-gray-400 py-1">{g}</div>
+                    <div key={g} className="text-center text-xs font-semibold text-ink-navy/35 py-1">{g}</div>
                   ))}
                 </div>
                 {/* Celle */}
@@ -453,12 +454,12 @@ export default function Calendario() {
                     return (
                       <button key={i} onClick={() => { setGiornoAperto(day); }}
                         className={`relative rounded-xl p-1.5 min-h-16 text-left transition-colors border ${
-                          isT ? 'bg-indigo-600 border-indigo-600 text-white' :
-                          isPast ? 'bg-gray-50 border-gray-100 text-gray-400' :
-                          dayApps.length > 0 ? 'bg-white border-indigo-100 hover:border-indigo-300 hover:bg-indigo-50' :
-                          'bg-white border-gray-100 hover:bg-gray-50'
+                          isT ? 'bg-electric-blue border-electric-blue text-white' :
+                          isPast ? 'bg-mist border-ink-navy/8 text-ink-navy/35' :
+                          dayApps.length > 0 ? 'bg-white border-electric-blue/15 hover:border-electric-blue/40 hover:bg-electric-blue/10' :
+                          'bg-white border-ink-navy/8 hover:bg-mist'
                         }`}>
-                        <p className={`text-xs font-bold mb-1 ${isT ? 'text-white' : isPast ? 'text-gray-400' : 'text-gray-700'}`}>
+                        <p className={`text-xs font-bold mb-1 ${isT ? 'text-white' : isPast ? 'text-ink-navy/35' : 'text-ink-navy/70'}`}>
                           {day.getDate()}
                         </p>
                         {dayApps.length > 0 && (
@@ -475,15 +476,15 @@ export default function Calendario() {
                               )
                             })}
                             {dayApps.length > 2 && (
-                              <p className={`text-[10px] font-semibold ${isT ? 'text-indigo-200' : 'text-gray-400'}`}>
+                              <p className={`text-[10px] font-semibold ${isT ? 'text-electric-blue/50' : 'text-ink-navy/35'}`}>
                                 +{dayApps.length - 2} altri
                               </p>
                             )}
                           </div>
                         )}
                         {copertiTot > 0 && (
-                          <p className={`text-[9px] mt-0.5 font-semibold ${isT ? 'text-indigo-200' : 'text-orange-400'}`}>
-                            🪑 {copertiTot}
+                          <p className={`text-[9px] mt-0.5 font-semibold ${isT ? 'text-electric-blue/50' : 'text-orange-400'}`}>
+                            {copertiTot}
                           </p>
                         )}
                       </button>
@@ -503,22 +504,22 @@ export default function Calendario() {
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col overflow-hidden" style={{ maxHeight: '80vh' }}>
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-ink-navy/8 flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-bold text-gray-900 capitalize">{label}</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{dayApps.filter(a => a.status !== 'cancellato').length} prenotazioni</p>
+                  <h3 className="text-base font-bold text-ink-navy capitalize">{label}</h3>
+                  <p className="text-xs text-ink-navy/35 mt-0.5">{dayApps.filter(a => a.status !== 'cancellato').length} prenotazioni</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => { setGiornoAperto(null); openNuovoConData(giornoAperto) }}
-                    className="text-xs text-indigo-600 font-semibold px-2 py-1 border border-indigo-200 rounded-lg hover:bg-indigo-50">
+                    className="text-xs text-electric-blue font-semibold px-2 py-1 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
                     + Nuova
                   </button>
-                  <button onClick={() => setGiornoAperto(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+                  <button onClick={() => setGiornoAperto(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
                 </div>
               </div>
               <div className="overflow-y-auto flex-1 p-4 space-y-2">
                 {dayApps.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-6">Nessuna prenotazione per questo giorno</p>
+                  <p className="text-sm text-ink-navy/35 text-center py-6">Nessuna prenotazione per questo giorno</p>
                 ) : dayApps.map(a => {
                   const c = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
                   const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
@@ -534,9 +535,9 @@ export default function Calendario() {
                       <p className="text-sm font-semibold mt-0.5">{a.clienteNome || 'Cliente'}</p>
                       {a.servizio && <p className="text-xs opacity-70">{a.servizio}</p>}
                       <div className="flex gap-3 mt-1 text-xs opacity-80">
-                        {(a.coperti ?? 1) > 0 && <span>🪑 {a.coperti ?? 1}</span>}
-                        {a.allergie && a.allergie.toLowerCase() !== 'nessuna' && <span>⚠️ {a.allergie}</span>}
-                        {a.occasione && <span>🎉 {a.occasione}</span>}
+                        {(a.coperti ?? 1) > 0 && <span>{a.coperti ?? 1}</span>}
+                        {a.allergie && a.allergie.toLowerCase() !== 'nessuna' && <span>{a.allergie}</span>}
+                        {a.occasione && <span>{a.occasione}</span>}
                       </div>
                     </div>
                   )
@@ -557,41 +558,41 @@ export default function Calendario() {
         return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
-            <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between">
+            <div className="px-5 py-4 border-b border-ink-navy/8 flex items-start justify-between">
               <div>
-                <h2 className="text-base font-bold text-gray-900">{selected.clienteNome || 'Appuntamento'}</h2>
-                {selected.clienteEmail && <p className="text-xs text-gray-400">{selected.clienteEmail}</p>}
+                <h2 className="text-base font-bold text-ink-navy">{selected.clienteNome || 'Appuntamento'}</h2>
+                {selected.clienteEmail && <p className="text-xs text-ink-navy/35">{selected.clienteEmail}</p>}
               </div>
-              <button onClick={() => { setSelected(null); setSelectedTavoliIds([]) }} className="text-gray-400 hover:text-gray-600 text-xl mt-1">✕</button>
+              <button onClick={() => { setSelected(null); setSelectedTavoliIds([]) }} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl mt-1">✕</button>
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-              <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 space-y-1.5">
-                <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Prenotazione</p>
-                <p className="text-sm font-semibold text-indigo-900">
+              <div className="bg-electric-blue/10 border border-electric-blue/15 rounded-xl px-4 py-3 space-y-1.5">
+                <p className="text-xs font-semibold text-electric-blue uppercase tracking-wider">Prenotazione</p>
+                <p className="text-sm font-semibold text-ink-navy">
                   {GIORNI_FULL[new Date(selected.data).getDay()]}{' '}
                   {new Date(selected.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}{' '}
                   alle {new Date(selected.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                 </p>
-                {selected.servizio && <p className="text-sm text-indigo-700">📋 {selected.servizio} · {selected.durata} min</p>}
-                {(selected.coperti ?? 1) > 0 && <p className="text-sm text-indigo-700">🪑 {selected.coperti ?? 1} {(selected.coperti ?? 1) === 1 ? 'persona' : 'persone'}</p>}
+                {selected.servizio && <p className="text-sm text-electric-blue">{selected.servizio} · {selected.durata} min</p>}
+                {(selected.coperti ?? 1) > 0 && <p className="text-sm text-electric-blue">{selected.coperti ?? 1} {(selected.coperti ?? 1) === 1 ? 'persona' : 'persone'}</p>}
                 {(() => {
                   const ids: string[] = (() => { try { return selected.tavoliIds ? JSON.parse(selected.tavoliIds) : (selected.tavoloId ? [selected.tavoloId] : []) } catch { return selected.tavoloId ? [selected.tavoloId] : [] } })()
                   const ts = tavoli.filter(t => ids.includes(t.id)).sort((a,b) => a.numero - b.numero)
                   if (ts.length === 0) return null
-                  return <p className="text-sm text-indigo-700">🍽️ {ts.length === 1 ? `Tavolo ${ts[0].numero} (${ts[0].posti} posti)` : `Tavoli ${ts.map(t=>t.numero).join('+')} (fusi · ${ts.reduce((s,t)=>s+t.posti,0)} posti)`}</p>
+                  return <p className="text-sm text-electric-blue">{ts.length === 1 ? `Tavolo ${ts[0].numero} (${ts[0].posti} posti)` : `Tavoli ${ts.map(t=>t.numero).join('+')} (fusi · ${ts.reduce((s,t)=>s+t.posti,0)} posti)`}</p>
                 })()}
-                {selected.allergie && selected.allergie.toLowerCase() !== 'nessuna' && <p className="text-sm text-red-600">⚠️ {selected.allergie}</p>}
-                {selected.occasione && <p className="text-sm text-purple-600">🎉 {selected.occasione}</p>}
-                {selected.note && <p className="text-xs text-indigo-400 mt-1 italic">{selected.note}</p>}
+                {selected.allergie && selected.allergie.toLowerCase() !== 'nessuna' && <p className="text-sm text-red-600">{selected.allergie}</p>}
+                {selected.occasione && <p className="text-sm text-purple-600">{selected.occasione}</p>}
+                {selected.note && <p className="text-xs text-electric-blue mt-1 italic">{selected.note}</p>}
               </div>
 
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Stato</p>
+                <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Stato</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { key: 'confermato', label: '✓ Confermato' },
-                    { key: 'completato', label: '✅ Completato' },
-                    { key: 'no_show', label: '👻 No-show' },
+                    { key: 'confermato', label: 'Confermato' },
+                    { key: 'completato', label: 'Completato' },
+                    { key: 'no_show', label: 'No-show' },
                     { key: 'cancellato', label: '✕ Cancellato' },
                   ].map(({ key, label }) => {
                     const c = STATUS_COLORS[key]
@@ -600,7 +601,7 @@ export default function Calendario() {
                         className={`text-sm py-2 rounded-lg font-medium transition-colors ${
                           selected.status === key
                             ? `${c.bg} ${c.text}`
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            : 'bg-mist text-ink-navy/60 hover:bg-ink-navy/10'
                         }`}>
                         {label}
                       </button>
@@ -612,9 +613,9 @@ export default function Calendario() {
               {tavoli.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tavoli assegnati</p>
+                    <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider">Tavoli assegnati</p>
                     {tavoliAssegnati.length > 0 && (
-                      <span className="text-xs font-bold text-indigo-600">
+                      <span className="text-xs font-bold text-electric-blue">
                         {tavoliAssegnati.length === 1
                           ? `T${tavoli.find(t => t.id === tavoliAssegnati[0])?.numero ?? ''}`
                           : `T${tavoli.filter(t => tavoliAssegnati.includes(t.id)).sort((a,b)=>a.numero-b.numero).map(t=>t.numero).join('+')}`}
@@ -638,7 +639,7 @@ export default function Calendario() {
                         : tavoliAssegnati.includes(t.id)
                       return (
                         <label key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                          checked ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'
+                          checked ? 'border-electric-blue/40 bg-electric-blue/10' : 'border-ink-navy/10 hover:bg-mist'
                         } ${occupato && !checked ? 'opacity-50 cursor-not-allowed' : ''}`}>
                           <input type="checkbox"
                             checked={checked}
@@ -650,11 +651,11 @@ export default function Calendario() {
                                 : base.filter(id => id !== t.id)
                               )
                             }}
-                            className="accent-indigo-600 w-4 h-4 shrink-0"
+                            className="accent-electric-blue w-4 h-4 shrink-0"
                           />
-                          <span className="text-sm text-gray-700 flex-1">
+                          <span className="text-sm text-ink-navy/70 flex-1">
                             <span className="font-semibold">Tavolo {t.numero}</span>
-                            <span className="text-gray-400"> · {t.posti} posti{t.note ? ` · ${t.note}` : ''}</span>
+                            <span className="text-ink-navy/35"> · {t.posti} posti{t.note ? ` · ${t.note}` : ''}</span>
                           </span>
                           {occupato && !checked && <span className="text-xs text-red-400">occupato</span>}
                         </label>
@@ -670,7 +671,7 @@ export default function Calendario() {
                       <button
                         onClick={() => handleAssegnaTavoli(selected.id, idsEffettivi)}
                         disabled={assegnaLoading || idsEffettivi.length === 0}
-                        className="w-full text-sm font-semibold bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                        className="w-full text-sm font-semibold bg-electric-blue text-white py-2 rounded-lg hover:bg-electric-blue/90 disabled:opacity-50 transition-colors">
                         {assegnaLoading ? 'Salvataggio…' : label}
                       </button>
                     )
@@ -678,10 +679,10 @@ export default function Calendario() {
                 </div>
               )}
             </div>
-            <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
+            <div className="px-5 py-3 border-t border-ink-navy/8 flex gap-2">
               <button onClick={() => handleDeleteApp(selected.id)}
-                className="text-sm text-gray-400 font-medium py-2 px-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors" title="Elimina">
-                🗑️
+                className="w-9 flex items-center justify-center text-ink-navy/35 py-2 px-3 border border-ink-navy/10 rounded-lg hover:bg-mist transition-colors" title="Elimina">
+                <span className="w-3.5 h-3.5"><IconTrash /></span>
               </button>
             </div>
           </div>
@@ -694,75 +695,75 @@ export default function Calendario() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 my-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">Nuova prenotazione</h2>
-              <button onClick={() => setShowNuovo(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <h2 className="text-lg font-bold text-ink-navy">Nuova prenotazione</h2>
+              <button onClick={() => setShowNuovo(false)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
             </div>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nome cliente *</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome cliente *</label>
                   <input type="text" placeholder="Mario Rossi" value={formApp.clienteNome}
                     onChange={e => setFormApp({ ...formApp, clienteNome: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email</label>
                   <input type="email" placeholder="mario@email.com" value={formApp.clienteEmail}
                     onChange={e => setFormApp({ ...formApp, clienteEmail: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data *</label>
                   <input type="date" value={formApp.data} onChange={e => setFormApp({ ...formApp, data: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ora *</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora *</label>
                   <input type="time" value={formApp.ora} onChange={e => setFormApp({ ...formApp, ora: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">N° persone</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">N° persone</label>
                   <input type="number" min={1} value={formApp.coperti}
                     onChange={e => setFormApp({ ...formApp, coperti: Number(e.target.value) })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Durata</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Durata</label>
                   <select value={formApp.durata} onChange={e => setFormApp({ ...formApp, durata: Number(e.target.value) })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
                     {[60, 90, 120, 150, 180].map(d => <option key={d} value={d}>{d} min</option>)}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo / Servizio</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo / Servizio</label>
                 <input type="text" placeholder="Prenotazione tavolo, Cena di lavoro…" value={formApp.servizio}
                   onChange={e => setFormApp({ ...formApp, servizio: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Allergie</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Allergie</label>
                   <input type="text" placeholder="nessuna" value={formApp.allergie}
                     onChange={e => setFormApp({ ...formApp, allergie: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Occasione</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Occasione</label>
                   <input type="text" placeholder="compleanno, anniversario…" value={formApp.occasione}
                     onChange={e => setFormApp({ ...formApp, occasione: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
               </div>
               {tavoli.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Tavoli (opzionale)</label>
+                    <label className="block text-sm font-medium text-ink-navy/70">Tavoli (opzionale)</label>
                     {formApp.tavoloId && (() => {
                       const ids: string[] = (() => { try { return JSON.parse(formApp.tavoloId) } catch { return [formApp.tavoloId] } })()
                       if (ids.length < 2) return null
@@ -785,17 +786,17 @@ export default function Calendario() {
                       })
                       return (
                         <label key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${
-                          occupato ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60' : checked ? 'border-indigo-300 bg-indigo-50 cursor-pointer' : 'border-gray-200 hover:bg-gray-50 cursor-pointer'
+                          occupato ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60' : checked ? 'border-electric-blue/40 bg-electric-blue/10 cursor-pointer' : 'border-ink-navy/10 hover:bg-mist cursor-pointer'
                         }`}>
                           <input type="checkbox" checked={checked} disabled={occupato}
                             onChange={e => {
                               const newIds = e.target.checked ? [...selIds, t.id] : selIds.filter(id => id !== t.id)
                               setFormApp(f => ({ ...f, tavoloId: newIds.length === 0 ? '' : newIds.length === 1 ? newIds[0] : JSON.stringify(newIds) }))
                             }}
-                            className="accent-indigo-600 w-4 h-4 shrink-0" />
-                          <span className="text-sm text-gray-700 flex-1">
+                            className="accent-electric-blue w-4 h-4 shrink-0" />
+                          <span className="text-sm text-ink-navy/70 flex-1">
                             <span className="font-semibold">Tavolo {t.numero}</span>
-                            <span className="text-gray-400"> · {t.posti} posti{t.note ? ` · ${t.note}` : ''}</span>
+                            <span className="text-ink-navy/35"> · {t.posti} posti{t.note ? ` · ${t.note}` : ''}</span>
                           </span>
                           {occupato && <span className="text-xs text-red-500 font-medium">occupato</span>}
                         </label>
@@ -805,15 +806,15 @@ export default function Calendario() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note interne</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note interne</label>
                 <textarea value={formApp.note} onChange={e => setFormApp({ ...formApp, note: e.target.value })}
-                  rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                  rows={2} className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
               </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => setShowNuovo(false)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50">Annulla</button>
+              <button onClick={() => setShowNuovo(false)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
               <button onClick={handleSaveApp} disabled={!formApp.clienteNome || !formApp.data || !formApp.ora}
-                className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40">
+                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">
                 Salva prenotazione
               </button>
             </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { IconChat, IconCheck } from '../../../components/icons'
 import { useSearchParams } from 'next/navigation'
 
 interface Messaggio {
@@ -190,10 +191,10 @@ export default function Inbox() {
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Messaggi</h1>
-          <p className="text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-ink-navy">Messaggi</h1>
+          <p className="text-ink-navy/50 mt-0.5">
             {nonLetteTotale > 0
-              ? <span className="text-indigo-600 font-medium">{nonLetteTotale} non letti</span>
+              ? <span className="text-electric-blue font-medium">{nonLetteTotale} non letti</span>
               : 'Tutti i messaggi letti'}
           </p>
         </div>
@@ -203,17 +204,17 @@ export default function Inbox() {
               {selezionati.size > 0 && (
                 <button onClick={handleDeleteSelezionati}
                   className="text-sm bg-red-500 text-white font-semibold px-3 py-1.5 rounded-lg hover:bg-red-600 transition-colors">
-                  🗑️ Elimina ({selezionati.size})
+                   Elimina ({selezionati.size})
                 </button>
               )}
               <button onClick={() => { setSelezioneAttiva(false); setSelezionati(new Set()) }}
-                className="text-sm border border-gray-300 text-gray-600 font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50">
+                className="text-sm border border-ink-navy/15 text-ink-navy/60 font-semibold px-3 py-1.5 rounded-lg hover:bg-mist">
                 Annulla
               </button>
             </>
           ) : (
             <button onClick={() => setSelezioneAttiva(true)}
-              className="text-sm border border-gray-300 text-gray-600 font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50">
+              className="text-sm border border-ink-navy/15 text-ink-navy/60 font-semibold px-3 py-1.5 rounded-lg hover:bg-mist">
               Seleziona
             </button>
           )}
@@ -221,43 +222,45 @@ export default function Inbox() {
       </div>
 
       {loading ? (
-        <div className="text-center text-gray-400 py-12">Caricamento...</div>
+        <div className="text-center text-ink-navy/35 py-12">Caricamento...</div>
       ) : listaGruppi.length === 0 ? (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-400">
-          <div className="text-4xl mb-3">💬</div>
+        <div className="bg-white border border-dashed border-ink-navy/15 rounded-xl p-12 text-center text-ink-navy/35">
+          <div className="w-11 h-11 rounded-xl bg-mist flex items-center justify-center p-2.5 mx-auto mb-4">
+            <IconChat />
+          </div>
           <p className="font-medium">Nessun messaggio ancora</p>
           <p className="text-sm mt-1">I messaggi dal chatbot appariranno qui</p>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden">
           {listaGruppi.map((group, i) => {
             const groupKey = group.email || `${group.nome}-anon`
             const isSelezionato = selezionati.has(groupKey)
             return (
               <div key={`${group.email || group.nome}-${i}`}
                 onClick={() => selezioneAttiva ? toggleSeleziona(groupKey) : handleOpenCliente(group)}
-                className={`flex items-start gap-4 px-4 py-4 cursor-pointer transition-colors ${i > 0 ? 'border-t border-gray-100' : ''} ${isSelezionato ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}>
+                className={`flex items-start gap-4 px-4 py-4 cursor-pointer transition-colors ${i > 0 ? 'border-t border-ink-navy/8' : ''} ${isSelezionato ? 'bg-electric-blue/10' : 'hover:bg-mist'}`}>
 
                 {/* Checkbox selezione */}
                 {selezioneAttiva && (
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-2 transition-colors ${isSelezionato ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>
-                    {isSelezionato && <span className="text-white text-xs font-bold">✓</span>}
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 mt-2 transition-colors ${isSelezionato ? 'bg-electric-blue border-electric-blue' : 'border-ink-navy/15'}`}>
+                    {isSelezionato && <span className="w-3 h-3 text-white"><IconCheck /></span>}
                   </div>
                 )}
 
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${group.nonLette > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${group.nonLette > 0 ? 'bg-electric-blue/15 text-electric-blue' : 'bg-mist text-ink-navy/50'}`}>
                   {group.nome[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <p className={`text-sm ${group.nonLette > 0 ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>{group.nome}</p>
-                    <p className="text-xs text-gray-400">{new Date(group.ultimaData).toLocaleDateString('it-IT')}</p>
+                    <p className={`text-sm ${group.nonLette > 0 ? 'font-semibold text-ink-navy' : 'text-ink-navy/70'}`}>{group.nome}</p>
+                    <p className="text-xs text-ink-navy/35">{new Date(group.ultimaData).toLocaleDateString('it-IT')}</p>
                   </div>
-                  {group.email && <p className="text-xs text-gray-400">{group.email}</p>}
-                  <p className="text-sm text-gray-500 truncate mt-0.5">{group.ultimoMessaggio}</p>
+                  {group.email && <p className="text-xs text-ink-navy/35">{group.email}</p>}
+                  <p className="text-sm text-ink-navy/50 truncate mt-0.5">{group.ultimoMessaggio}</p>
                 </div>
                 {group.nonLette > 0 && !selezioneAttiva && (
-                  <div className="w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center shrink-0 mt-1">
+                  <div className="w-5 h-5 bg-electric-blue rounded-full flex items-center justify-center shrink-0 mt-1">
                     <span className="text-white text-xs font-bold">{group.nonLette}</span>
                   </div>
                 )}
@@ -271,27 +274,27 @@ export default function Inbox() {
       {selectedCliente && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-hidden" style={{ height: '560px' }}>
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-ink-navy/10 flex items-center justify-between">
               <div>
-                <p className="font-semibold text-gray-900">{selectedCliente.nome}</p>
-                {selectedCliente.email && <p className="text-xs text-gray-400">{selectedCliente.email}</p>}
-                <p className="text-xs text-gray-400 mt-0.5">{selectedCliente.conversazioni.length} sessioni di chat</p>
+                <p className="font-semibold text-ink-navy">{selectedCliente.nome}</p>
+                {selectedCliente.email && <p className="text-xs text-ink-navy/35">{selectedCliente.email}</p>}
+                <p className="text-xs text-ink-navy/35 mt-0.5">{selectedCliente.conversazioni.length} sessioni di chat</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => handleDeleteGruppo(selectedCliente)}
                   className="text-xs text-red-400 hover:text-red-600 px-2 py-1 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
-                  🗑️ Elimina
+                   Elimina
                 </button>
-                <button onClick={() => setSelectedCliente(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+                <button onClick={() => setSelectedCliente(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-mist">
               {messaggiCliente.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${
                     m.role === 'user'
-                      ? 'bg-indigo-600 text-white rounded-br-sm'
-                      : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm shadow-sm'
+                      ? 'bg-electric-blue text-white rounded-br-sm'
+                      : 'bg-white text-ink-navy border border-ink-navy/10 rounded-bl-sm shadow-sm'
                   }`}>
                     {m.content}
                   </div>
@@ -301,11 +304,11 @@ export default function Inbox() {
             </div>
 
             {/* Campo risposta */}
-            <div className="px-4 py-3 border-t border-gray-200 bg-white">
+            <div className="px-4 py-3 border-t border-ink-navy/10 bg-white">
               {selectedCliente.conversazioni[0]?.canale !== 'widget' && selectedCliente.conversazioni[0]?.canale !== 'chat' ? null : (
                 <div className="flex items-center gap-1 mb-2">
                   <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                    ⚠️ Canale web — il messaggio non verrà recapitato al cliente finché non integri WhatsApp/Instagram
+                     Canale web — il messaggio non verrà recapitato al cliente finché non integri WhatsApp/Instagram
                   </span>
                 </div>
               )}
@@ -316,12 +319,12 @@ export default function Inbox() {
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleInviaRisposta() } }}
                   placeholder="Scrivi una risposta..."
                   rows={2}
-                  className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  className="flex-1 border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none"
                 />
                 <button
                   onClick={handleInviaRisposta}
                   disabled={!risposta.trim() || invioInCorso}
-                  className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors shrink-0">
+                  className="bg-electric-blue text-white p-2.5 rounded-xl hover:bg-electric-blue/90 disabled:opacity-40 transition-colors shrink-0">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"/>
                     <polygon points="22 2 15 22 11 13 2 9 22 2"/>

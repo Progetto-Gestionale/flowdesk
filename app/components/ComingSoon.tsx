@@ -2,13 +2,12 @@ import Link from 'next/link'
 import Logo from './Logo'
 
 interface ComingSoonProps {
-  icon: string
+  product: 'care' | 'web'
   title: string
-  tag: string
   description: string
 }
 
-export default function ComingSoon({ icon, title, tag, description }: ComingSoonProps) {
+export default function ComingSoon({ product, title, description }: ComingSoonProps) {
   return (
     <main className="min-h-screen bg-ink-navy flex flex-col">
       <header className="max-w-6xl mx-auto w-full px-6 h-16 flex items-center justify-between">
@@ -25,18 +24,17 @@ export default function ComingSoon({ icon, title, tag, description }: ComingSoon
 
       <section className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-lg text-center">
-          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center text-3xl mx-auto mb-6">
-            {icon}
+          <div className="flex justify-center">
+            <Logo size={30} dark product={product} />
           </div>
-          <span className="font-mono text-xs tracking-widest text-zest-lime uppercase">{tag}</span>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+          <h1 className="mt-6 text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
             {title}
           </h1>
           <p className="mt-4 text-white/60 leading-relaxed">
             {description}
           </p>
-          <div className="mt-8 inline-flex items-center gap-2 bg-zest-lime text-ink-navy font-semibold text-sm px-5 py-2.5 rounded-lg">
-            🚧 In arrivo
+          <div className="mt-8 inline-flex items-center gap-2 border border-zest-lime/40 text-zest-lime font-mono font-semibold text-xs uppercase tracking-wide px-5 py-2.5 rounded-lg">
+            In arrivo
           </div>
         </div>
       </section>

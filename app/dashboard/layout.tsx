@@ -62,7 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen bg-mist overflow-hidden">
       <Sidebar verticale={verticale} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar onMenuClick={() => {}} />
+        <TopBar />
         <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>

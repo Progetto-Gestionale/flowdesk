@@ -23,32 +23,20 @@ export default function RegistratiPage() {
       <div className="grid sm:grid-cols-2 gap-6 w-full max-w-2xl">
         {/* Food */}
         <button onClick={() => scegli('food')}
-          className="bg-white border-2 border-transparent hover:border-electric-blue rounded-2xl p-8 text-left transition-all hover:shadow-lg group">
-          <div className="text-4xl mb-4">🍽️</div>
-          <h2 className="text-xl font-extrabold text-ink-navy group-hover:text-electric-blue transition-colors">
-            Flowest Food
-          </h2>
-          <p className="text-ink-navy/50 text-sm mt-2 leading-relaxed">
+          className="bg-white border-2 border-transparent hover:border-electric-blue rounded-2xl p-8 text-left transition-all hover:shadow-lg">
+          <Logo size={22} product="food" withWordmark />
+          <p className="text-ink-navy/50 text-sm mt-5 leading-relaxed">
             Gestione tavoli, menu digitale, ordini QR, prenotazioni, staff e analytics per ristoranti e locali.
           </p>
-          <span className="inline-block mt-4 font-mono text-[11px] tracking-wide font-semibold bg-electric-blue/10 text-electric-blue px-3 py-1 rounded-full">
-            Ristoranti · Bar · Locali
-          </span>
         </button>
 
         {/* Care */}
         <button onClick={() => scegli('care')}
-          className="bg-white border-2 border-transparent hover:border-electric-blue rounded-2xl p-8 text-left transition-all hover:shadow-lg group">
-          <div className="text-4xl mb-4">🩺</div>
-          <h2 className="text-xl font-extrabold text-ink-navy group-hover:text-electric-blue transition-colors">
-            Flowest Care
-          </h2>
-          <p className="text-ink-navy/50 text-sm mt-2 leading-relaxed">
+          className="bg-white border-2 border-transparent hover:border-electric-blue rounded-2xl p-8 text-left transition-all hover:shadow-lg">
+          <Logo size={22} product="care" withWordmark />
+          <p className="text-ink-navy/50 text-sm mt-5 leading-relaxed">
             Gestione pazienti, appuntamenti, cartelle cliniche, staff e analytics per strutture sanitarie.
           </p>
-          <span className="inline-block mt-4 font-mono text-[11px] tracking-wide font-semibold bg-electric-blue/10 text-electric-blue px-3 py-1 rounded-full">
-            Cliniche · Studi · Ambulatori
-          </span>
         </button>
       </div>
 

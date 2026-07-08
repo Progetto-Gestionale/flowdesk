@@ -2,6 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
+import {
+  IconHome, IconClock, IconRefresh, IconUsers, IconSettings, IconCalendar,
+  IconFork, IconCard, IconInfo, IconHelp, IconBot, IconUser, IconCheck,
+  IconChat, IconCamera, IconPin,
+} from '../../components/icons'
 
 const SETTORI = [
   'Ristorazione', 'Biomedica', 'Consulenza', 'E-commerce',
@@ -19,32 +24,32 @@ const GIORNI_LUNGHI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerd�
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
 const SEZIONI = [
-  { id: 'generale', label: '🏠 Locale' },
-  { id: 'orari', label: '🕐 Orari' },
-  { id: 'turni', label: '🔄 Turni' },
-  { id: 'staff', label: '👥 Staff' },
-  { id: 'servizi', label: '⚙️ Servizi' },
-  { id: 'prenotazioni', label: '📅 Prenotazioni' },
-  { id: 'menu', label: '🍽️ Menu & Offerta' },
-  { id: 'pagamenti', label: '💳 Pagamenti' },
-  { id: 'info', label: 'ℹ️ Info pratiche' },
-  { id: 'faq', label: '❓ FAQ' },
-  { id: 'bot', label: '🤖 Bot' },
-  { id: 'account', label: '👤 Account' },
+  { id: 'generale', label: 'Locale', Icon: IconHome },
+  { id: 'orari', label: 'Orari', Icon: IconClock },
+  { id: 'turni', label: 'Turni', Icon: IconRefresh },
+  { id: 'staff', label: 'Staff', Icon: IconUsers },
+  { id: 'servizi', label: 'Servizi', Icon: IconSettings },
+  { id: 'prenotazioni', label: 'Prenotazioni', Icon: IconCalendar },
+  { id: 'menu', label: 'Menu & Offerta', Icon: IconFork },
+  { id: 'pagamenti', label: 'Pagamenti', Icon: IconCard },
+  { id: 'info', label: 'Info pratiche', Icon: IconInfo },
+  { id: 'faq', label: 'FAQ', Icon: IconHelp },
+  { id: 'bot', label: 'Bot', Icon: IconBot },
+  { id: 'account', label: 'Account', Icon: IconUser },
 ]
 
 interface TurnoServizio { id: string; nome: string; oraInizio: string; oraFine: string }
 interface FabbisognoFascia { giorno: number; oraInizio: string; oraFine: string; persone: number; ruolo: string; fascia: string }
 
 const SERVIZI_LISTA = [
-  { id: 'tavolo', label: 'Prenotazione tavolo', icon: '🪑' },
-  { id: 'asporto', label: 'Asporto', icon: '🥡' },
-  { id: 'delivery', label: 'Delivery', icon: '🛵' },
-  { id: 'eventi', label: 'Eventi privati', icon: '🎉' },
-  { id: 'catering', label: 'Catering', icon: '🍱' },
-  { id: 'aperitivo', label: 'Aperitivo / Cocktail', icon: '🍹' },
-  { id: 'brunch', label: 'Brunch', icon: '🥞' },
-  { id: 'degustazione', label: 'Menu degustazione', icon: '🍷' },
+  { id: 'tavolo', label: 'Prenotazione tavolo' },
+  { id: 'asporto', label: 'Asporto' },
+  { id: 'delivery', label: 'Delivery' },
+  { id: 'eventi', label: 'Eventi privati' },
+  { id: 'catering', label: 'Catering' },
+  { id: 'aperitivo', label: 'Aperitivo / Cocktail' },
+  { id: 'brunch', label: 'Brunch' },
+  { id: 'degustazione', label: 'Menu degustazione' },
 ]
 
 const PAGAMENTI_LISTA = [
@@ -68,7 +73,7 @@ function jp<T>(raw: string | null | undefined, fallback: T): T {
   try { return raw ? JSON.parse(raw) : fallback } catch { return fallback }
 }
 
-const cls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+const cls = 'w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue'
 
 // Stato per-sezione
 type SezioneStatus = { saving: boolean; saved: boolean; dirty: boolean }
@@ -170,15 +175,15 @@ export default function Impostazioni() {
 
   const widgetUrl = publicId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/chat/${publicId}` : null
 
-  if (loading) return <div className="text-gray-400 text-sm p-6">Caricamento...</div>
+  if (loading) return <div className="text-ink-navy/35 text-sm p-6">Caricamento...</div>
 
   const st = (id: string) => status[id] ?? initStatus()
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Impostazioni</h1>
-        <p className="text-gray-500 mt-0.5">Più informazioni fornisci, più il bot sarà preciso con i tuoi clienti.</p>
+        <h1 className="text-2xl font-bold text-ink-navy">Impostazioni</h1>
+        <p className="text-ink-navy/50 mt-0.5">Più informazioni fornisci, più il bot sarà preciso con i tuoi clienti.</p>
       </div>
 
       <div className="flex gap-6">
@@ -189,10 +194,11 @@ export default function Impostazioni() {
               const sst = st(s.id)
               return (
                 <button key={s.id} onClick={() => setSezioneAttiva(s.id)}
-                  className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-colors font-medium flex items-center justify-between ${sezioneAttiva === s.id ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                  <span>{s.label}</span>
-                  {sst.saved && !sst.dirty && <span className={`text-[10px] font-bold ${sezioneAttiva === s.id ? 'text-indigo-200' : 'text-green-500'}`}>✓</span>}
-                  {sst.dirty && <span className={`w-1.5 h-1.5 rounded-full ${sezioneAttiva === s.id ? 'bg-indigo-200' : 'bg-amber-400'}`} />}
+                  className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-colors font-medium flex items-center gap-2.5 ${sezioneAttiva === s.id ? 'bg-electric-blue text-white' : 'text-ink-navy/60 hover:bg-mist'}`}>
+                  <span className="w-4 h-4 shrink-0"><s.Icon /></span>
+                  <span className="flex-1">{s.label}</span>
+                  {sst.saved && !sst.dirty && <span className={`w-3 h-3 shrink-0 ${sezioneAttiva === s.id ? 'text-electric-blue/50' : 'text-green-500'}`}><IconCheck /></span>}
+                  {sst.dirty && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sezioneAttiva === s.id ? 'bg-white/60' : 'bg-amber-400'}`} />}
                 </button>
               )
             })}
@@ -238,13 +244,13 @@ export default function Impostazioni() {
               <div className="space-y-2">
                 {GIORNI.map(g => (
                   <div key={g} className="flex items-center gap-3">
-                    <span className="text-sm text-gray-600 w-24 shrink-0">{GIORNI_LABEL[g]}</span>
+                    <span className="text-sm text-ink-navy/60 w-24 shrink-0">{GIORNI_LABEL[g]}</span>
                     <input type="text" value={orari[g] ?? ''} onChange={e => { setOrari(prev => ({ ...prev, [g]: e.target.value })); dirty('orari') }}
                       placeholder='12:00-15:00, 19:00-23:00' className={cls} />
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-400 mt-2">Lascia vuoto se chiuso quel giorno</p>
+              <p className="text-xs text-ink-navy/35 mt-2">Lascia vuoto se chiuso quel giorno</p>
             </Section>
           )}
 
@@ -254,30 +260,30 @@ export default function Impostazioni() {
               status={st('turni')}>
               <div className="space-y-3">
                 {turniServizio.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-3">Nessun turno configurato. Aggiungine uno.</p>
+                  <p className="text-sm text-ink-navy/35 text-center py-3">Nessun turno configurato. Aggiungine uno.</p>
                 )}
                 {turniServizio.map((t, i) => (
-                  <div key={t.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <div key={t.id} className="bg-mist border border-ink-navy/10 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Turno {i + 1}</span>
+                      <span className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider">Turno {i + 1}</span>
                       <button onClick={() => { setTurniServizio(prev => prev.filter((_, j) => j !== i)); dirty('turni') }}
                         className="text-xs text-red-400 hover:text-red-600 font-medium">Rimuovi</button>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Nome turno</label>
+                        <label className="block text-xs font-medium text-ink-navy/60 mb-1">Nome turno</label>
                         <input type="text" value={t.nome}
                           onChange={e => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, nome: e.target.value } : x)); dirty('turni') }}
                           placeholder="es. Pranzo" className={cls} />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Inizio</label>
+                        <label className="block text-xs font-medium text-ink-navy/60 mb-1">Inizio</label>
                         <input type="time" value={t.oraInizio}
                           onChange={e => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraInizio: e.target.value } : x)); dirty('turni') }}
                           className={cls} />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Fine</label>
+                        <label className="block text-xs font-medium text-ink-navy/60 mb-1">Fine</label>
                         <input type="time" value={t.oraFine}
                           onChange={e => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraFine: e.target.value } : x)); dirty('turni') }}
                           className={cls} />
@@ -288,11 +294,11 @@ export default function Impostazioni() {
                 <button onClick={() => {
                   setTurniServizio(prev => [...prev, { id: crypto.randomUUID(), nome: '', oraInizio: '12:00', oraFine: '15:00' }])
                   dirty('turni')
-                }} className="w-full text-sm text-indigo-600 font-semibold border-2 border-dashed border-indigo-200 rounded-xl py-3 hover:bg-indigo-50 transition-colors">
+                }} className="w-full text-sm text-electric-blue font-semibold border-2 border-dashed border-electric-blue/25 rounded-xl py-3 hover:bg-electric-blue/10 transition-colors">
                   + Aggiungi turno
                 </button>
                 {turniServizio.length > 0 && (
-                  <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3 text-xs text-indigo-700 space-y-1">
+                  <div className="bg-electric-blue/10 border border-electric-blue/15 rounded-lg px-4 py-3 text-xs text-electric-blue space-y-1">
                     <p className="font-semibold">Turni configurati:</p>
                     {turniServizio.map(t => (
                       <p key={t.id}>{t.nome || '(senza nome)'} — {t.oraInizio}–{t.oraFine}</p>
@@ -309,17 +315,17 @@ export default function Impostazioni() {
               status={st('staff')}>
               <div className="space-y-3">
                 {fabbisogno.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-3">Nessuna fascia configurata. Aggiungi le tue esigenze di personale.</p>
+                  <p className="text-sm text-ink-navy/35 text-center py-3">Nessuna fascia configurata. Aggiungi le tue esigenze di personale.</p>
                 )}
                 {fabbisogno.length > 0 && (
                   <div className="grid grid-cols-[130px_80px_80px_60px_1fr_auto] gap-2 px-1 mb-1">
                     {['Giorno', 'Dalle', 'Alle', 'N°', 'Ruolo', ''].map((h, i) => (
-                      <span key={i} className="text-xs font-semibold text-gray-400 uppercase">{h}</span>
+                      <span key={i} className="text-xs font-semibold text-ink-navy/35 uppercase">{h}</span>
                     ))}
                   </div>
                 )}
                 {fabbisogno.map((r, i) => (
-                  <div key={i} className="grid grid-cols-[130px_80px_80px_60px_1fr_auto] gap-2 items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                  <div key={i} className="grid grid-cols-[130px_80px_80px_60px_1fr_auto] gap-2 items-center bg-mist border border-ink-navy/8 rounded-xl px-3 py-2">
                     <select value={r.giorno}
                       onChange={e => { setFabbisogno(f => f.map((x, idx) => idx === i ? { ...x, giorno: Number(e.target.value) } : x)); dirty('staff') }}
                       className={cls}>
@@ -338,15 +344,15 @@ export default function Impostazioni() {
                       onChange={e => { setFabbisogno(f => f.map((x, idx) => idx === i ? { ...x, ruolo: e.target.value } : x)); dirty('staff') }}
                       className={cls} />
                     <button onClick={() => { setFabbisogno(f => f.filter((_, idx) => idx !== i)); dirty('staff') }}
-                      className="text-gray-300 hover:text-red-500 font-bold text-sm transition-colors px-1">✕</button>
+                      className="text-ink-navy/25 hover:text-red-500 font-bold text-sm transition-colors px-1">✕</button>
                   </div>
                 ))}
                 <button onClick={() => { setFabbisogno(f => [...f, { giorno: 0, fascia: 'libera', oraInizio: '09:00', oraFine: '17:00', persone: 1, ruolo: '' }]); dirty('staff') }}
-                  className="w-full text-sm text-indigo-600 font-semibold border-2 border-dashed border-indigo-200 rounded-xl py-3 hover:bg-indigo-50 transition-colors">
+                  className="w-full text-sm text-electric-blue font-semibold border-2 border-dashed border-electric-blue/25 rounded-xl py-3 hover:bg-electric-blue/10 transition-colors">
                   + Aggiungi fascia
                 </button>
                 {fabbisogno.length > 0 && (
-                  <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3 text-xs text-indigo-700 space-y-1">
+                  <div className="bg-electric-blue/10 border border-electric-blue/15 rounded-lg px-4 py-3 text-xs text-electric-blue space-y-1">
                     <p className="font-semibold mb-1">Riepilogo:</p>
                     {[0,1,2,3,4,5,6].map(g => {
                       const fasce = fabbisogno.filter(r => r.giorno === g)
@@ -368,11 +374,11 @@ export default function Impostazioni() {
               <div className="grid grid-cols-2 gap-3">
                 {SERVIZI_LISTA.map(s => (
                   <button key={s.id} onClick={() => { setServizi(prev => ({ ...prev, [s.id]: !prev[s.id] })); dirty('servizi') }}
-                    className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${servizi[s.id] ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                    <span className="text-2xl">{s.icon}</span>
+                    className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${servizi[s.id] ? 'border-electric-blue bg-electric-blue/10' : 'border-ink-navy/10 bg-white hover:border-ink-navy/15'}`}>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${servizi[s.id] ? 'bg-electric-blue' : 'bg-ink-navy/15'}`} />
                     <div>
-                      <p className={`text-sm font-semibold ${servizi[s.id] ? 'text-indigo-700' : 'text-gray-700'}`}>{s.label}</p>
-                      <p className={`text-xs ${servizi[s.id] ? 'text-indigo-500' : 'text-gray-400'}`}>{servizi[s.id] ? 'Attivo' : 'Non disponibile'}</p>
+                      <p className={`text-sm font-semibold ${servizi[s.id] ? 'text-electric-blue' : 'text-ink-navy/70'}`}>{s.label}</p>
+                      <p className={`text-xs ${servizi[s.id] ? 'text-electric-blue' : 'text-ink-navy/35'}`}>{servizi[s.id] ? 'Attivo' : 'Non disponibile'}</p>
                     </div>
                   </button>
                 ))}
@@ -441,11 +447,11 @@ export default function Impostazioni() {
               <div className="grid grid-cols-2 gap-3">
                 {PAGAMENTI_LISTA.map(p => (
                   <button key={p.id} onClick={() => { setPagamenti(prev => prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id]); dirty('pagamenti') }}
-                    className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${pagamenti.includes(p.id) ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${pagamenti.includes(p.id) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>
-                      {pagamenti.includes(p.id) && <span className="text-white text-[10px] font-bold">✓</span>}
+                    className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${pagamenti.includes(p.id) ? 'border-electric-blue bg-electric-blue/10' : 'border-ink-navy/10 bg-white hover:border-ink-navy/15'}`}>
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${pagamenti.includes(p.id) ? 'bg-electric-blue border-electric-blue' : 'border-ink-navy/15'}`}>
+                      {pagamenti.includes(p.id) && <span className="w-2.5 h-2.5 text-white"><IconCheck /></span>}
                     </div>
-                    <span className={`text-sm font-medium ${pagamenti.includes(p.id) ? 'text-indigo-700' : 'text-gray-700'}`}>{p.label}</span>
+                    <span className={`text-sm font-medium ${pagamenti.includes(p.id) ? 'text-electric-blue' : 'text-ink-navy/70'}`}>{p.label}</span>
                   </button>
                 ))}
               </div>
@@ -481,9 +487,9 @@ export default function Impostazioni() {
               status={st('faq')}>
               <div className="space-y-3">
                 {faq.map((f, i) => (
-                  <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+                  <div key={i} className="bg-mist border border-ink-navy/10 rounded-xl p-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Domanda {i + 1}</span>
+                      <span className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider">Domanda {i + 1}</span>
                       <button onClick={() => { setFaq(prev => prev.filter((_, j) => j !== i)); dirty('faq') }}
                         className="text-xs text-red-400 hover:text-red-600">Rimuovi</button>
                     </div>
@@ -494,7 +500,7 @@ export default function Impostazioni() {
                   </div>
                 ))}
                 <button onClick={() => { setFaq(prev => [...prev, { domanda: '', risposta: '' }]); dirty('faq') }}
-                  className="w-full text-sm text-indigo-600 font-semibold border-2 border-dashed border-indigo-200 rounded-xl py-3 hover:bg-indigo-50 transition-colors">
+                  className="w-full text-sm text-electric-blue font-semibold border-2 border-dashed border-electric-blue/25 rounded-xl py-3 hover:bg-electric-blue/10 transition-colors">
                   + Aggiungi domanda
                 </button>
               </div>
@@ -511,18 +517,18 @@ export default function Impostazioni() {
               </Field>
               <Field label="ID pubblico del chatbot">
                 <div className="flex gap-2 items-center">
-                  <span className="text-sm text-gray-400 shrink-0">/chat/</span>
+                  <span className="text-sm text-ink-navy/35 shrink-0">/chat/</span>
                   <input type="text" value={publicId} onChange={e => { setPublicId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); dirty('bot') }}
                     placeholder="ristorante-mario" className={cls} />
                 </div>
                 {widgetUrl && (
-                  <div className="mt-2 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <span className="text-xs text-indigo-700 font-mono truncate">{widgetUrl}</span>
+                  <div className="mt-2 bg-electric-blue/10 border border-electric-blue/15 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                    <span className="text-xs text-electric-blue font-mono truncate">{widgetUrl}</span>
                     <button onClick={() => navigator.clipboard.writeText(widgetUrl)}
-                      className="text-xs text-indigo-600 font-semibold shrink-0 hover:text-indigo-800">Copia</button>
+                      className="text-xs text-electric-blue font-semibold shrink-0 hover:text-ink-navy">Copia</button>
                   </div>
                 )}
-                <p className="text-xs text-gray-400 mt-1">Link pubblico del chatbot — condividilo sul sito o sui social.</p>
+                <p className="text-xs text-ink-navy/35 mt-1">Link pubblico del chatbot — condividilo sul sito o sui social.</p>
               </Field>
             </Section>
           )}
@@ -542,37 +548,37 @@ export default function Impostazioni() {
                 </select>
               </Field>
 
-              <div className="border-t border-gray-100 pt-4 mt-2">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Integrazioni</h3>
+              <div className="border-t border-ink-navy/8 pt-4 mt-2">
+                <h3 className="text-sm font-semibold text-ink-navy/70 mb-3">Integrazioni</h3>
                 <div className="space-y-3">
                   {[
-                    { name: 'WhatsApp Business', icon: '💬', desc: 'Ricevi prenotazioni dai messaggi WhatsApp' },
-                    { name: 'Instagram DM', icon: '📸', desc: 'Bot attivo sui DM del profilo Instagram' },
-                    { name: 'Google Calendar', icon: '🗓️', desc: 'Sync automatico delle prenotazioni' },
-                    { name: 'Google Business', icon: '📍', desc: 'Pulsante "Prenota" su Google Maps' },
-                    { name: 'Stripe', icon: '💳', desc: 'Acconti online per eventi e catering' },
+                    { name: 'WhatsApp Business', Icon: IconChat, desc: 'Ricevi prenotazioni dai messaggi WhatsApp' },
+                    { name: 'Instagram DM', Icon: IconCamera, desc: 'Bot attivo sui DM del profilo Instagram' },
+                    { name: 'Google Calendar', Icon: IconCalendar, desc: 'Sync automatico delle prenotazioni' },
+                    { name: 'Google Business', Icon: IconPin, desc: 'Pulsante "Prenota" su Google Maps' },
+                    { name: 'Stripe', Icon: IconCard, desc: 'Acconti online per eventi e catering' },
                   ].map(i => (
-                    <div key={i.name} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div key={i.name} className="flex items-center justify-between py-2 border-b border-ink-navy/8 last:border-0">
                       <div className="flex items-center gap-3">
-                        <span className="text-xl">{i.icon}</span>
+                        <span className="w-5 h-5 text-ink-navy/40 shrink-0"><i.Icon /></span>
                         <div>
-                          <span className="text-sm font-medium text-gray-700">{i.name}</span>
-                          <p className="text-xs text-gray-400">{i.desc}</p>
+                          <span className="text-sm font-medium text-ink-navy/70">{i.name}</span>
+                          <p className="text-xs text-ink-navy/35">{i.desc}</p>
                         </div>
                       </div>
-                      <button className="text-xs text-gray-400 font-semibold cursor-not-allowed bg-gray-100 px-3 py-1 rounded-full">Prossimamente</button>
+                      <button className="text-xs text-ink-navy/35 font-semibold cursor-not-allowed bg-mist px-3 py-1 rounded-full">Prossimamente</button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4 mt-2">
+              <div className="border-t border-ink-navy/8 pt-4 mt-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-700">Piano attivo: Trial gratuito</p>
-                    <p className="text-sm text-gray-500">Accesso completo durante il periodo di prova</p>
+                    <p className="text-sm font-medium text-ink-navy/70">Piano attivo: Trial gratuito</p>
+                    <p className="text-sm text-ink-navy/50">Accesso completo durante il periodo di prova</p>
                   </div>
-                  <button className="bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700">Passa a Pro</button>
+                  <button className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90">Passa a Pro</button>
                 </div>
               </div>
 
@@ -593,19 +599,19 @@ function Section({ title, subtitle, children, onSave, status }: {
   onSave: () => void; status: { saving: boolean; saved: boolean; dirty: boolean }
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+    <div className="bg-white border border-ink-navy/10 rounded-xl p-5 space-y-4">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="font-semibold text-gray-900">{title}</h2>
-          {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+          <h2 className="font-semibold text-ink-navy">{title}</h2>
+          {subtitle && <p className="text-xs text-ink-navy/35 mt-0.5">{subtitle}</p>}
         </div>
         <button onClick={onSave} disabled={status.saving || (status.saved && !status.dirty)}
           className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors shrink-0 ml-4 ${
             status.saved && !status.dirty
               ? 'bg-green-100 text-green-700 cursor-default'
-              : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'
+              : 'bg-electric-blue text-white hover:bg-electric-blue/90 disabled:opacity-50'
           }`}>
-          {status.saving ? 'Salvataggio...' : status.saved && !status.dirty ? '✓ Salvato' : 'Salva'}
+          {status.saving ? 'Salvataggio...' : status.saved && !status.dirty ? 'Salvato' : 'Salva'}
         </button>
       </div>
       {children}
@@ -616,9 +622,9 @@ function Section({ title, subtitle, children, onSave, status }: {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-ink-navy/70 mb-1">{label}</label>
       {children}
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-ink-navy/35 mt-1">{hint}</p>}
     </div>
   )
 }
@@ -645,17 +651,17 @@ function SwitchVerticale() {
 
   if (!verticale) return null
   const altra = verticale === 'food' ? 'care' : 'food'
-  const label = altra === 'food' ? '🍽️ Flowest Food' : '🏥 Flowest Care'
+  const label = altra === 'food' ? 'Flowest Food' : 'Flowest Care'
 
   return (
-    <div className="border-t border-gray-100 pt-4 mt-2">
+    <div className="border-t border-ink-navy/8 pt-4 mt-2">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-700">Verticale attiva: {verticale === 'food' ? '🍽️ Flowest Food' : '🏥 Flowest Care'}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Cambia per accedere all&apos;altra versione del prodotto</p>
+          <p className="text-sm font-medium text-ink-navy/70">Verticale attiva: {verticale === 'food' ? 'Flowest Food' : 'Flowest Care'}</p>
+          <p className="text-xs text-ink-navy/35 mt-0.5">Cambia per accedere all&apos;altra versione del prodotto</p>
         </div>
         <button onClick={() => cambia(altra)} disabled={loading}
-          className="text-sm font-semibold px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+          className="text-sm font-semibold px-4 py-2 rounded-lg border border-ink-navy/15 hover:bg-mist disabled:opacity-50 transition-colors">
           {loading ? 'Cambio...' : `Passa a ${label}`}
         </button>
       </div>
@@ -666,9 +672,9 @@ function SwitchVerticale() {
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="flex items-center justify-between py-2">
-      <span className="text-sm text-gray-700">{label}</span>
+      <span className="text-sm text-ink-navy/70">{label}</span>
       <button onClick={() => onChange(!checked)}
-        className={`relative w-10 h-5 rounded-full transition-colors ${checked ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+        className={`relative w-10 h-5 rounded-full transition-colors ${checked ? 'bg-electric-blue' : 'bg-gray-300'}`}>
         <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
       </button>
     </div>

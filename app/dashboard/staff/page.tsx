@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { IconUsers, IconTrash, IconPencil, IconBot } from '../../components/icons'
 
 interface Dipendente {
   id: string
@@ -58,7 +59,7 @@ interface TurnoGenerato {
 
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_LUNGHI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
-const COLORI = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-pink-100 text-pink-700', 'bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700']
+const COLORI = ['bg-electric-blue/15 text-electric-blue', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-pink-100 text-pink-700', 'bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700']
 
 function getLunedi(date: Date) {
   const d = new Date(date)
@@ -402,17 +403,17 @@ export default function StaffPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestione Staff</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Turni, dipendenti e richieste</p>
+          <h1 className="text-2xl font-bold text-ink-navy">Gestione Staff</h1>
+          <p className="text-ink-navy/50 text-sm mt-0.5">Turni, dipendenti e richieste</p>
         </div>
         <div className="flex gap-2">
           {tab === 'dipendenti' && (
-            <button onClick={() => setShowModalDip(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-indigo-700 text-sm">
+            <button onClick={() => setShowModalDip(true)} className="bg-electric-blue text-white px-4 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
               + Dipendente
             </button>
           )}
           {tab === 'turni' && (
-            <button onClick={() => setShowModalTurno(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-indigo-700 text-sm">
+            <button onClick={() => setShowModalTurno(true)} className="bg-electric-blue text-white px-4 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
               + Turno
             </button>
           )}
@@ -421,20 +422,20 @@ export default function StaffPage() {
 
       {linkInviato && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm font-medium">
-          ✅ Link inviato a {linkInviato}
+           Link inviato a {linkInviato}
         </div>
       )}
 
       {/* Tab */}
       <div className="flex gap-2 flex-wrap">
         {([
-          ['turni', '📅 Turni'],
-          ['dipendenti', '👥 Dipendenti'],
-          ['richieste', `📋 Richieste${richiesteInAttesa.length > 0 ? ` (${richiesteInAttesa.length})` : ''}`],
-          ['genera', '✨ Genera con AI'],
+          ['turni', 'Turni'],
+          ['dipendenti', 'Dipendenti'],
+          ['richieste', `Richieste${richiesteInAttesa.length > 0 ? ` (${richiesteInAttesa.length})` : ''}`],
+          ['genera', 'Genera con AI'],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === id ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === id ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
             {label}
           </button>
         ))}
@@ -446,13 +447,13 @@ export default function StaffPage() {
           {/* Barra controlli */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Toggle settimana/mese */}
-            <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <div className="flex bg-mist rounded-lg p-0.5">
               <button onClick={() => setVistaTurni('settimana')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${vistaTurni === 'settimana' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${vistaTurni === 'settimana' ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
                 Settimana
               </button>
               <button onClick={() => setVistaTurni('mese')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${vistaTurni === 'mese' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${vistaTurni === 'mese' ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
                 Mese
               </button>
             </div>
@@ -461,26 +462,26 @@ export default function StaffPage() {
             {vistaTurni === 'settimana' ? (
               <>
                 <button onClick={() => { const d = new Date(settimana); d.setDate(d.getDate() - 7); setSettimana(d) }}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600">←</button>
-                <span className="text-sm font-medium text-gray-700">
+                  className="p-2 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60">←</button>
+                <span className="text-sm font-medium text-ink-navy/70">
                   {settimana.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })} – {giorni[6].toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
                 <button onClick={() => { const d = new Date(settimana); d.setDate(d.getDate() + 7); setSettimana(d) }}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600">→</button>
+                  className="p-2 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60">→</button>
                 <button onClick={() => setSettimana(getLunedi(new Date()))}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Oggi</button>
+                  className="text-xs text-electric-blue hover:text-ink-navy font-medium">Oggi</button>
               </>
             ) : (
               <>
                 <button onClick={() => setMeseCal(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600">←</button>
-                <span className="text-sm font-medium text-gray-700 capitalize">
+                  className="p-2 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60">←</button>
+                <span className="text-sm font-medium text-ink-navy/70 capitalize">
                   {meseCal.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
                 </span>
                 <button onClick={() => setMeseCal(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600">→</button>
+                  className="p-2 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60">→</button>
                 <button onClick={() => setMeseCal(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Oggi</button>
+                  className="text-xs text-electric-blue hover:text-ink-navy font-medium">Oggi</button>
               </>
             )}
 
@@ -488,51 +489,51 @@ export default function StaffPage() {
               {vistaTurni === 'settimana' && (
                 <>
                   <button onClick={copiaDaSettimanaPrec} disabled={copiando}
-                    className="text-xs px-3 py-1.5 bg-gray-50 text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 font-medium disabled:opacity-50 transition-colors">
-                    {copiando ? 'Copia...' : '📋 Copia sett. prec.'}
+                    className="text-xs px-3 py-1.5 bg-mist text-ink-navy/60 border border-ink-navy/10 rounded-lg hover:bg-mist font-medium disabled:opacity-50 transition-colors">
+                    {copiando ? 'Copia...' : 'Copia sett. prec.'}
                   </button>
                   <button onClick={() => setConfirmCancella(true)} disabled={turni.length === 0}
                     className="text-xs px-3 py-1.5 bg-red-50 text-red-500 border border-red-200 rounded-lg hover:bg-red-100 font-medium disabled:opacity-40 transition-colors">
-                    🗑️ Cancella settimana
+                     Cancella settimana
                   </button>
                 </>
               )}
               <button onClick={inviaReminder} disabled={inviandoReminder}
                 className="text-xs px-3 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium disabled:opacity-50 transition-colors">
-                {inviandoReminder ? 'Invio...' : '📨 Invia reminder'}
+                {inviandoReminder ? 'Invio...' : 'Invia reminder'}
               </button>
             </div>
           </div>
 
           {reminderOk && (
             <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-2.5 rounded-xl text-sm font-medium">
-              ✅ {reminderOk}
+              {reminderOk}
             </div>
           )}
 
-          {vistaTurni === 'settimana' && <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="grid grid-cols-8 border-b border-gray-200">
-              <div className="p-3 text-xs font-semibold text-gray-400 uppercase"></div>
+          {vistaTurni === 'settimana' && <div className="bg-white rounded-2xl border border-ink-navy/10 overflow-hidden shadow-sm">
+            <div className="grid grid-cols-8 border-b border-ink-navy/10">
+              <div className="p-3 text-xs font-semibold text-ink-navy/35 uppercase"></div>
               {giorni.map((g, i) => {
                 const isOggi = toISO(g) === toISO(new Date())
                 return (
-                  <div key={i} className={`p-3 text-center border-l border-gray-200 ${isOggi ? 'bg-indigo-50' : ''}`}>
-                    <p className="text-xs font-semibold text-gray-400 uppercase">{GIORNI_BREVI[i]}</p>
-                    <p className={`text-sm font-bold mt-0.5 ${isOggi ? 'text-indigo-600' : 'text-gray-700'}`}>{g.getDate()}</p>
+                  <div key={i} className={`p-3 text-center border-l border-ink-navy/10 ${isOggi ? 'bg-electric-blue/10' : ''}`}>
+                    <p className="text-xs font-semibold text-ink-navy/35 uppercase">{GIORNI_BREVI[i]}</p>
+                    <p className={`text-sm font-bold mt-0.5 ${isOggi ? 'text-electric-blue' : 'text-ink-navy/70'}`}>{g.getDate()}</p>
                   </div>
                 )
               })}
             </div>
             {dipendenti.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 text-sm">Aggiungi dipendenti per creare i turni</div>
+              <div className="p-8 text-center text-ink-navy/35 text-sm">Aggiungi dipendenti per creare i turni</div>
             ) : (
               dipendenti.map(dip => (
-                <div key={dip.id} className="grid grid-cols-8 border-b border-gray-100 last:border-0">
-                  <div className="p-3 flex items-center gap-2 border-r border-gray-100">
+                <div key={dip.id} className="grid grid-cols-8 border-b border-ink-navy/8 last:border-0">
+                  <div className="p-3 flex items-center gap-2 border-r border-ink-navy/8">
                     <span className={`w-2 h-2 rounded-full ${colorMap[dip.id].split(' ')[0].replace('100', '500')}`}></span>
                     <div>
-                      <p className="text-xs font-semibold text-gray-800 truncate max-w-[80px]">{dip.nome}</p>
-                      {dip.ruolo && <p className="text-xs text-gray-400 truncate max-w-[80px]">{dip.ruolo}</p>}
+                      <p className="text-xs font-semibold text-ink-navy truncate max-w-[80px]">{dip.nome}</p>
+                      {dip.ruolo && <p className="text-xs text-ink-navy/35 truncate max-w-[80px]">{dip.ruolo}</p>}
                     </div>
                   </div>
                   {giorni.map((g, i) => {
@@ -556,13 +557,16 @@ export default function StaffPage() {
                     return (
                       <div key={i}
                         onClick={() => setCellModal({ dipendenteId: dip.id, nome: dip.nome, data: dataStr, dataLabel: g.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }), oraInizio: '09:00', oraFine: '17:00' })}
-                        className={`border-l border-gray-100 min-h-[64px] p-1.5 space-y-1 cursor-pointer transition-colors group ${assenza ? '' : haDisp ? 'bg-green-50/50 hover:bg-green-50' : noDisp ? 'bg-gray-50 hover:bg-gray-100/60' : 'hover:bg-indigo-50/40'}`}>
+                        className={`border-l border-ink-navy/8 min-h-[64px] p-1.5 space-y-1 cursor-pointer transition-colors group ${assenza ? '' : haDisp ? 'bg-green-50/50 hover:bg-green-50' : noDisp ? 'bg-mist hover:bg-mist/60' : 'hover:bg-electric-blue/10'}`}>
                         {/* Indicatore disponibilità */}
                         {!assenza && haDisp && turniGiorno.length === 0 && (
-                          <span className="inline-block text-[10px] font-medium text-green-500 leading-none">● disp.</span>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-500 leading-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            disp.
+                          </span>
                         )}
                         {!assenza && noDisp && turniGiorno.length === 0 && (
-                          <span className="inline-block text-[10px] font-medium text-gray-300 leading-none">✕ n.d.</span>
+                          <span className="inline-block text-[10px] font-medium text-ink-navy/25 leading-none">✕ n.d.</span>
                         )}
                         {turniGiorno.map(t => {
                           const dispGiorno = (tutteDisp.find(d => d.dipendenteId === dip.id)?.giorni ?? []).find(gd => gd.data === dataStr)
@@ -574,7 +578,7 @@ export default function StaffPage() {
                             <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${assenzaApp ? 'bg-red-100 text-red-700' : warnTurno ? 'bg-amber-100 text-amber-800' : colorMap[dip.id]} relative`}
                               onClick={e => e.stopPropagation()}
                               title={warnTitle}>
-                              <p className="font-semibold">{warnTurno ? '⚠️ ' : ''}{t.oraInizio}–{t.oraFine}</p>
+                              <p className="font-semibold">{warnTurno ? ' ' : ''}{t.oraInizio}–{t.oraFine}</p>
                               {t.ruolo && <p className="opacity-75 truncate">{t.ruolo}</p>}
                               <button onClick={e => { e.stopPropagation(); eliminaTurno(t.id) }}
                                 className="absolute top-0.5 right-0.5 text-red-400 hover:text-red-600 text-xs leading-none opacity-0 group-hover:opacity-100">✕</button>
@@ -595,7 +599,7 @@ export default function StaffPage() {
                           </div>
                         )}
 
-                        <p className="text-indigo-200 group-hover:text-indigo-400 text-center text-base leading-none transition-colors">+</p>
+                        <p className="text-electric-blue/50 group-hover:text-electric-blue text-center text-base leading-none transition-colors">+</p>
                       </div>
                     )
                   })}
@@ -611,10 +615,10 @@ export default function StaffPage() {
             const offsetInizio = primoGiornoMese.getDay() === 0 ? 6 : primoGiornoMese.getDay() - 1
             const totaleCelle = Math.ceil((offsetInizio + ultimoGiornoMese.getDate()) / 7) * 7
             return (
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="grid grid-cols-7 border-b border-gray-200">
+              <div className="bg-white rounded-2xl border border-ink-navy/10 overflow-hidden shadow-sm">
+                <div className="grid grid-cols-7 border-b border-ink-navy/10">
                   {['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map((g, i) => (
-                    <div key={i} className={`py-3 text-center text-xs font-bold ${i >= 5 ? 'text-indigo-400' : 'text-gray-400'}`}>{g}</div>
+                    <div key={i} className={`py-3 text-center text-xs font-bold ${i >= 5 ? 'text-electric-blue' : 'text-ink-navy/35'}`}>{g}</div>
                   ))}
                 </div>
                 <div className="grid grid-cols-7">
@@ -628,18 +632,18 @@ export default function StaffPage() {
                     const isOggi = dataCorrente === toISO(new Date())
                     const isWeekend = idx % 7 >= 5
                     return (
-                      <div key={idx} className={`min-h-[80px] p-1.5 border-b border-r border-gray-100
-                        ${!isDelMese ? 'bg-gray-50/60' : isWeekend ? 'bg-indigo-50/20' : 'bg-white'}`}>
+                      <div key={idx} className={`min-h-[80px] p-1.5 border-b border-r border-ink-navy/8
+                        ${!isDelMese ? 'bg-mist/60' : isWeekend ? 'bg-electric-blue/5' : 'bg-white'}`}>
                         {isDelMese && (
                           <>
                             <p className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full mb-1
-                              ${isOggi ? 'bg-indigo-600 text-white' : isWeekend ? 'text-indigo-500' : 'text-gray-700'}`}>
+                              ${isOggi ? 'bg-electric-blue text-white' : isWeekend ? 'text-electric-blue' : 'text-ink-navy/70'}`}>
                               {giornoNum}
                             </p>
                             {turniGiorno.map((t, i) => (
                               <div key={i}
                                 onClick={() => setTurnoDettaglio(turnoDettaglio?.id === t.id ? null : t)}
-                                className={`rounded px-1.5 py-0.5 text-xs font-semibold mb-0.5 cursor-pointer truncate ${colorMap[t.dipendente.id] ?? 'bg-gray-100 text-gray-600'}`}>
+                                className={`rounded px-1.5 py-0.5 text-xs font-semibold mb-0.5 cursor-pointer truncate ${colorMap[t.dipendente.id] ?? 'bg-mist text-ink-navy/60'}`}>
                                 {t.dipendente.nome.split(' ')[0]} {t.oraInizio}–{t.oraFine}
                               </div>
                             ))}
@@ -655,20 +659,20 @@ export default function StaffPage() {
 
           {/* Dettaglio turno mese */}
           {vistaTurni === 'mese' && turnoDettaglio && (
-            <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-electric-blue/25 shadow-sm p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-semibold text-gray-900">{turnoDettaglio.dipendente.nome}</p>
-                  <p className="text-sm text-gray-500 mt-0.5">
+                  <p className="font-semibold text-ink-navy">{turnoDettaglio.dipendente.nome}</p>
+                  <p className="text-sm text-ink-navy/50 mt-0.5">
                     {new Date(turnoDettaglio.data).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
                   </p>
-                  <p className="text-indigo-600 font-bold text-lg mt-1">{turnoDettaglio.oraInizio} – {turnoDettaglio.oraFine}</p>
-                  {turnoDettaglio.ruolo && <p className="text-gray-500 text-sm mt-0.5">{turnoDettaglio.ruolo}</p>}
+                  <p className="text-electric-blue font-bold text-lg mt-1">{turnoDettaglio.oraInizio} – {turnoDettaglio.oraFine}</p>
+                  {turnoDettaglio.ruolo && <p className="text-ink-navy/50 text-sm mt-0.5">{turnoDettaglio.ruolo}</p>}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => eliminaTurno(turnoDettaglio.id).then(() => setTurnoDettaglio(null))}
                     className="text-xs px-2 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium">Elimina</button>
-                  <button onClick={() => setTurnoDettaglio(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+                  <button onClick={() => setTurnoDettaglio(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-lg">✕</button>
                 </div>
               </div>
             </div>
@@ -680,7 +684,7 @@ export default function StaffPage() {
               {dipendenti.map((d, i) => (
                 <div key={d.id} className="flex items-center gap-1.5">
                   <span className={`w-3 h-3 rounded-full ${COLORI[i % COLORI.length].split(' ')[0].replace('100','400')}`}></span>
-                  <span className="text-xs text-gray-600">{d.nome}</span>
+                  <span className="text-xs text-ink-navy/60">{d.nome}</span>
                 </div>
               ))}
             </div>
@@ -692,37 +696,43 @@ export default function StaffPage() {
       {tab === 'dipendenti' && (
         <div className="space-y-3">
           {dipendenti.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center shadow-sm">
-              <div className="text-5xl mb-4">👥</div>
-              <h3 className="text-lg font-semibold text-gray-800">Nessun dipendente</h3>
-              <p className="text-gray-500 text-sm mt-2">Aggiungi i tuoi dipendenti per gestire i turni</p>
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-electric-blue/10 text-electric-blue flex items-center justify-center p-3 mx-auto mb-4">
+                <IconUsers />
+              </div>
+              <h3 className="text-lg font-semibold text-ink-navy">Nessun dipendente</h3>
+              <p className="text-ink-navy/50 text-sm mt-2">Aggiungi i tuoi dipendenti per gestire i turni</p>
             </div>
           ) : dipendenti.map((d, i) => (
-            <div key={d.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+            <div key={d.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${COLORI[i % COLORI.length]}`}>
                     {d.nome[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{d.nome}</p>
-                    <p className="text-sm text-gray-500">{d.email}</p>
-                    {d.ruolo && <p className="text-xs text-gray-400">{d.ruolo}</p>}
+                    <p className="font-semibold text-ink-navy">{d.nome}</p>
+                    <p className="text-sm text-ink-navy/50">{d.email}</p>
+                    {d.ruolo && <p className="text-xs text-ink-navy/35">{d.ruolo}</p>}
                   </div>
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end">
                   <button onClick={() => apriDispModal(d)}
                     className="text-xs px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors font-medium">
-                    📆 Disponibilità
+                    Disponibilità
                   </button>
                   <button onClick={() => inviaLink(d.email, d.nome)}
-                    className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors font-medium">
-                    📨 Invia link
+                    className="text-xs px-3 py-1.5 bg-electric-blue/10 text-electric-blue rounded-lg hover:bg-electric-blue/15 transition-colors font-medium">
+                    Invia link
                   </button>
                   <button onClick={() => apriModifica(d)}
-                    className="text-gray-400 hover:text-indigo-500 p-1.5 rounded-lg hover:bg-indigo-50 transition-colors">✏️</button>
+                    className="text-ink-navy/35 hover:text-electric-blue p-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
+                    <span className="w-3.5 h-3.5 block"><IconPencil /></span>
+                  </button>
                   <button onClick={() => eliminaDipendente(d.id)}
-                    className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors">🗑️</button>
+                    className="text-ink-navy/35 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                    <span className="w-3.5 h-3.5 block"><IconTrash /></span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -734,27 +744,27 @@ export default function StaffPage() {
       {tab === 'richieste' && (
         <div className="space-y-3">
           {richieste.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center shadow-sm">
-              <p className="text-gray-400 text-sm">Nessuna richiesta ricevuta</p>
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
+              <p className="text-ink-navy/35 text-sm">Nessuna richiesta ricevuta</p>
             </div>
           ) : richieste.map(r => (
-            <div key={r.id} className={`bg-white rounded-2xl border shadow-sm p-4 ${r.status === 'in_attesa' ? 'border-amber-200' : 'border-gray-200'}`}>
+            <div key={r.id} className={`bg-white rounded-2xl border shadow-sm p-4 ${r.status === 'in_attesa' ? 'border-amber-200' : 'border-ink-navy/10'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900">{r.dipendente.nome}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">
+                    <span className="font-semibold text-ink-navy">{r.dipendente.nome}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-mist text-ink-navy/60 capitalize">
                       {r.tipo.replace('_', ' ')}
                     </span>
                   </div>
                   {r.data && (
-                    <p className="text-sm text-gray-500 mt-0.5">
+                    <p className="text-sm text-ink-navy/50 mt-0.5">
                       {new Date(r.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}
                       {r.dataFine && r.dataFine !== r.data && ` → ${new Date(r.dataFine).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}`}
                     </p>
                   )}
-                  {r.note && <p className="text-xs text-gray-400 mt-1 truncate">{r.note}</p>}
-                  <p className="text-xs text-gray-300 mt-1">{new Date(r.createdAt).toLocaleDateString('it-IT')}</p>
+                  {r.note && <p className="text-xs text-ink-navy/35 mt-1 truncate">{r.note}</p>}
+                  <p className="text-xs text-ink-navy/25 mt-1">{new Date(r.createdAt).toLocaleDateString('it-IT')}</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {r.status === 'in_attesa' && (
@@ -762,18 +772,18 @@ export default function StaffPage() {
                       <button onClick={() => aggiornaRichiesta(r.id, 'approvata')}
                         className="text-xs px-2.5 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-medium border border-green-200">Approva</button>
                       <button onClick={() => aggiornaRichiesta(r.id, 'rifiutata')}
-                        className="text-xs px-2.5 py-1 bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 font-medium border border-gray-200">Rifiuta</button>
+                        className="text-xs px-2.5 py-1 bg-mist text-ink-navy/50 rounded-lg hover:bg-mist font-medium border border-ink-navy/10">Rifiuta</button>
                     </>
                   )}
                   {r.status !== 'in_attesa' && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : 'bg-mist text-ink-navy/50'}`}>
                       {r.status === 'approvata' ? 'Approvata' : 'Rifiutata'}
                     </span>
                   )}
                   <button onClick={() => setConferma({ msg: 'Eliminare questa richiesta?', onConfirm: async () => {
                     await fetch(`/api/richieste-staff/${r.id}`, { method: 'DELETE', credentials: 'include' })
                     fetchAll()
-                  }})} className="text-xs px-2 py-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors font-medium">
+                  }})} className="text-xs px-2 py-1 text-ink-navy/25 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors font-medium">
                     Elimina
                   </button>
                 </div>
@@ -788,62 +798,62 @@ export default function StaffPage() {
         <div className="space-y-5">
 
           {/* ── Genera turni ── */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
-            <h3 className="font-bold text-gray-900">Genera piano turni con AI</h3>
+          <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
+            <h3 className="font-bold text-ink-navy">Genera piano turni con AI</h3>
 
             {/* Settimana */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 font-medium w-20">Settimana</span>
+              <span className="text-xs text-ink-navy/50 font-medium w-20">Settimana</span>
               <button onClick={() => { const d = new Date(settimana); d.setDate(d.getDate() - 7); setSettimana(d) }}
-                className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm">←</button>
-              <span className="text-sm font-semibold text-indigo-700 flex-1 text-center">
+                className="p-1.5 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60 text-sm">←</button>
+              <span className="text-sm font-semibold text-electric-blue flex-1 text-center">
                 {settimana.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })} – {giorni[6].toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
               </span>
               <button onClick={() => { const d = new Date(settimana); d.setDate(d.getDate() + 7); setSettimana(d) }}
-                className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm">→</button>
+                className="p-1.5 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60 text-sm">→</button>
               <button onClick={() => setSettimana(getLunedi(new Date()))}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Oggi</button>
+                className="text-xs text-electric-blue hover:text-ink-navy font-medium">Oggi</button>
             </div>
 
             {/* Fabbisogno modificabile per questa settimana */}
-            <div className="border border-gray-200 rounded-xl p-3 space-y-2 bg-gray-50/50">
+            <div className="border border-ink-navy/10 rounded-xl p-3 space-y-2 bg-mist/50">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-600">Fabbisogno per questa settimana <span className="font-normal text-gray-400">(copia del template, modificabile)</span></p>
+                <p className="text-xs font-semibold text-ink-navy/60">Fabbisogno per questa settimana <span className="font-normal text-ink-navy/35">(copia del template, modificabile)</span></p>
                 <div className="flex items-center gap-2">
                   <button onClick={() => { localStorage.removeItem(`fabb_${toISO(settimana)}`); setFabbisognoSett(fabbisogno) }}
-                    className="text-xs text-gray-400 hover:text-indigo-600 font-medium transition-colors">↺ Ripristina</button>
+                    className="text-xs text-ink-navy/35 hover:text-electric-blue font-medium transition-colors">↺ Ripristina</button>
                   <button onClick={() => setFabbisognoSett(s => [...s, { giorno: 0, fascia: 'libera', oraInizio: '09:00', oraFine: '17:00', persone: 1, ruolo: '' }])}
-                    className="text-xs px-2.5 py-1 bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 font-medium">+ Aggiungi</button>
+                    className="text-xs px-2.5 py-1 bg-white border border-ink-navy/15 text-ink-navy/60 rounded-lg hover:bg-mist font-medium">+ Aggiungi</button>
                 </div>
               </div>
               {fabbisognoSett.length === 0 ? (
-                <p className="text-xs text-gray-400 py-2 text-center">
+                <p className="text-xs text-ink-navy/35 py-2 text-center">
                   Nessun fabbisogno configurato —{' '}
-                  <a href="/dashboard/impostazioni?sezione=staff" className="text-indigo-500 hover:underline">configuralo in Impostazioni → Staff</a>
+                  <a href="/dashboard/impostazioni?sezione=staff" className="text-electric-blue hover:underline">configuralo in Impostazioni → Staff</a>
                 </p>
               ) : (
                 <>
                   <div className="grid grid-cols-[110px_1fr_1fr_1fr_1fr_24px] gap-1.5 px-0.5">
                     {['Giorno', 'Dalle', 'Alle', 'N°', 'Ruolo', ''].map((h, i) => (
-                      <span key={i} className="text-xs font-semibold text-gray-400 uppercase">{h}</span>
+                      <span key={i} className="text-xs font-semibold text-ink-navy/35 uppercase">{h}</span>
                     ))}
                   </div>
                   {fabbisognoSett.map((r, i) => (
                     <div key={i} className="grid grid-cols-[110px_1fr_1fr_1fr_1fr_24px] gap-1.5 items-center">
                       <select value={r.giorno} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, giorno: Number(e.target.value) } : x))}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white">
+                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white">
                         {GIORNI_LUNGHI.map((g, idx) => <option key={idx} value={idx}>{g}</option>)}
                       </select>
                       <input type="time" value={r.oraInizio} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, oraInizio: e.target.value } : x))}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white" />
+                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
                       <input type="time" value={r.oraFine} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, oraFine: e.target.value } : x))}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white" />
+                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
                       <input type="number" min={1} max={20} value={r.persone} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, persone: Number(e.target.value) } : x))}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white" />
+                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
                       <input placeholder="ruolo" value={r.ruolo} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, ruolo: e.target.value } : x))}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white" />
+                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
                       <button onClick={() => setFabbisognoSett(s => s.filter((_, idx) => idx !== i))}
-                        className="text-gray-300 hover:text-red-500 text-sm font-bold transition-colors">✕</button>
+                        className="text-ink-navy/25 hover:text-red-500 text-sm font-bold transition-colors">✕</button>
                     </div>
                   ))}
                 </>
@@ -852,54 +862,54 @@ export default function StaffPage() {
 
             {/* Note aggiuntive */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Note aggiuntive <span className="text-gray-400 font-normal">(opzionale)</span></label>
+              <label className="block text-sm font-medium text-ink-navy/70 mb-1.5">Note aggiuntive <span className="text-ink-navy/35 font-normal">(opzionale)</span></label>
               <textarea value={noteGenerazione} onChange={e => setNoteGenerazione(e.target.value)}
                 placeholder="es. questa settimana abbiamo un evento sabato sera, servono 2 persone in più..."
-                rows={2} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                rows={2} className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
             </div>
 
             <button onClick={generaTurni} disabled={generando || dipendenti.length === 0}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 text-sm">
-              {generando ? <><span className="animate-spin inline-block">⟳</span> L'AI sta elaborando il piano...</> : '✨ Genera piano turni'}
+              className="w-full bg-electric-blue text-white font-semibold py-3 rounded-xl hover:bg-electric-blue/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 text-sm">
+              {generando ? <><span className="animate-spin inline-block">⟳</span> L'AI sta elaborando il piano...</> : 'Genera piano turni'}
             </button>
             {dipendenti.length === 0 && (
-              <p className="text-center text-xs text-gray-400">Aggiungi almeno un dipendente prima di generare i turni</p>
+              <p className="text-center text-xs text-ink-navy/35">Aggiungi almeno un dipendente prima di generare i turni</p>
             )}
           </div>
 
           {/* ── Risultato AI ── */}
           {turniGenerati && (
-            <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5 space-y-4">
+            <div className="bg-white rounded-2xl border border-electric-blue/25 shadow-sm p-5 space-y-4">
               <div className="flex items-start gap-3">
-                <span className="text-2xl">✨</span>
+                <span className="w-9 h-9 rounded-lg bg-electric-blue/10 text-electric-blue flex items-center justify-center p-2 shrink-0"><IconBot /></span>
                 <div>
-                  <h3 className="font-bold text-gray-900">Piano turni generato</h3>
-                  {spiegazioneAI && <p className="text-sm text-gray-500 mt-1">{spiegazioneAI}</p>}
+                  <h3 className="font-bold text-ink-navy">Piano turni generato</h3>
+                  {spiegazioneAI && <p className="text-sm text-ink-navy/50 mt-1">{spiegazioneAI}</p>}
                 </div>
               </div>
-              <p className="text-xs text-gray-400">Modifica i turni se vuoi, poi conferma per salvarli nella griglia.</p>
+              <p className="text-xs text-ink-navy/35">Modifica i turni se vuoi, poi conferma per salvarli nella griglia.</p>
               <div className="space-y-3">
                 {GIORNI_LUNGHI.map((giorno, idx) => {
                   const turniGiorno = turniGenerati.map((t, gIdx) => ({ ...t, gIdx })).filter(t => t.giorno === idx)
                   if (turniGiorno.length === 0) return null
                   return (
-                    <div key={idx} className="border border-gray-100 rounded-xl p-3 space-y-2">
-                      <p className="text-xs font-bold text-gray-500 uppercase">{giorno}</p>
+                    <div key={idx} className="border border-ink-navy/8 rounded-xl p-3 space-y-2">
+                      <p className="text-xs font-bold text-ink-navy/50 uppercase">{giorno}</p>
                       {turniGiorno.map(({ gIdx, ...t }) => (
-                        <div key={gIdx} className="grid grid-cols-[1fr_80px_80px_28px] gap-2 items-center bg-gray-50 rounded-lg p-2">
+                        <div key={gIdx} className="grid grid-cols-[1fr_80px_80px_28px] gap-2 items-center bg-mist rounded-lg p-2">
                           <select value={t.dipendenteId}
                             onChange={e => { const dip = dipendenti.find(d => d.id === e.target.value); setTurniGenerati(prev => prev!.map((x, i) => i === gIdx ? { ...x, dipendenteId: e.target.value, nome: dip?.nome ?? x.nome } : x)) }}
-                            className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white">
+                            className="border border-ink-navy/15 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white">
                             {dipendenti.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
                           </select>
                           <input type="time" value={t.oraInizio}
                             onChange={e => setTurniGenerati(prev => prev!.map((x, i) => i === gIdx ? { ...x, oraInizio: e.target.value } : x))}
-                            className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white" />
+                            className="border border-ink-navy/15 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
                           <input type="time" value={t.oraFine}
                             onChange={e => setTurniGenerati(prev => prev!.map((x, i) => i === gIdx ? { ...x, oraFine: e.target.value } : x))}
-                            className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white" />
+                            className="border border-ink-navy/15 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
                           <button onClick={() => setTurniGenerati(prev => prev!.filter((_, i) => i !== gIdx))}
-                            className="text-gray-300 hover:text-red-500 text-sm font-bold transition-colors">✕</button>
+                            className="text-ink-navy/25 hover:text-red-500 text-sm font-bold transition-colors">✕</button>
                         </div>
                       ))}
                     </div>
@@ -911,7 +921,7 @@ export default function StaffPage() {
                   className="flex-1 border border-red-300 text-red-600 font-semibold py-2.5 rounded-xl hover:bg-red-50 text-sm">✕ Annulla proposta</button>
                 <button onClick={salvaTurniGenerati} disabled={salvandoTurni}
                   className="flex-1 bg-green-600 text-white font-semibold py-2.5 rounded-xl hover:bg-green-700 text-sm disabled:opacity-50">
-                  {salvandoTurni ? 'Salvataggio...' : '✓ Conferma e salva'}
+                  {salvandoTurni ? 'Salvataggio...' : 'Conferma e salva'}
                 </button>
               </div>
             </div>
@@ -937,43 +947,43 @@ export default function StaffPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 space-y-4">
             <div>
-              <h3 className="text-base font-bold text-gray-900">{cellModal.nome}</h3>
-              <p className="text-sm text-gray-500">{cellModal.dataLabel}</p>
+              <h3 className="text-base font-bold text-ink-navy">{cellModal.nome}</h3>
+              <p className="text-sm text-ink-navy/50">{cellModal.dataLabel}</p>
             </div>
             {assenzaApprovata && (
               <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700 font-medium">
-                🚫 {cellModal.nome.split(' ')[0]} ha {assenzaApprovata.tipo.replace('_', ' ')} approvata in questo giorno.
+                 {cellModal.nome.split(' ')[0]} ha {assenzaApprovata.tipo.replace('_', ' ')} approvata in questo giorno.
               </div>
             )}
             {!assenzaApprovata && noDispCella && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
-                ⚠️ Questo dipendente non ha dichiarato disponibilità per questo giorno.
+                 Questo dipendente non ha dichiarato disponibilità per questo giorno.
               </div>
             )}
             {!assenzaApprovata && fuoriOrarioCella && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
-                ⚠️ Disponibile solo dalle {dispCella?.oraInizio} alle {dispCella?.oraFine}.
+                 Disponibile solo dalle {dispCella?.oraInizio} alle {dispCella?.oraFine}.
               </div>
             )}
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Dalle</label>
+                <label className="block text-xs font-medium text-ink-navy/60 mb-1">Dalle</label>
                 <input type="time" value={cellModal.oraInizio}
                   onChange={e => setCellModal(m => m ? { ...m, oraInizio: e.target.value } : m)}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Alle</label>
+                <label className="block text-xs font-medium text-ink-navy/60 mb-1">Alle</label>
                 <input type="time" value={cellModal.oraFine}
                   onChange={e => setCellModal(m => m ? { ...m, oraFine: e.target.value } : m)}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setCellModal(null)}
-                className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">Annulla</button>
+                className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
               <button onClick={salvaDaCella} disabled={savingCell}
-                className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50">
+                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 text-sm disabled:opacity-50">
                 {savingCell ? '...' : 'Salva turno'}
               </button>
             </div>
@@ -986,28 +996,28 @@ export default function StaffPage() {
       {dipendenteDaModificare && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-lg font-bold text-gray-900">Modifica dipendente</h3>
+            <h3 className="text-lg font-bold text-ink-navy">Modifica dipendente</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome *</label>
                 <input value={formModifica.nome} onChange={e => setFormModifica(f => ({ ...f, nome: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email *</label>
                 <input type="email" value={formModifica.email} onChange={e => setFormModifica(f => ({ ...f, email: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ruolo</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ruolo</label>
                 <input placeholder="es. Cameriere, Chef..." value={formModifica.ruolo} onChange={e => setFormModifica(f => ({ ...f, ruolo: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => setDipendenteDaModificare(null)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">Annulla</button>
+              <button onClick={() => setDipendenteDaModificare(null)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
               <button onClick={salvaDipendente} disabled={saving || !formModifica.nome || !formModifica.email}
-                className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50">
+                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 text-sm disabled:opacity-50">
                 {saving ? 'Salvataggio...' : 'Salva modifiche'}
               </button>
             </div>
@@ -1019,28 +1029,28 @@ export default function StaffPage() {
       {showModalDip && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-lg font-bold text-gray-900">Nuovo dipendente</h3>
+            <h3 className="text-lg font-bold text-ink-navy">Nuovo dipendente</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome *</label>
                 <input value={formDip.nome} onChange={e => setFormDip(f => ({ ...f, nome: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email *</label>
                 <input type="email" value={formDip.email} onChange={e => setFormDip(f => ({ ...f, email: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ruolo</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ruolo</label>
                 <input placeholder="es. Cameriere, Chef, Cassiere..." value={formDip.ruolo} onChange={e => setFormDip(f => ({ ...f, ruolo: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => setShowModalDip(false)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">Annulla</button>
+              <button onClick={() => setShowModalDip(false)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
               <button onClick={aggiungiDipendente} disabled={saving || !formDip.nome || !formDip.email}
-                className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50">
+                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 text-sm disabled:opacity-50">
                 {saving ? 'Salvataggio...' : 'Aggiungi'}
               </button>
             </div>
@@ -1061,31 +1071,31 @@ export default function StaffPage() {
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-bold text-gray-900">Disponibilità — {dispModal.dipendente.nome}</h3>
-                  <p className="text-xs text-gray-400">{dispModal.dipendente.ruolo || dispModal.dipendente.email}</p>
+                  <h3 className="text-base font-bold text-ink-navy">Disponibilità — {dispModal.dipendente.nome}</h3>
+                  <p className="text-xs text-ink-navy/35">{dispModal.dipendente.ruolo || dispModal.dipendente.email}</p>
                 </div>
-                <button onClick={() => setDispModal(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+                <button onClick={() => setDispModal(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-lg">✕</button>
               </div>
 
               {/* Navigazione mese */}
               <div className="flex items-center justify-between">
                 <button onClick={async () => { const m = new Date(dispMese.getFullYear(), dispMese.getMonth() - 1, 1); setDispMese(m); setDispGiornoSel(null); await caricaDisp(dispModal.dipendente.id, m) }}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">←</button>
-                <span className="font-semibold text-gray-800 text-sm capitalize">
+                  className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50">←</button>
+                <span className="font-semibold text-ink-navy text-sm capitalize">
                   {dispMese.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
                 </span>
                 <button onClick={async () => { const m = new Date(dispMese.getFullYear(), dispMese.getMonth() + 1, 1); setDispMese(m); setDispGiornoSel(null); await caricaDisp(dispModal.dipendente.id, m) }}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">→</button>
+                  className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50">→</button>
               </div>
 
               {loadingDisp ? (
-                <p className="text-center text-sm text-gray-400 py-4">Caricamento...</p>
+                <p className="text-center text-sm text-ink-navy/35 py-4">Caricamento...</p>
               ) : (
                 <>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-7 border-b border-gray-100">
+                  <div className="border border-ink-navy/10 rounded-xl overflow-hidden">
+                    <div className="grid grid-cols-7 border-b border-ink-navy/8">
                       {['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map((g, i) => (
-                        <div key={i} className={`py-2 text-center text-xs font-bold ${i >= 5 ? 'text-indigo-400' : 'text-gray-400'}`}>{g}</div>
+                        <div key={i} className={`py-2 text-center text-xs font-bold ${i >= 5 ? 'text-electric-blue' : 'text-ink-navy/35'}`}>{g}</div>
                       ))}
                     </div>
                     <div className="grid grid-cols-7">
@@ -1101,13 +1111,13 @@ export default function StaffPage() {
                         return (
                           <div key={idx}
                             onClick={() => isDelMese && dataStr && isDisp && setDispGiornoSel(isSel ? null : dataStr)}
-                            className={`min-h-[44px] p-1 border-b border-r border-gray-100 flex flex-col items-center justify-start pt-1.5
-                              ${!isDelMese ? 'bg-gray-50/60' : isDisp ? 'bg-green-100 cursor-pointer hover:bg-green-200' : 'bg-white'}
+                            className={`min-h-[44px] p-1 border-b border-r border-ink-navy/8 flex flex-col items-center justify-start pt-1.5
+                              ${!isDelMese ? 'bg-mist/60' : isDisp ? 'bg-green-100 cursor-pointer hover:bg-green-200' : 'bg-white'}
                               ${isSel ? 'ring-2 ring-inset ring-green-500' : ''}`}>
                             {isDelMese && (
                               <>
                                 <p className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full
-                                  ${isOggi ? 'bg-indigo-600 text-white' : isDisp ? 'text-green-700' : 'text-gray-400'}`}>
+                                  ${isOggi ? 'bg-electric-blue text-white' : isDisp ? 'text-green-700' : 'text-ink-navy/35'}`}>
                                   {gNum}
                                 </p>
                                 {hasOrario && <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-0.5" title="Orario specifico"></span>}
@@ -1120,11 +1130,11 @@ export default function StaffPage() {
                   </div>
 
                   {dispGiorni.length === 0 ? (
-                    <p className="text-center text-sm text-gray-400">Nessuna disponibilità inviata per questo mese</p>
+                    <p className="text-center text-sm text-ink-navy/35">Nessuna disponibilità inviata per questo mese</p>
                   ) : (
                     <div className="flex items-center gap-4 flex-wrap">
                       <p className="text-xs text-green-700 font-medium">{dispGiorni.length} giorn{dispGiorni.length === 1 ? 'o' : 'i'} disponibil{dispGiorni.length === 1 ? 'e' : 'i'}</p>
-                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <div className="flex items-center gap-1.5 text-xs text-ink-navy/50">
                         <span className="w-2 h-2 rounded-full bg-red-400"></span>Orario specifico
                       </div>
                     </div>
@@ -1153,9 +1163,11 @@ export default function StaffPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
             <div className="text-center">
-              <div className="text-4xl mb-3">🗑️</div>
-              <h3 className="text-lg font-bold text-gray-900">Cancella tutti i turni</h3>
-              <p className="text-sm text-gray-500 mt-2">
+              <div className="w-12 h-12 rounded-xl bg-red-50 text-red-500 flex items-center justify-center p-3 mx-auto mb-4">
+                <IconTrash />
+              </div>
+              <h3 className="text-lg font-bold text-ink-navy">Cancella tutti i turni</h3>
+              <p className="text-sm text-ink-navy/50 mt-2">
                 Stai per eliminare <span className="font-semibold text-red-600">{turni.length} turni</span> della settimana<br />
                 <span className="font-medium">{settimana.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })} – {giorni[6].toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
               </p>
@@ -1163,7 +1175,7 @@ export default function StaffPage() {
             </div>
             <div className="flex gap-3">
               <button onClick={() => setConfirmCancella(false)}
-                className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">
+                className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">
                 Annulla
               </button>
               <button onClick={cancellaSettimana} disabled={cancellandoSett}
@@ -1179,48 +1191,48 @@ export default function StaffPage() {
       {showModalTurno && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-lg font-bold text-gray-900">Nuovo turno</h3>
+            <h3 className="text-lg font-bold text-ink-navy">Nuovo turno</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dipendente *</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Dipendente *</label>
                 <select value={formTurno.dipendenteId} onChange={e => setFormTurno(f => ({ ...f, dipendenteId: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
                   <option value="">Seleziona...</option>
                   {dipendenti.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data *</label>
                 <input type="date" value={formTurno.data} onChange={e => setFormTurno(f => ({ ...f, data: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Inizio *</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Inizio *</label>
                   <input type="time" value={formTurno.oraInizio} onChange={e => setFormTurno(f => ({ ...f, oraInizio: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fine *</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Fine *</label>
                   <input type="time" value={formTurno.oraFine} onChange={e => setFormTurno(f => ({ ...f, oraFine: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ruolo specifico</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ruolo specifico</label>
                 <input placeholder="es. Sala, Cucina..." value={formTurno.ruolo} onChange={e => setFormTurno(f => ({ ...f, ruolo: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note</label>
                 <input value={formTurno.note} onChange={e => setFormTurno(f => ({ ...f, note: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => setShowModalTurno(false)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm">Annulla</button>
+              <button onClick={() => setShowModalTurno(false)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
               <button onClick={aggiungiTurno} disabled={saving || !formTurno.dipendenteId || !formTurno.data}
-                className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50">
+                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 text-sm disabled:opacity-50">
                 {saving ? 'Salvataggio...' : 'Aggiungi turno'}
               </button>
             </div>
@@ -1231,9 +1243,9 @@ export default function StaffPage() {
       {conferma && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConferma(null)}>
           <div className="bg-white rounded-2xl shadow-xl p-6 w-80 mx-4" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-gray-800 mb-4">{conferma.msg}</p>
+            <p className="text-sm font-medium text-ink-navy mb-4">{conferma.msg}</p>
             <div className="flex gap-3">
-              <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Annulla</button>
+              <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-ink-navy/10 text-ink-navy/60 text-sm font-medium hover:bg-mist">Annulla</button>
               <button onClick={async () => { await conferma.onConfirm(); setConferma(null) }} className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Conferma</button>
             </div>
           </div>

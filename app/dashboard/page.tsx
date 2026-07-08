@@ -1,31 +1,33 @@
 import Link from 'next/link'
+import type { ComponentType } from 'react'
+import { IconUsers, IconClipboard, IconChat, IconCalendar, IconFork } from '../components/icons'
 
-const stats = [
-  { label: 'Lead questo mese', value: '—', icon: '👤', href: '/dashboard/clienti/crm' },
-  { label: 'Post pubblicati', value: '—', icon: '📝', href: '/dashboard/marketing/piano' },
-  { label: 'ROI campagne', value: '—', icon: '📈', href: '/dashboard/marketing/roi' },
-  { label: 'Messaggi non letti', value: '—', icon: '💬', href: '/dashboard/clienti/inbox' },
+const stats: { label: string; value: string; Icon: ComponentType<{ className?: string }>; href: string }[] = [
+  { label: 'Lead questo mese', value: '—', Icon: IconUsers, href: '/dashboard/clienti/crm' },
+  { label: 'Richieste in attesa', value: '—', Icon: IconClipboard, href: '/dashboard/clienti/preventivi' },
+  { label: 'Messaggi non letti', value: '—', Icon: IconChat, href: '/dashboard/clienti/inbox' },
+  { label: 'Prenotazioni', value: '—', Icon: IconCalendar, href: '/dashboard/clienti/calendario' },
 ]
 
 const modules = [
   {
-    title: 'Marketing Intelligence',
-    description: 'Analytics social, content repurposing AI, piano editoriale e calcolo ROI.',
-    icon: '📊',
-    links: [
-      { label: 'Analytics Social', href: '/dashboard/marketing/analytics' },
-      { label: 'Content Repurposing', href: '/dashboard/marketing/content' },
-      { label: 'Piano Editoriale', href: '/dashboard/marketing/piano' },
-    ],
-  },
-  {
     title: 'Lead & Client Hub',
     description: 'CRM, inbox unificata WhatsApp + email, preventivi e calendario.',
-    icon: '🤝',
+    Icon: IconUsers,
     links: [
       { label: 'CRM / Pipeline', href: '/dashboard/clienti/crm' },
       { label: 'Inbox Unificata', href: '/dashboard/clienti/inbox' },
       { label: 'Preventivi', href: '/dashboard/clienti/preventivi' },
+    ],
+  },
+  {
+    title: 'Sala & Cucina',
+    description: 'Menu digitale, ordini QR in tempo reale e mappa tavoli.',
+    Icon: IconFork,
+    links: [
+      { label: 'Menu', href: '/dashboard/menu' },
+      { label: 'Ordini', href: '/dashboard/ordini' },
+      { label: 'Tavoli & QR', href: '/dashboard/tavoli' },
     ],
   },
 ]
@@ -47,7 +49,9 @@ export default function DashboardHome() {
             href={s.href}
             className="bg-white border border-ink-navy/10 rounded-xl p-4 hover:shadow-sm hover:border-electric-blue/30 transition-all"
           >
-            <div className="text-2xl mb-2">{s.icon}</div>
+            <div className="w-6 h-6 text-electric-blue mb-3">
+              <s.Icon />
+            </div>
             <div className="text-2xl font-extrabold text-ink-navy">{s.value}</div>
             <div className="text-sm text-ink-navy/50 mt-0.5">{s.label}</div>
           </Link>
@@ -59,8 +63,8 @@ export default function DashboardHome() {
         {modules.map((m) => (
           <div key={m.title} className="border border-ink-navy/10 bg-white rounded-xl p-5">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-electric-blue/10 flex items-center justify-center text-xl">
-                {m.icon}
+              <div className="w-10 h-10 rounded-lg bg-electric-blue/10 flex items-center justify-center p-2.5 text-electric-blue">
+                <m.Icon />
               </div>
               <h2 className="font-bold text-ink-navy">{m.title}</h2>
             </div>
@@ -84,7 +88,7 @@ export default function DashboardHome() {
       <div className="bg-ink-navy rounded-xl p-5 text-white flex items-center justify-between">
         <div>
           <p className="font-semibold">Completa il setup del tuo account</p>
-          <p className="text-white/50 text-sm mt-0.5">Collega i tuoi social e configura le preferenze AI.</p>
+          <p className="text-white/50 text-sm mt-0.5">Configura il tuo locale e le preferenze AI.</p>
         </div>
         <Link
           href="/dashboard/impostazioni"

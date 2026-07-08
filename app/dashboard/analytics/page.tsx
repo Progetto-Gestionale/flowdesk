@@ -117,12 +117,12 @@ function MiniCalendario({ periodo, riferimento, onScegli, onChiudi }: {
   if (periodo === 'anno') {
     const anni = Array.from({ length: 6 }, (_, i) => ora.getFullYear() - 5 + i)
     return (
-      <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-4 w-56">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Seleziona anno</p>
+      <div className="absolute right-0 top-full mt-1 bg-white border border-ink-navy/10 rounded-2xl shadow-xl z-50 p-4 w-56">
+        <p className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide mb-3">Seleziona anno</p>
         <div className="grid grid-cols-3 gap-1.5">
           {anni.map(a => (
             <button key={a} onClick={() => { onScegli(new Date(a, 6, 1)); onChiudi() }}
-              className={`rounded-xl py-2 text-sm font-medium transition-colors ${a === riferimento.getFullYear() ? 'bg-indigo-600 text-white' : a > ora.getFullYear() ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-indigo-50 text-gray-700'}`}
+              className={`rounded-xl py-2 text-sm font-medium transition-colors ${a === riferimento.getFullYear() ? 'bg-electric-blue text-white' : a > ora.getFullYear() ? 'text-ink-navy/25 cursor-not-allowed' : 'hover:bg-electric-blue/10 text-ink-navy/70'}`}
               disabled={a > ora.getFullYear()}>
               {a}
             </button>
@@ -155,17 +155,17 @@ function MiniCalendario({ periodo, riferimento, onScegli, onChiudi }: {
   }
 
   return (
-    <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-4 w-72">
+    <div className="absolute right-0 top-full mt-1 bg-white border border-ink-navy/10 rounded-2xl shadow-xl z-50 p-4 w-72">
       {/* Header mese */}
       <div className="flex items-center justify-between mb-3">
-        <button onClick={mesePrecedente} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 text-lg">‹</button>
-        <span className="text-sm font-semibold text-gray-800">{MESI_BREVI[meseNav]} {annoNav}</span>
+        <button onClick={mesePrecedente} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-lg">‹</button>
+        <span className="text-sm font-semibold text-ink-navy">{MESI_BREVI[meseNav]} {annoNav}</span>
         <button onClick={meseSuccessivo} disabled={annoNav === ora.getFullYear() && meseNav >= ora.getMonth()}
-          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 text-lg disabled:opacity-30">›</button>
+          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-lg disabled:opacity-30">›</button>
       </div>
       {/* Intestazioni giorni */}
       <div className="grid grid-cols-7 gap-0.5 mb-1">
-        {GIORNI_BREVI.map((g, i) => <div key={i} className="text-center text-[10px] font-semibold text-gray-400">{g}</div>)}
+        {GIORNI_BREVI.map((g, i) => <div key={i} className="text-center text-[10px] font-semibold text-ink-navy/35">{g}</div>)}
       </div>
       {/* Celle giorni */}
       <div className="grid grid-cols-7 gap-0.5">
@@ -184,7 +184,7 @@ function MiniCalendario({ periodo, riferimento, onScegli, onChiudi }: {
               })()
           return (
             <button key={giorno} onClick={() => selGiorno(giorno)} disabled={futuro}
-              className={`rounded-lg py-1 text-xs font-medium transition-colors ${futuro ? 'text-gray-200 cursor-not-allowed' : attivo ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50 text-gray-700'}`}>
+              className={`rounded-lg py-1 text-xs font-medium transition-colors ${futuro ? 'text-gray-200 cursor-not-allowed' : attivo ? 'bg-electric-blue text-white' : 'hover:bg-electric-blue/10 text-ink-navy/70'}`}>
               {giorno}
             </button>
           )
@@ -255,7 +255,7 @@ export default function AnalyticsPage() {
       .then(d => { setStaff(d.staff ?? []); setLoadingStaff(false) })
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Caricamento...</div>
+  if (loading) return <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>
   if (!data) return null
 
   const maxTotale = Math.max(...data.perMese.map(m => m.totale), 1)
@@ -276,15 +276,15 @@ export default function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Statistiche sull&apos;andamento del tuo locale</p>
+          <h1 className="text-2xl font-bold text-ink-navy">Analytics</h1>
+          <p className="text-ink-navy/50 text-sm mt-0.5">Statistiche sull&apos;andamento del tuo locale</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           {/* Selettore periodo */}
-          <div className="flex rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm text-sm font-medium">
+          <div className="flex rounded-xl border border-ink-navy/10 bg-white overflow-hidden shadow-sm text-sm font-medium">
             {(['settimana', 'mese', 'anno'] as Periodo[]).map(p => (
               <button key={p} onClick={() => { setPeriodo(p); setRiferimento(new Date()) }}
-                className={`px-4 py-2 capitalize transition-colors ${periodo === p ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+                className={`px-4 py-2 capitalize transition-colors ${periodo === p ? 'bg-electric-blue text-white' : 'text-ink-navy/50 hover:bg-mist'}`}>
                 {p.charAt(0).toUpperCase() + p.slice(1)}
               </button>
             ))}
@@ -292,11 +292,11 @@ export default function AnalyticsPage() {
           {/* Navigazione prev/next */}
           <div className="flex items-center gap-2 relative">
             <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, -1))}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors text-lg">
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg">
               ‹
             </button>
             <button onClick={() => setCalendarioAperto(v => !v)}
-              className="text-sm font-medium text-gray-700 min-w-[160px] text-center px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors">
+              className="text-sm font-medium text-ink-navy/70 min-w-[160px] text-center px-3 py-1.5 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors">
               {data?.labelPeriodo ?? '—'}
             </button>
             {calendarioAperto && (
@@ -309,12 +309,12 @@ export default function AnalyticsPage() {
             )}
             <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, 1))}
               disabled={isFuturo}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors text-lg disabled:opacity-30 disabled:cursor-not-allowed">
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg disabled:opacity-30 disabled:cursor-not-allowed">
               ›
             </button>
             {!isOggi && (
               <button onClick={() => setRiferimento(new Date())}
-                className="text-xs text-indigo-600 hover:underline ml-1">
+                className="text-xs text-electric-blue hover:underline ml-1">
                 Oggi
               </button>
             )}
@@ -324,33 +324,33 @@ export default function AnalyticsPage() {
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Prenotazioni totali</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">{data.totaleApp}</p>
-          <p className="text-xs text-gray-400 mt-1">{periodo === 'settimana' ? 'questa settimana' : periodo === 'mese' ? 'questo mese' : 'ultimi 12 mesi'}</p>
+        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Prenotazioni totali</p>
+          <p className="text-3xl font-bold text-ink-navy mt-1">{data.totaleApp}</p>
+          <p className="text-xs text-ink-navy/35 mt-1">{periodo === 'settimana' ? 'questa settimana' : periodo === 'mese' ? 'questo mese' : 'ultimi 12 mesi'}</p>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Tasso no-show</p>
+        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Tasso no-show</p>
           <p className={`text-3xl font-bold mt-1 ${data.tassoNoShow > 15 ? 'text-red-500' : data.tassoNoShow > 8 ? 'text-amber-500' : 'text-green-500'}`}>
             {data.tassoNoShow}%
           </p>
-          <p className="text-xs text-gray-400 mt-1">{data.noShow} no-show · {data.cancellati} cancellate</p>
+          <p className="text-xs text-ink-navy/35 mt-1">{data.noShow} no-show · {data.cancellati} cancellate</p>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Giorno più gettonato</p>
-          <p className="text-3xl font-bold text-indigo-600 mt-1">{data.giornoTop ?? '—'}</p>
-          <p className="text-xs text-gray-400 mt-1">giorno della settimana</p>
+        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Giorno più gettonato</p>
+          <p className="text-3xl font-bold text-electric-blue mt-1">{data.giornoTop ?? '—'}</p>
+          <p className="text-xs text-ink-navy/35 mt-1">giorno della settimana</p>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Orario più richiesto</p>
-          <p className="text-3xl font-bold text-indigo-600 mt-1">{data.oraTop ?? '—'}</p>
-          <p className="text-xs text-gray-400 mt-1">fascia oraria</p>
+        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Orario più richiesto</p>
+          <p className="text-3xl font-bold text-electric-blue mt-1">{data.oraTop ?? '—'}</p>
+          <p className="text-xs text-ink-navy/35 mt-1">fascia oraria</p>
         </div>
       </div>
 
       {/* Grafico prenotazioni per mese */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-800 mb-4">
+      <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-ink-navy mb-4">
           {periodo === 'settimana' ? 'Prenotazioni questa settimana' : periodo === 'mese' ? 'Prenotazioni questo mese' : 'Prenotazioni ultimi 12 mesi'}
         </h2>
         <div className="flex items-end gap-3 h-40">
@@ -362,19 +362,19 @@ export default function AnalyticsPage() {
             const hOk = Math.max(hTot - hNS - hCanc, 0)
             return (
               <div key={m.mese} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-xs text-gray-500 font-medium">{m.totale}</span>
+                <span className="text-xs text-ink-navy/50 font-medium">{m.totale}</span>
                 <div className="w-full flex flex-col justify-end rounded-t-lg overflow-hidden" style={{ height: `${Math.max(hTot, 4)}px` }}>
                   <div className="w-full bg-red-300" style={{ height: `${hNS}px` }} title={`No-show: ${m.noShow}`} />
                   <div className="w-full bg-orange-300" style={{ height: `${hCanc}px` }} title={`Cancellate: ${m.cancellati}`} />
-                  <div className="w-full bg-indigo-500" style={{ height: `${hOk}px` }} />
+                  <div className="w-full bg-electric-blue" style={{ height: `${hOk}px` }} />
                 </div>
-                <span className="text-xs text-gray-400">{label}</span>
+                <span className="text-xs text-ink-navy/35">{label}</span>
               </div>
             )
           })}
         </div>
-        <div className="flex gap-4 mt-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-indigo-500 inline-block" /> Prenotazioni</span>
+        <div className="flex gap-4 mt-3 text-xs text-ink-navy/50">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-electric-blue inline-block" /> Prenotazioni</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-300 inline-block" /> Cancellate</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-300 inline-block" /> No-show</span>
         </div>
@@ -382,19 +382,19 @@ export default function AnalyticsPage() {
 
       {/* Grafico revenue */}
       {maxRevenue > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">Revenue tavoli</h2>
+        <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+          <h2 className="text-base font-semibold text-ink-navy mb-4">Revenue tavoli</h2>
           <div className="flex items-end gap-3 h-32">
             {data.perMese.map(m => {
               const label = bucketLabel(m.mese)
               const h = Math.round((m.revenue / maxRevenue) * 110)
               return (
                 <div key={m.mese} className="flex-1 flex flex-col items-center gap-1">
-                  {m.revenue > 0 && <span className="text-xs text-gray-500 font-medium">€{m.revenue.toLocaleString('it-IT')}</span>}
+                  {m.revenue > 0 && <span className="text-xs text-ink-navy/50 font-medium">€{m.revenue.toLocaleString('it-IT')}</span>}
                   <div className="w-full flex flex-col justify-end" style={{ height: '110px' }}>
                     <div className="w-full bg-emerald-500 rounded-t-lg" style={{ height: `${Math.max(h, m.revenue > 0 ? 4 : 0)}px` }} />
                   </div>
-                  <span className="text-xs text-gray-400">{label}</span>
+                  <span className="text-xs text-ink-navy/35">{label}</span>
                 </div>
               )
             })}
@@ -403,12 +403,12 @@ export default function AnalyticsPage() {
       )}
 
       {/* Tabella dettaglio mesi */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-800">Dettaglio mensile</h2>
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-ink-navy/8">
+          <h2 className="text-base font-semibold text-ink-navy">Dettaglio mensile</h2>
         </div>
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+          <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
             <tr>
               <th className="text-left px-6 py-3">Periodo</th>
               <th className="text-right px-4 py-3">Totale</th>
@@ -420,9 +420,9 @@ export default function AnalyticsPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {[...data.perMese].reverse().map(m => (
-              <tr key={m.mese} className="hover:bg-gray-50">
-                <td className="px-6 py-3 font-medium text-gray-800">{bucketFull(m.mese)}</td>
-                <td className="text-right px-4 py-3 text-gray-700">{m.totale}</td>
+              <tr key={m.mese} className="hover:bg-mist">
+                <td className="px-6 py-3 font-medium text-ink-navy">{bucketFull(m.mese)}</td>
+                <td className="text-right px-4 py-3 text-ink-navy/70">{m.totale}</td>
                 <td className="text-right px-4 py-3 text-green-600">{m.completati}</td>
                 <td className="text-right px-4 py-3 text-orange-500">{m.cancellati > 0 ? m.cancellati : '—'}</td>
                 <td className="text-right px-4 py-3 text-red-500">{m.noShow > 0 ? m.noShow : '—'}</td>
@@ -439,12 +439,12 @@ export default function AnalyticsPage() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Analytics staff</h2>
-            <p className="text-gray-500 text-sm mt-0.5">Ore, presenze e richieste per dipendente</p>
+            <h2 className="text-xl font-bold text-ink-navy">Analytics staff</h2>
+            <p className="text-ink-navy/50 text-sm mt-0.5">Ore, presenze e richieste per dipendente</p>
           </div>
           {mesiDisponibili.length > 0 && (
             <select value={meseSel} onChange={e => cambiaMe(e.target.value)}
-              className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+              className="text-sm border border-ink-navy/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-electric-blue bg-white">
               {mesiDisponibili.map(m => (
                 <option key={m} value={m}>
                   {MESI_LABEL[m.split('-')[1]]} {m.split('-')[0]}
@@ -455,34 +455,34 @@ export default function AnalyticsPage() {
         </div>
 
         {loadingStaff ? (
-          <div className="text-gray-400 text-sm py-8 text-center">Caricamento...</div>
+          <div className="text-ink-navy/35 text-sm py-8 text-center">Caricamento...</div>
         ) : staff.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center shadow-sm">
-            <p className="text-gray-400 text-sm">Nessun dipendente trovato</p>
+          <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
+            <p className="text-ink-navy/35 text-sm">Nessun dipendente trovato</p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {staff.map(dip => (
-              <div key={dip.id} onClick={() => apriDettaglio(dip.id)} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all">
+              <div key={dip.id} onClick={() => apriDettaglio(dip.id)} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4 cursor-pointer hover:border-electric-blue/40 hover:shadow-md transition-all">
                 {/* Header */}
                 <div>
-                  <p className="font-bold text-gray-900">{dip.nome}</p>
-                  {dip.ruolo && <p className="text-xs text-gray-400">{dip.ruolo}</p>}
+                  <p className="font-bold text-ink-navy">{dip.nome}</p>
+                  {dip.ruolo && <p className="text-xs text-ink-navy/35">{dip.ruolo}</p>}
                 </div>
 
                 {/* KPI principali */}
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center bg-indigo-50 rounded-xl py-2">
-                    <p className="text-lg font-bold text-indigo-700">{dip.oreLavorate}</p>
-                    <p className="text-[10px] text-indigo-500 font-medium">ore</p>
+                  <div className="text-center bg-electric-blue/10 rounded-xl py-2">
+                    <p className="text-lg font-bold text-electric-blue">{dip.oreLavorate}</p>
+                    <p className="text-[10px] text-electric-blue font-medium">ore</p>
                   </div>
-                  <div className="text-center bg-indigo-50 rounded-xl py-2">
-                    <p className="text-lg font-bold text-indigo-700">{dip.giorniLavorati}</p>
-                    <p className="text-[10px] text-indigo-500 font-medium">giorni</p>
+                  <div className="text-center bg-electric-blue/10 rounded-xl py-2">
+                    <p className="text-lg font-bold text-electric-blue">{dip.giorniLavorati}</p>
+                    <p className="text-[10px] text-electric-blue font-medium">giorni</p>
                   </div>
-                  <div className="text-center bg-indigo-50 rounded-xl py-2">
-                    <p className="text-lg font-bold text-indigo-700">{dip.giornoTop ?? '—'}</p>
-                    <p className="text-[10px] text-indigo-500 font-medium">giorno top</p>
+                  <div className="text-center bg-electric-blue/10 rounded-xl py-2">
+                    <p className="text-lg font-bold text-electric-blue">{dip.giornoTop ?? '—'}</p>
+                    <p className="text-[10px] text-electric-blue font-medium">giorno top</p>
                   </div>
                 </div>
 
@@ -494,21 +494,21 @@ export default function AnalyticsPage() {
                     { label: 'Permessi', tot: dip.permessi.totale, app: dip.permessi.approvati, color: 'text-amber-600' },
                   ].map(r => r.tot > 0 && (
                     <div key={r.label} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">{r.label}</span>
+                      <span className="text-ink-navy/50">{r.label}</span>
                       <span className={`font-semibold ${r.color}`}>
                         {r.app}/{r.tot}
-                        <span className="text-gray-400 font-normal text-xs ml-1">approv.</span>
+                        <span className="text-ink-navy/35 font-normal text-xs ml-1">approv.</span>
                       </span>
                     </div>
                   ))}
                   {dip.preferenze > 0 && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Pref. orario</span>
+                      <span className="text-ink-navy/50">Pref. orario</span>
                       <span className="font-semibold text-purple-600">{dip.preferenze}</span>
                     </div>
                   )}
                   {dip.ferie.totale === 0 && dip.malattie.totale === 0 && dip.permessi.totale === 0 && dip.preferenze === 0 && (
-                    <p className="text-xs text-gray-300 italic">Nessuna richiesta questo mese</p>
+                    <p className="text-xs text-ink-navy/25 italic">Nessuna richiesta questo mese</p>
                   )}
                 </div>
               </div>
@@ -522,7 +522,7 @@ export default function AnalyticsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setDettaglio(null) }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             {loadingDett ? (
-              <div className="p-12 text-center text-gray-400">Caricamento...</div>
+              <div className="p-12 text-center text-ink-navy/35">Caricamento...</div>
             ) : dettaglio && (() => {
               const { dip, turniPerGiorno, orePerDow, richieste: rich, mese } = dettaglio
               const [y, m] = mese.split('-').map(Number)
@@ -540,16 +540,16 @@ export default function AnalyticsPage() {
                   {/* Header */}
                   <div className="flex items-start justify-between">
                     <div>
-                      <h2 className="text-xl font-bold text-gray-900">{dip.nome}</h2>
-                      {dip.ruolo && <p className="text-sm text-gray-400">{dip.ruolo}</p>}
-                      <p className="text-xs text-gray-400 mt-0.5">{MESI_LABEL[mese.split('-')[1]]} {mese.split('-')[0]}</p>
+                      <h2 className="text-xl font-bold text-ink-navy">{dip.nome}</h2>
+                      {dip.ruolo && <p className="text-sm text-ink-navy/35">{dip.ruolo}</p>}
+                      <p className="text-xs text-ink-navy/35 mt-0.5">{MESI_LABEL[mese.split('-')[1]]} {mese.split('-')[0]}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => scaricaPdf(dip.nome, dip.ruolo, mese, turniPerGiorno)}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors">
-                        ⬇ Scarica PDF
+                        className="text-xs px-3 py-1.5 rounded-lg bg-electric-blue text-white font-semibold hover:bg-electric-blue/90 transition-colors">
+                        Scarica PDF
                       </button>
-                      <button onClick={() => setDettaglio(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+                      <button onClick={() => setDettaglio(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl leading-none">✕</button>
                     </div>
                   </div>
 
@@ -560,19 +560,19 @@ export default function AnalyticsPage() {
                       { label: 'Giorni lavorati', val: dip.giorniLavorati },
                       { label: 'Giorno top', val: dip.giornoTop ?? '—' },
                     ].map(k => (
-                      <div key={k.label} className="bg-indigo-50 rounded-xl p-3 text-center">
-                        <p className="text-xl font-bold text-indigo-700">{k.val}</p>
-                        <p className="text-[11px] text-indigo-500 mt-0.5">{k.label}</p>
+                      <div key={k.label} className="bg-electric-blue/10 rounded-xl p-3 text-center">
+                        <p className="text-xl font-bold text-electric-blue">{k.val}</p>
+                        <p className="text-[11px] text-electric-blue mt-0.5">{k.label}</p>
                       </div>
                     ))}
                   </div>
 
                   {/* Calendario turni del mese */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Presenze nel mese</h3>
+                    <h3 className="text-sm font-semibold text-ink-navy/70 mb-3">Presenze nel mese</h3>
                     <div className="grid grid-cols-7 gap-1 text-center">
                       {['L','M','M','G','V','S','D'].map((d, i) => (
-                        <div key={i} className="text-[10px] font-semibold text-gray-400 pb-1">{d}</div>
+                        <div key={i} className="text-[10px] font-semibold text-ink-navy/35 pb-1">{d}</div>
                       ))}
                       {/* celle vuote prima del primo giorno (lun=0) */}
                       {Array.from({ length: (primoGiorno === 0 ? 6 : primoGiorno - 1) }).map((_, i) => <div key={`e${i}`} />)}
@@ -583,7 +583,7 @@ export default function AnalyticsPage() {
                         const oreGiorno = ts ? ts.reduce((s, t) => s + t.ore, 0) : 0
                         return (
                           <div key={day} title={ts ? ts.map(t => `${t.oraInizio}–${t.oraFine} (${t.ore}h)`).join('\n') : undefined}
-                            className={`rounded-lg py-1.5 text-xs font-medium transition-colors ${ts ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                            className={`rounded-lg py-1.5 text-xs font-medium transition-colors ${ts ? 'bg-electric-blue text-white' : 'bg-mist text-ink-navy/35'}`}>
                             <div>{day}</div>
                             {ts && <div className="text-[9px] opacity-80">{oreGiorno}h</div>}
                           </div>
@@ -594,7 +594,7 @@ export default function AnalyticsPage() {
 
                   {/* Distribuzione per giorno settimana */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Ore per giorno della settimana</h3>
+                    <h3 className="text-sm font-semibold text-ink-navy/70 mb-3">Ore per giorno della settimana</h3>
                     <div className="flex items-end gap-2 h-24">
                       {/* orePerDow da API: 0=dom, riordino lun-dom */}
                       {[1,2,3,4,5,6,0].map((dow, i) => {
@@ -602,9 +602,9 @@ export default function AnalyticsPage() {
                         const h = Math.round((ore / maxDow) * 80)
                         return (
                           <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                            {ore > 0 && <span className="text-[10px] text-gray-500">{ore}h</span>}
-                            <div className="w-full rounded-t-md bg-indigo-500" style={{ height: `${Math.max(h, ore > 0 ? 4 : 0)}px` }} />
-                            <span className="text-[10px] text-gray-400">{DOW[i]}</span>
+                            {ore > 0 && <span className="text-[10px] text-ink-navy/50">{ore}h</span>}
+                            <div className="w-full rounded-t-md bg-electric-blue" style={{ height: `${Math.max(h, ore > 0 ? 4 : 0)}px` }} />
+                            <span className="text-[10px] text-ink-navy/35">{DOW[i]}</span>
                           </div>
                         )
                       })}
@@ -614,13 +614,13 @@ export default function AnalyticsPage() {
                   {/* Assenze */}
                   {assenze.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-700 mb-2">Assenze e permessi</h3>
+                      <h3 className="text-sm font-semibold text-ink-navy/70 mb-2">Assenze e permessi</h3>
                       <div className="space-y-2">
                         {assenze.map((r, i) => (
-                          <div key={i} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2.5">
+                          <div key={i} className="flex items-center justify-between bg-mist rounded-xl px-4 py-2.5">
                             <div>
-                              <span className="text-sm font-medium text-gray-800 capitalize">{r.tipo.replace('_', ' ')}</span>
-                              <span className="text-xs text-gray-400 ml-2">{fmtData(r.data)}{r.dataFine && r.dataFine !== r.data ? ` → ${fmtData(r.dataFine)}` : ''}</span>
+                              <span className="text-sm font-medium text-ink-navy capitalize">{r.tipo.replace('_', ' ')}</span>
+                              <span className="text-xs text-ink-navy/35 ml-2">{fmtData(r.data)}{r.dataFine && r.dataFine !== r.data ? ` → ${fmtData(r.dataFine)}` : ''}</span>
                             </div>
                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : r.status === 'rifiutata' ? 'bg-red-100 text-red-500' : 'bg-amber-100 text-amber-600'}`}>
                               {r.status === 'approvata' ? 'Approvata' : r.status === 'rifiutata' ? 'Rifiutata' : 'In attesa'}
@@ -634,12 +634,12 @@ export default function AnalyticsPage() {
                   {/* Preferenze orario */}
                   {preferenze.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-700 mb-2">Preferenze orario</h3>
+                      <h3 className="text-sm font-semibold text-ink-navy/70 mb-2">Preferenze orario</h3>
                       <div className="space-y-2">
                         {preferenze.map((r, i) => (
                           <div key={i} className="flex items-center justify-between bg-purple-50 rounded-xl px-4 py-2.5">
-                            <span className="text-sm text-gray-700">{fmtData(r.data)}{r.oraInizio ? ` · ${r.oraInizio}–${r.oraFine}` : ''}</span>
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            <span className="text-sm text-ink-navy/70">{fmtData(r.data)}{r.oraInizio ? ` · ${r.oraInizio}–${r.oraFine}` : ''}</span>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status === 'approvata' ? 'bg-green-100 text-green-700' : 'bg-mist text-ink-navy/50'}`}>
                               {r.status === 'approvata' ? 'Confermata' : 'In attesa'}
                             </span>
                           </div>
@@ -649,7 +649,7 @@ export default function AnalyticsPage() {
                   )}
 
                   {assenze.length === 0 && preferenze.length === 0 && dip.giorniLavorati === 0 && (
-                    <p className="text-center text-gray-400 text-sm py-4">Nessun dato per questo mese</p>
+                    <p className="text-center text-ink-navy/35 text-sm py-4">Nessun dato per questo mese</p>
                   )}
                 </div>
               )

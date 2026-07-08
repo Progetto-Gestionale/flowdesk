@@ -1,6 +1,7 @@
 'use client'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import QRCode from 'qrcode'
+import { IconTable, IconCheck, IconTrash, IconPencil, IconUnlink } from '../../components/icons'
 
 // ── Tipi ─────────────────────────────────────────────────────────────────────
 interface Tavolo { id: string; numero: number; etichetta: string | null; posti: number; note: string | null; gruppoId: string | null }
@@ -14,10 +15,10 @@ const DEFAULT_VISUAL: Omit<MapData,'x'|'y'> = { forma: 'quadrato', colore: '#636
 const CANVAS_W = 1400
 const CANVAS_H = 800
 const TIPI_ELEMENTO = [
-  { tipo: 'bagno',    label: '🚽 Bagno',   colore: '#bfdbfe', w: 80,  h: 60  },
-  { tipo: 'cucina',   label: '👨‍🍳 Cucina',  colore: '#fecaca', w: 160, h: 90  },
-  { tipo: 'bancone',  label: '🍺 Bancone',  colore: '#d1d5db', w: 200, h: 55  },
-  { tipo: 'ingresso', label: '🚪 Ingresso', colore: '#bbf7d0', w: 60,  h: 100 },
+  { tipo: 'bagno', label: 'Bagno', colore: '#bfdbfe', w: 80, h: 60 },
+  { tipo: 'cucina', label: 'Cucina', colore: '#fecaca', w: 160, h: 90 },
+  { tipo: 'bancone', label: 'Bancone', colore: '#d1d5db', w: 200, h: 55 },
+  { tipo: 'ingresso', label: 'Ingresso', colore: '#bbf7d0', w: 60, h: 100 },
   { tipo: 'muro',     label: 'Muro',        colore: '#374151', w: 220, h: 22  },
 ]
 
@@ -89,12 +90,15 @@ function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMod
   }
 
   if (!tavoli.length) return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center shadow-sm">
-      <div className="text-5xl mb-4">🪑</div><p className="text-gray-500 text-sm">Nessun tavolo ancora</p>
+    <div className="bg-white rounded-2xl border border-ink-navy/10 p-16 text-center shadow-sm">
+      <div className="w-12 h-12 rounded-xl bg-electric-blue/10 text-electric-blue flex items-center justify-center p-3 mx-auto mb-4">
+        <IconTable />
+      </div>
+      <p className="text-ink-navy/50 text-sm">Nessun tavolo ancora</p>
     </div>
   )
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
       <div className="divide-y divide-gray-100">
         {tavoli.map(t => {
           const label = t.etichetta ?? `Tavolo ${t.numero}`
@@ -107,59 +111,61 @@ function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMod
             ? `T${Array.from(tavoloAppMap.entries()).filter(([,a]) => a.id === appAssegnato!.id).map(([tid]) => tavoli.find(tv=>tv.id===tid)?.numero).filter(Boolean).sort((a,b)=>(a as number)-(b as number)).join('+')}`
             : null
           return (
-            <div key={t.id} className={isSelected ? 'bg-indigo-50' : appAssegnato ? 'bg-red-50/40' : ''}>
+            <div key={t.id} className={isSelected ? 'bg-electric-blue/10' : appAssegnato ? 'bg-red-50/40' : ''}>
               <div className="flex items-center gap-4 px-5 py-4">
                 {selectMode && (
                   <button onClick={() => onToggleSelect(t.id)}
-                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-300'}`}>
-                    {isSelected && <span className="text-xs font-bold">✓</span>}
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-electric-blue border-electric-blue text-white' : 'border-ink-navy/15'}`}>
+                    {isSelected && <span className="w-3 h-3 text-white"><IconCheck /></span>}
                   </button>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-gray-900">{label}</p>
+                    <p className="font-semibold text-ink-navy">{label}</p>
                     {isFusoPerTurno && labelFusoTurno && (
                       <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">
-                        🔗 {labelFusoTurno} (turno)
+                         {labelFusoTurno} (turno)
                       </span>
                     )}
                     {gruppo && !isFusoPerTurno && (
                       <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">
-                        🔗 T{gruppo.label}
+                         T{gruppo.label}
                       </span>
                     )}
                     {appAssegnato && (
                       <span className="text-xs bg-red-100 text-red-700 font-semibold px-2 py-0.5 rounded-full">
-                        🔴 {appAssegnato.clienteNome?.split(' ')[0] ?? 'Occupato'}{appAssegnato.coperti ? ` · 🪑${appAssegnato.coperti}` : ''}
+                         {appAssegnato.clienteNome?.split(' ')[0] ?? 'Occupato'}{appAssegnato.coperti ? ` · ${appAssegnato.coperti}` : ''}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400">🪑 {t.posti} posti{t.note ? ` · ${t.note}` : ''}</p>
+                  <p className="text-xs text-ink-navy/35">{t.posti} posti{t.note ? ` · ${t.note}` : ''}</p>
                 </div>
                 <div className="flex gap-2 items-center flex-wrap">
                   {gruppo && !isFusoPerTurno && (
                     <button onClick={() => onSciogliGruppo(gruppo.id)}
                       className="text-xs px-3 py-1.5 rounded-lg border border-orange-200 text-orange-600 hover:bg-orange-50">
-                      🔓 Sciogli
+                      Sciogli
                     </button>
                   )}
                   {publicId && (
                     <button onClick={() => setQrAperto(qrAperto === t.id ? null : t.id)}
-                      className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">QR</button>
+                      className="text-xs px-3 py-1.5 rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist">QR</button>
                   )}
                   <button onClick={() => onModifica(t)}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50">✏️ Modifica</button>
+                    className="text-xs px-3 py-1.5 rounded-lg border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/10">Modifica</button>
                   <button onClick={() => onElimina(t.id)}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">🗑️</button>
+                    className="w-8 flex items-center justify-center text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">
+                    <span className="w-3.5 h-3.5"><IconTrash /></span>
+                  </button>
                 </div>
               </div>
               {qrAperto === t.id && publicId && (
-                <div className="px-5 pb-4 flex items-start gap-6 bg-gray-50 border-t border-gray-100">
+                <div className="px-5 pb-4 flex items-start gap-6 bg-mist border-t border-ink-navy/8">
                   <QRCanvas url={url} id={`qr-${t.id}`} />
                   <div className="space-y-2 pt-2">
-                    <p className="text-xs text-gray-500 break-all max-w-xs">{url}</p>
-                    <button onClick={() => scarica(t.id, t.numero)} className="block text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">⬇ Scarica PNG</button>
-                    <button onClick={() => stampa(t.id, label)} className="block text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">🖨 Stampa</button>
+                    <p className="text-xs text-ink-navy/50 break-all max-w-xs">{url}</p>
+                    <button onClick={() => scarica(t.id, t.numero)} className="block text-xs px-3 py-1.5 rounded-lg bg-electric-blue text-white font-medium hover:bg-electric-blue/90">Scarica PNG</button>
+                    <button onClick={() => stampa(t.id, label)} className="block text-xs px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/70 hover:bg-mist"> Stampa</button>
                   </div>
                 </div>
               )}
@@ -316,32 +322,32 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     <div className="space-y-3">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-2 py-1 shadow-sm">
-          <button onClick={() => setZoomSync(Math.max(0.2, +(zoomRef.current - 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-lg font-bold text-lg">−</button>
-          <span className="text-xs font-semibold text-gray-600 w-10 text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoomSync(Math.min(3, +(zoomRef.current + 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-lg font-bold text-lg">+</button>
-          <button onClick={() => { setZoomSync(1); setPan({ x: 0, y: 0 }); panRef.current = { x: 0, y: 0 } }} className="ml-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-1">Reset</button>
+        <div className="flex items-center gap-1 bg-white border border-ink-navy/10 rounded-xl px-2 py-1 shadow-sm">
+          <button onClick={() => setZoomSync(Math.max(0.2, +(zoomRef.current - 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">−</button>
+          <span className="text-xs font-semibold text-ink-navy/60 w-10 text-center">{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoomSync(Math.min(3, +(zoomRef.current + 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">+</button>
+          <button onClick={() => { setZoomSync(1); setPan({ x: 0, y: 0 }); panRef.current = { x: 0, y: 0 } }} className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1">Reset</button>
         </div>
         <button onClick={() => setEditMode(v => !v)}
-          className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl border transition-colors ${editMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
-          ✏️ {editMode ? 'Modifica attiva' : 'Modifica'}
+          className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl border transition-colors ${editMode ? 'bg-electric-blue text-white border-electric-blue' : 'bg-white text-ink-navy/60 border-ink-navy/15 hover:bg-mist'}`}>
+           {editMode ? 'Modifica attiva' : 'Modifica'}
         </button>
         {editMode && (
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-gray-400">Aggiungi:</span>
+            <span className="text-xs text-ink-navy/35">Aggiungi:</span>
             {TIPI_ELEMENTO.map(t => (
               <button key={t.tipo} onClick={() => aggiungiElemento(t)}
-                className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-medium shadow-sm">{t.label}</button>
+                className="text-xs px-2.5 py-1 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist text-ink-navy/70 font-medium shadow-sm">{t.label}</button>
             ))}
           </div>
         )}
-        <p className="text-xs text-gray-400 ml-auto hidden lg:block">
+        <p className="text-xs text-ink-navy/35 ml-auto hidden lg:block">
           {selectMode ? 'Clicca i tavoli per selezionarli' : editMode ? 'Trascina tavoli per spostarli' : 'Solo visualizzazione — clicca Modifica per editare'}
         </p>
       </div>
 
       {/* Canvas */}
-      <div className="rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+      <div className="rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden"
         style={{ width: '100%', height: 680, backgroundColor: '#ffffff', cursor: selectMode ? 'default' : 'grab', position: 'relative', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}
         onMouseDown={selectMode ? undefined : startPan}
         title={!editMode ? 'Modalità visualizzazione — clicca Modifica per spostare i tavoli' : undefined}>
@@ -392,7 +398,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                 {appAssegnato && (
                   <div style={{ position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)', zIndex: 30, whiteSpace: 'nowrap' }}>
                     <div style={{ backgroundColor: '#ef4444', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 8, padding: '2px 7px', boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}>
-                      {appAssegnato.clienteNome?.split(' ')[0] ?? 'Prenotato'}{appAssegnato.coperti ? ` · 🪑${appAssegnato.coperti}` : ''}
+                      {appAssegnato.clienteNome?.split(' ')[0] ?? 'Prenotato'}{appAssegnato.coperti ? ` · ${appAssegnato.coperti}` : ''}
                     </div>
                   </div>
                 )}
@@ -414,7 +420,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                   onMouseDown={editMode && !selectMode ? e => startDragT(e, t.id) : selectMode ? e => { e.stopPropagation(); onToggleSelect(t.id) } : undefined}
                   style={{ width: w, height: h, backgroundColor: colore, borderRadius: isC ? '50%' : 10, cursor: selectMode ? 'pointer' : editMode ? 'grab' : 'default', position: 'absolute', top: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: isSelected ? `0 0 0 3px #6366f1, 0 3px 12px rgba(0,0,0,0.15)` : '0 3px 12px rgba(0,0,0,0.15)', opacity: selectMode && !isSelected ? 0.75 : 1 }}>
                   <span style={{ color: '#fff', fontWeight: 700, fontSize: Math.min(w, h) < 80 ? 10 : 13, textAlign: 'center', padding: '0 6px', lineHeight: 1.3, pointerEvents: 'none' }}>{label}</span>
-                  <span style={{ color: '#fff', fontSize: Math.min(w, h) < 80 ? 10 : 12, fontWeight: 600, marginTop: 3, pointerEvents: 'none', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 20, padding: '1px 7px' }}>🪑 {t.posti}</span>
+                  <span style={{ color: '#fff', fontSize: Math.min(w, h) < 80 ? 10 : 12, fontWeight: 600, marginTop: 3, pointerEvents: 'none', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 20, padding: '1px 7px' }}>{t.posti}</span>
                 </div>
 
                 {/* Azioni hover — sciogli gruppo sempre visibile, il resto solo in editMode */}
@@ -422,10 +428,10 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                   <div style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 4, zIndex: 30, paddingBottom: 4 }}>
                     {gruppo && (
                       <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => onSciogliGruppo(gruppo.id)}
-                        className="w-6 h-6 bg-white border border-orange-300 rounded-full text-xs flex items-center justify-center hover:bg-orange-50 shadow" title="Sciogli gruppo">🔓</button>
+                        className="w-6 h-6 p-1.5 bg-white border border-orange-300 rounded-full text-orange-500 flex items-center justify-center hover:bg-orange-50 shadow" title="Sciogli gruppo"><IconUnlink /></button>
                     )}
-                    {editMode && <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => onModifica(t)} className="w-6 h-6 bg-white border border-gray-300 rounded-full text-xs flex items-center justify-center hover:bg-indigo-50 shadow">✏️</button>}
-                    {editMode && <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => onElimina(t.id)} className="w-6 h-6 bg-white border border-red-200 rounded-full text-xs flex items-center justify-center hover:bg-red-50 shadow text-red-500 font-bold">✕</button>}
+                    {editMode && <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => onModifica(t)} className="w-6 h-6 p-1.5 bg-white border border-ink-navy/15 rounded-full text-ink-navy/50 flex items-center justify-center hover:bg-electric-blue/10 shadow"><IconPencil /></button>}
+                    {editMode && <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => onElimina(t.id)} className="w-6 h-6 p-1.5 bg-white border border-red-200 rounded-full flex items-center justify-center hover:bg-red-50 shadow text-red-500"><IconTrash /></button>}
                   </div>
                 )}
 
@@ -602,18 +608,18 @@ export default function TavoliPage() {
 
   // Banner selezione attiva
   const selBanner = selectMode && (
-    <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
-      <span className="text-sm text-indigo-700 font-medium flex-1">
+    <div className="flex items-center gap-3 bg-electric-blue/10 border border-electric-blue/25 rounded-xl px-4 py-3">
+      <span className="text-sm text-electric-blue font-medium flex-1">
         {selectedIds.length === 0 ? 'Clicca i tavoli da fondere' : `${selectedIds.length} tavol${selectedIds.length === 1 ? 'o' : 'i'} selezionat${selectedIds.length === 1 ? 'o' : 'i'}`}
       </span>
       {selectedIds.length >= 2 && (
         <button onClick={fondiTavoli} disabled={fondendo}
           className="bg-orange-500 text-white font-semibold px-4 py-1.5 rounded-lg text-sm hover:bg-orange-600 disabled:opacity-50">
-          {fondendo ? '...' : `🔗 Fondi ${selectedIds.length} tavoli`}
+          {fondendo ? '...' : `Fondi ${selectedIds.length} tavoli`}
         </button>
       )}
       <button onClick={() => { setSelectMode(false); setSelectedIds([]) }}
-        className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg">Annulla</button>
+        className="text-sm text-ink-navy/50 hover:text-ink-navy/70 border border-ink-navy/15 px-3 py-1.5 rounded-lg">Annulla</button>
     </div>
   )
 
@@ -622,16 +628,16 @@ export default function TavoliPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tavoli</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Disegna la piantina e gestisci i QR code</p>
+          <h1 className="text-2xl font-bold text-ink-navy">Tavoli</h1>
+          <p className="text-ink-navy/50 text-sm mt-0.5">Disegna la piantina e gestisci i QR code</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => { setSelectMode(v => !v); setSelectedIds([]) }}
-            className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${selectMode ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-            {selectMode ? '✕ Esci selezione' : '🔗 Fondi tavoli'}
+            className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${selectMode ? 'bg-electric-blue/15 border-electric-blue/40 text-electric-blue' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
+            {selectMode ? '✕ Esci selezione' : 'Fondi tavoli'}
           </button>
           <button onClick={() => setShowCrea(true)}
-            className="bg-indigo-600 text-white font-semibold px-4 py-2 rounded-xl text-sm hover:bg-indigo-700 shadow-sm">
+            className="bg-electric-blue text-white font-semibold px-4 py-2 rounded-xl text-sm hover:bg-electric-blue/90 shadow-sm">
             + Nuovo tavolo
           </button>
         </div>
@@ -639,7 +645,7 @@ export default function TavoliPage() {
 
       {!publicId && tavoli.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
-          ⚠️ Nessun <strong>publicId</strong> configurato — i QR non possono essere generati.
+           Nessun <strong>publicId</strong> configurato — i QR non possono essere generati.
         </div>
       )}
 
@@ -647,50 +653,50 @@ export default function TavoliPage() {
 
       {/* Tab switch */}
       <div className="flex gap-2">
-        {[{ k: 'mappa', l: '🗺️ Mappa' }, { k: 'lista', l: '☰ Lista' }].map(t => (
+        {[{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }].map(t => (
           <button key={t.k} onClick={() => setVista(t.k as 'mappa' | 'lista')}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
             {t.l}
           </button>
         ))}
       </div>
 
       {/* Selettore giorno + turno */}
-      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+      <div className="bg-white border border-ink-navy/10 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Giorno</span>
+            <span className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Giorno</span>
             <input type="date" value={giornoSel} onChange={e => setGiornoSel(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="border border-ink-navy/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
             <button onClick={() => setGiornoSel(new Date().toISOString().split('T')[0])}
-              className="text-xs text-indigo-600 font-semibold px-2 py-1 border border-indigo-200 rounded-lg hover:bg-indigo-50">Oggi</button>
+              className="text-xs text-electric-blue font-semibold px-2 py-1 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">Oggi</button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Turno</span>
+            <span className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Turno</span>
             {turniServizio.map(t => (
               <button key={t.id} onClick={() => setTurnoSel(t.id)}
-                className={`text-sm font-semibold px-3 py-1 rounded-full transition-colors ${turnoSel === t.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                className={`text-sm font-semibold px-3 py-1 rounded-full transition-colors ${turnoSel === t.id ? 'bg-electric-blue text-white' : 'bg-mist text-ink-navy/60 hover:bg-ink-navy/10'}`}>
                 {t.nome} <span className="text-xs opacity-70">{t.oraInizio}–{t.oraFine}</span>
               </button>
             ))}
             {turniServizio.length > 0 && (
               <button onClick={() => setTurnoSel(null)}
-                className={`text-sm font-semibold px-3 py-1 rounded-full transition-colors ${turnoSel === null ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                className={`text-sm font-semibold px-3 py-1 rounded-full transition-colors ${turnoSel === null ? 'bg-gray-700 text-white' : 'bg-mist text-ink-navy/50 hover:bg-ink-navy/10'}`}>
                 Tutti
               </button>
             )}
             <a href="/dashboard/impostazioni?sezione=turni"
-              className="text-xs text-gray-400 hover:text-indigo-600 font-medium px-2 py-1 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
-              ⚙️ Gestisci turni
+              className="text-xs text-ink-navy/35 hover:text-electric-blue font-medium px-2 py-1 border border-ink-navy/10 rounded-lg hover:border-electric-blue/40 hover:bg-electric-blue/10 transition-colors">
+               Gestisci turni
             </a>
           </div>
           {appTurno.length > 0 && (
-            <span className="ml-auto text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">
+            <span className="ml-auto text-xs font-semibold text-electric-blue bg-electric-blue/10 px-2 py-1 rounded-full">
               {appTurno.length} prenotazion{appTurno.length === 1 ? 'e' : 'i'}
             </span>
           )}
         </div>
 
-      {loading ? <p className="text-gray-400 text-sm">Caricamento...</p> : (
+      {loading ? <p className="text-ink-navy/35 text-sm">Caricamento...</p> : (
         <>
           {vista === 'mappa' && (
             <VistaMappa ref={mappaRef} tavoli={tavoli} gruppi={gruppi}
@@ -712,54 +718,54 @@ export default function TavoliPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">Nuovo tavolo</h3>
-              <button onClick={() => setShowCrea(false)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+              <h3 className="text-lg font-bold text-ink-navy">Nuovo tavolo</h3>
+              <button onClick={() => setShowCrea(false)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl font-bold">✕</button>
             </div>
             <div className="grid sm:grid-cols-2 gap-5">
               <div className="space-y-3">
                 <div className="flex gap-3">
-                  <div className="flex-1"><label className="block text-xs font-medium text-gray-600 mb-1">Numero *</label>
+                  <div className="flex-1"><label className="block text-xs font-medium text-ink-navy/60 mb-1">Numero *</label>
                     <input type="number" value={formV.numero} onChange={e => setFormV(f => ({ ...f, numero: e.target.value }))} placeholder="1"
-                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                  <div className="flex-1"><label className="block text-xs font-medium text-gray-600 mb-1">Posti</label>
+                      className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
+                  <div className="flex-1"><label className="block text-xs font-medium text-ink-navy/60 mb-1">Posti</label>
                     <input type="number" value={formV.posti} onChange={e => setFormV(f => ({ ...f, posti: e.target.value }))} placeholder="4"
-                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                      className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
                 </div>
-                <div><label className="block text-xs font-medium text-gray-600 mb-1">Etichetta</label>
+                <div><label className="block text-xs font-medium text-ink-navy/60 mb-1">Etichetta</label>
                   <input value={formV.etichetta} onChange={e => setFormV(f => ({ ...f, etichetta: e.target.value }))} placeholder="es. Terrazza..."
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                <div><label className="block text-xs font-medium text-gray-600 mb-1">Note</label>
+                    className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
+                <div><label className="block text-xs font-medium text-ink-navy/60 mb-1">Note</label>
                   <input value={formV.note} onChange={e => setFormV(f => ({ ...f, note: e.target.value }))} placeholder="es. Vicino alla finestra..."
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                    className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
               </div>
               <div className="space-y-3">
-                <div><label className="block text-xs font-medium text-gray-600 mb-2">Forma sulla mappa</label>
+                <div><label className="block text-xs font-medium text-ink-navy/60 mb-2">Forma sulla mappa</label>
                   <div className="flex gap-2">
                     {(['quadrato', 'cerchio'] as const).map(f => (
                       <button key={f} onClick={() => setVisual(v => ({ ...v, forma: f }))}
-                        className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium ${visual.forma === f ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600'}`}>
-                        {f === 'quadrato' ? '⬛ Quadrato' : '⚫ Cerchio'}</button>
+                        className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium ${visual.forma === f ? 'border-electric-blue bg-electric-blue/10 text-electric-blue' : 'border-ink-navy/10 text-ink-navy/60'}`}>
+                        {f === 'quadrato' ? 'Quadrato' : 'Cerchio'}</button>
                     ))}</div></div>
-                <div><label className="block text-xs font-medium text-gray-600 mb-2">Colore</label>
+                <div><label className="block text-xs font-medium text-ink-navy/60 mb-2">Colore</label>
                   <div className="flex gap-2 flex-wrap items-center">
                     {COLORI_PRESET.map(c => (
                       <button key={c} onClick={() => setVisual(v => ({ ...v, colore: c }))} style={{ backgroundColor: c }}
                         className={`w-7 h-7 rounded-full transition-transform ${visual.colore === c ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'}`} />
                     ))}
-                    <input type="color" value={visual.colore} onChange={e => setVisual(v => ({ ...v, colore: e.target.value }))} className="w-7 h-7 rounded-full border border-gray-300 cursor-pointer p-0" />
+                    <input type="color" value={visual.colore} onChange={e => setVisual(v => ({ ...v, colore: e.target.value }))} className="w-7 h-7 rounded-full border border-ink-navy/15 cursor-pointer p-0" />
                   </div></div>
-                <div className="flex items-center justify-center py-4 bg-gray-50 rounded-xl"
+                <div className="flex items-center justify-center py-4 bg-mist rounded-xl"
                   style={{ backgroundImage: 'radial-gradient(circle,#e5e7eb 1px,transparent 1px)', backgroundSize: '20px 20px' }}>
                   <div style={{ width: visual.w, height: visual.h, backgroundColor: visual.colore, borderRadius: visual.forma === 'cerchio' ? '50%' : 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
                     <span style={{ color: '#fff', fontWeight: 700, fontSize: 12 }}>{formV.etichetta || `T${formV.numero || '?'}`}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 9, marginTop: 1 }}>🪑 {formV.posti || 4}</span>
+                    <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 9, marginTop: 1 }}> {formV.posti || 4}</span>
                   </div>
                 </div>
               </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => setShowCrea(false)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl text-sm">Annulla</button>
-              <button onClick={creaTavolo} disabled={savingCrea || !formV.numero} className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">{savingCrea ? '...' : '+ Aggiungi'}</button>
+              <button onClick={() => setShowCrea(false)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl text-sm">Annulla</button>
+              <button onClick={creaTavolo} disabled={savingCrea || !formV.numero} className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">{savingCrea ? '...' : '+ Aggiungi'}</button>
             </div>
           </div>
         </div>
@@ -770,26 +776,26 @@ export default function TavoliPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">Modifica Tavolo {editTavolo.numero}</h3>
-              <button onClick={() => setEditTavolo(null)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+              <h3 className="text-lg font-bold text-ink-navy">Modifica Tavolo {editTavolo.numero}</h3>
+              <button onClick={() => setEditTavolo(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl font-bold">✕</button>
             </div>
             <div className="space-y-3">
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Numero tavolo</label>
+              <div><label className="block text-xs font-medium text-ink-navy/60 mb-1">Numero tavolo</label>
                 <input type="number" value={formEdit.numero} onChange={e => setFormEdit(f => ({ ...f, numero: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Posti</label>
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
+              <div><label className="block text-xs font-medium text-ink-navy/60 mb-1">Posti</label>
                 <input type="number" value={formEdit.posti} onChange={e => setFormEdit(f => ({ ...f, posti: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Etichetta</label>
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
+              <div><label className="block text-xs font-medium text-ink-navy/60 mb-1">Etichetta</label>
                 <input value={formEdit.etichetta} onChange={e => setFormEdit(f => ({ ...f, etichetta: e.target.value }))}
-                  placeholder="es. Terrazza..." className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="block text-xs font-medium text-gray-600 mb-1">Note</label>
+                  placeholder="es. Terrazza..." className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
+              <div><label className="block text-xs font-medium text-ink-navy/60 mb-1">Note</label>
                 <input value={formEdit.note} onChange={e => setFormEdit(f => ({ ...f, note: e.target.value }))}
-                  placeholder="es. Vicino alla finestra..." className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                  placeholder="es. Vicino alla finestra..." className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" /></div>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setEditTavolo(null)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl text-sm">Annulla</button>
-              <button onClick={salvaModifica} disabled={savingEdit} className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">{savingEdit ? '...' : 'Salva'}</button>
+              <button onClick={() => setEditTavolo(null)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl text-sm">Annulla</button>
+              <button onClick={salvaModifica} disabled={savingEdit} className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">{savingEdit ? '...' : 'Salva'}</button>
             </div>
           </div>
         </div>
@@ -799,9 +805,9 @@ export default function TavoliPage() {
       {conferma && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConferma(null)}>
           <div className="bg-white rounded-2xl shadow-xl p-6 w-80 mx-4" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-gray-800 mb-4">{conferma.msg}</p>
+            <p className="text-sm font-medium text-ink-navy mb-4">{conferma.msg}</p>
             <div className="flex gap-3">
-              <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Annulla</button>
+              <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-ink-navy/10 text-ink-navy/60 text-sm font-medium hover:bg-mist">Annulla</button>
               <button onClick={async () => { await conferma.onConfirm(); setConferma(null) }} className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Conferma</button>
             </div>
           </div>

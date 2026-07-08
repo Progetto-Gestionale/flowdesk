@@ -2,10 +2,11 @@ interface LogoProps {
   size?: number
   withWordmark?: boolean
   dark?: boolean
+  product?: 'food' | 'care' | 'web'
   className?: string
 }
 
-export default function Logo({ size = 36, withWordmark = true, dark = false, className = '' }: LogoProps) {
+export default function Logo({ size = 36, withWordmark = true, dark = false, product, className = '' }: LogoProps) {
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
       <div
@@ -25,6 +26,14 @@ export default function Logo({ size = 36, withWordmark = true, dark = false, cla
           style={{ fontSize: size * 0.62 }}
         >
           Flowest
+        </span>
+      )}
+      {product && (
+        <span
+          className="font-mono font-bold uppercase bg-zest-lime text-ink-navy leading-none rounded"
+          style={{ fontSize: size * 0.32, padding: `${size * 0.14}px ${size * 0.22}px` }}
+        >
+          {product}
         </span>
       )}
     </div>
