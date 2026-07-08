@@ -15,6 +15,7 @@ model User {
   niche              String?
   objectives         String?
   plan               String            @default("trial")
+  verticale          String            @default("food") // "food" | "care"
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   nomeLocale         String?
