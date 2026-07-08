@@ -14,13 +14,51 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ('tavoliIds' in body) {
     const ids: string[] = body.tavoliIds ?? []
     let tavoloId: string | null = null
-    let tavoliIdsJson: string = JSON.stringify(ids)
+    const tavoliIdsJson: string = JSON.stringify(ids)
 
     if (ids.length === 1) {
       tavoloId = ids[0]
     }
-    // Con 2+ tavoli non creiamo GruppoTavoli permanente:
-    // la fusione vale solo per questo appuntamento/turno
+
+    // Elimina eventuali gruppi auto precedenti che contengono questi stessi tavoli
+    const appCorrente = await prisma.appuntamento.findFirst({ where: { id, userId: user.id } })
+    if (appCorrente && ids.length > 0) {
+      const vecchiGruppi = await prisma.gruppoTavoli.findMany({
+        where: { userId: user.id, auto: true, tavoli: { some: { id: { in: ids } } } },
+        select: { id: true },
+      })
+      if (vecchiGruppi.length > 0) {
+        await prisma.gruppoTavoli.deleteMany({ where: { id: { in: vecchiGruppi.map(g => g.id) } } })
+      }
+    }
+
+    // Con 2+ tavoli creiamo un GruppoTavoli auto per far unire gli ordini QR
+    if (ids.length >= 2 && appCorrente) {
+      const dataStr = appCorrente.data.toISOString().split('T')[0]
+      const minutiApp = appCorrente.data.getHours() * 60 + appCorrente.data.getMinutes()
+
+      // Trova il turno di servizio corrispondente all'orario della prenotazione
+      let turnoId: string | null = null
+      try {
+        const turni: { id: string; oraInizio: string; oraFine: string }[] = JSON.parse(user.turniServizio ?? '[]')
+        function toMin(t: string) { const [h, m] = t.split(':').map(Number); const v = h*60+m; return v===0?1440:v }
+        const turno = turni.find(t => minutiApp >= toMin(t.oraInizio) && minutiApp < toMin(t.oraFine))
+        turnoId = turno?.id ?? null
+      } catch {}
+
+      const tavoli = await prisma.tavolo.findMany({ where: { id: { in: ids } }, orderBy: { numero: 'asc' } })
+      const label = tavoli.map(t => t.numero).join('+')
+      await prisma.gruppoTavoli.create({
+        data: {
+          userId: user.id,
+          label,
+          data: dataStr,
+          turnoId,
+          auto: true,
+          tavoli: { connect: ids.map((tid: string) => ({ id: tid })) },
+        },
+      })
+    }
 
     await prisma.appuntamento.update({
       where: { id },

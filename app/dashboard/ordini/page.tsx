@@ -46,6 +46,7 @@ export default function OrdiniPage() {
   const [tavoli, setTavoli] = useState<TavoloDb[]>([])
   const [loading, setLoading] = useState(true)
   const [cambioTavolo, setCambioTavolo] = useState<string | null>(null) // ordineId
+  const [confermaElimina, setConfermaElimina] = useState<string | null>(null) // ordineId
 
   async function fetchOrdini() {
     const res = await fetch('/api/ordini', { credentials: 'include' })
@@ -77,8 +78,8 @@ export default function OrdiniPage() {
   }
 
   async function cancellaOrdine(id: string) {
-    if (!confirm("Annullare questo ordine? L'operazione è irreversibile.")) return
     await fetch(`/api/ordini/${id}`, { method: 'DELETE', credentials: 'include' })
+    setConfermaElimina(null)
     fetchOrdini()
   }
 
@@ -136,7 +137,7 @@ export default function OrdiniPage() {
                       ? (tavoloAssegnato.etichetta ?? `Tavolo ${tavoloAssegnato.numero}`)
                       : `Tavolo ${o.tavolo}`
                     return (
-                      <div key={o.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${o.status === 'nuovo' ? 'border-amber-300 ring-2 ring-amber-200' : 'border-gray-200'}`}>
+                      <div key={o.id} className={`relative bg-white rounded-2xl border shadow-sm overflow-hidden ${o.status === 'nuovo' ? 'border-amber-300 ring-2 ring-amber-200' : 'border-gray-200'}`}>
                         {/* Header */}
                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                           <div>
@@ -186,10 +187,25 @@ export default function OrdiniPage() {
                         <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
                           <p className="font-bold text-gray-900">€{o.totale.toFixed(2)}</p>
                           <div className="flex gap-2">
-                            <button onClick={() => cancellaOrdine(o.id)}
+                            <button onClick={() => setConfermaElimina(o.id)}
                               className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
                               🗑️
                             </button>
+                            {confermaElimina === o.id && (
+                              <div className="absolute bottom-14 right-4 z-10 bg-white border border-red-200 rounded-xl shadow-lg p-3 w-52">
+                                <p className="text-xs text-gray-700 font-medium mb-2">Annullare questo ordine?</p>
+                                <div className="flex gap-2">
+                                  <button onClick={() => setConfermaElimina(null)}
+                                    className="flex-1 text-xs py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
+                                    No
+                                  </button>
+                                  <button onClick={() => cancellaOrdine(o.id)}
+                                    className="flex-1 text-xs py-1.5 rounded-lg bg-red-500 text-white font-semibold hover:bg-red-600">
+                                    Sì, elimina
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                             {cfg.next && (
                               <button onClick={() => avanzaStatus(o.id, cfg.next)}
                                 className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors">

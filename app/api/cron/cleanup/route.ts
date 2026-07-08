@@ -47,7 +47,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     appuntamentiCompletati: appAggiornati,
-    leadArchiviati: leadCancellati,
+leadArchiviati: leadCancellati,
     conversazioniEliminate: convEliminate,
     eseguitoAlle: ora.toISOString(),
   })

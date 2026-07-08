@@ -113,6 +113,7 @@ export default function StaffPage() {
   const [copiando, setCopiando] = useState(false)
   const [cancellandoSett, setCancellandoSett] = useState(false)
   const [confirmCancella, setConfirmCancella] = useState(false)
+  const [conferma, setConferma] = useState<{ msg: string; onConfirm: () => void } | null>(null)
 
   // Disponibilità di tutti i dipendenti per la settimana corrente (per banner nella griglia)
   const [tutteDisp, setTutteDisp] = useState<{ dipendenteId: string; giorni: GiornoDisponibile[] }[]>([])
@@ -250,9 +251,10 @@ export default function StaffPage() {
   }
 
   async function eliminaDipendente(id: string) {
-    if (!confirm('Eliminare questo dipendente e tutti i suoi turni?')) return
-    await fetch(`/api/dipendenti/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchAll()
+    setConferma({ msg: 'Eliminare questo dipendente e tutti i suoi turni?', onConfirm: async () => {
+      await fetch(`/api/dipendenti/${id}`, { method: 'DELETE', credentials: 'include' })
+      fetchAll()
+    }})
   }
 
   async function aggiungiTurno() {
@@ -565,11 +567,13 @@ export default function StaffPage() {
                         {turniGiorno.map(t => {
                           const dispGiorno = (tutteDisp.find(d => d.dipendenteId === dip.id)?.giorni ?? []).find(gd => gd.data === dataStr)
                           const fuoriOrario = dispGiorno?.oraInizio && (t.oraInizio < dispGiorno.oraInizio || t.oraFine > dispGiorno.oraFine)
-                          const warnTurno = noDisp || fuoriOrario
+                          const assenzaApp = assenza?.status === 'approvata'
+                          const warnTurno = noDisp || !!fuoriOrario || assenzaApp
+                          const warnTitle = assenzaApp ? `${assenza!.tipo.replace('_',' ')} approvata` : noDisp ? 'Non disponibile questo giorno' : fuoriOrario ? `Disponibile ${dispGiorno?.oraInizio}–${dispGiorno?.oraFine}` : undefined
                           return (
-                            <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${warnTurno ? 'bg-amber-100 text-amber-800' : colorMap[dip.id]} relative`}
+                            <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${assenzaApp ? 'bg-red-100 text-red-700' : warnTurno ? 'bg-amber-100 text-amber-800' : colorMap[dip.id]} relative`}
                               onClick={e => e.stopPropagation()}
-                              title={noDisp ? 'Non disponibile questo giorno' : fuoriOrario ? `Disponibile ${dispGiorno?.oraInizio}–${dispGiorno?.oraFine}` : undefined}>
+                              title={warnTitle}>
                               <p className="font-semibold">{warnTurno ? '⚠️ ' : ''}{t.oraInizio}–{t.oraFine}</p>
                               {t.ruolo && <p className="opacity-75 truncate">{t.ruolo}</p>}
                               <button onClick={e => { e.stopPropagation(); eliminaTurno(t.id) }}
@@ -766,11 +770,10 @@ export default function StaffPage() {
                       {r.status === 'approvata' ? 'Approvata' : 'Rifiutata'}
                     </span>
                   )}
-                  <button onClick={async () => {
-                    if (!confirm('Eliminare questa richiesta?')) return
+                  <button onClick={() => setConferma({ msg: 'Eliminare questa richiesta?', onConfirm: async () => {
                     await fetch(`/api/richieste-staff/${r.id}`, { method: 'DELETE', credentials: 'include' })
                     fetchAll()
-                  }} className="text-xs px-2 py-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors font-medium">
+                  }})} className="text-xs px-2 py-1 text-gray-300 hover:text-red-400 rounded-lg hover:bg-red-50 transition-colors font-medium">
                     Elimina
                   </button>
                 </div>
@@ -922,6 +925,14 @@ export default function StaffPage() {
         const hasDispCella = tutteDisp.some(d => d.dipendenteId === cellModal.dipendenteId)
         const noDispCella = hasDispCella && !dispCella
         const fuoriOrarioCella = dispCella?.oraInizio && (cellModal.oraInizio < dispCella.oraInizio || cellModal.oraFine > dispCella.oraFine)
+        const tipiAssenzaCella = ['assenza', 'malattia', 'permesso', 'ferie']
+        const assenzaApprovata = richieste.find(r =>
+          r.dipendente.id === cellModal.dipendenteId &&
+          r.status === 'approvata' &&
+          tipiAssenzaCella.includes(r.tipo) &&
+          r.data && cellModal.data >= r.data.split('T')[0] &&
+          cellModal.data <= (r.dataFine ? r.dataFine.split('T')[0] : r.data.split('T')[0])
+        )
         return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 space-y-4">
@@ -929,12 +940,17 @@ export default function StaffPage() {
               <h3 className="text-base font-bold text-gray-900">{cellModal.nome}</h3>
               <p className="text-sm text-gray-500">{cellModal.dataLabel}</p>
             </div>
-            {noDispCella && (
+            {assenzaApprovata && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700 font-medium">
+                🚫 {cellModal.nome.split(' ')[0]} ha {assenzaApprovata.tipo.replace('_', ' ')} approvata in questo giorno.
+              </div>
+            )}
+            {!assenzaApprovata && noDispCella && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
                 ⚠️ Questo dipendente non ha dichiarato disponibilità per questo giorno.
               </div>
             )}
-            {fuoriOrarioCella && (
+            {!assenzaApprovata && fuoriOrarioCella && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
                 ⚠️ Disponibile solo dalle {dispCella?.oraInizio} alle {dispCella?.oraFine}.
               </div>
@@ -1207,6 +1223,18 @@ export default function StaffPage() {
                 className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50">
                 {saving ? 'Salvataggio...' : 'Aggiungi turno'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {conferma && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConferma(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-80 mx-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-gray-800 mb-4">{conferma.msg}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Annulla</button>
+              <button onClick={async () => { await conferma.onConfirm(); setConferma(null) }} className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Conferma</button>
             </div>
           </div>
         </div>

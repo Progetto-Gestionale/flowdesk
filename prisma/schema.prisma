@@ -160,6 +160,7 @@ model GruppoTavoli {
   label     String
   data      String?
   turnoId   String?
+  auto      Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
   tavoli    Tavolo[]

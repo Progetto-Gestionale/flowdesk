@@ -31,6 +31,7 @@ export default function MenuPage() {
   const [editPiatto, setEditPiatto] = useState<Piatto & { categoriaId: string } | null>(null)
   const [formPiatto, setFormPiatto] = useState({ nome: '', descrizione: '', prezzo: '', immagineUrl: '' })
   const [saving, setSaving] = useState(false)
+  const [conferma, setConferma] = useState<{ msg: string; onConfirm: () => void } | null>(null)
 
   // ── Grafica state ──
   const [grafica, setGrafica] = useState({ menuLogoUrl: '', menuColoreP: '#4f46e5', menuColoreS: '#ffffff' })
@@ -78,9 +79,10 @@ export default function MenuPage() {
   }
 
   async function eliminaCategoria(id: string) {
-    if (!confirm('Eliminare questa categoria e tutti i suoi piatti?')) return
-    await fetch(`/api/menu/categorie/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchMenu()
+    setConferma({ msg: 'Eliminare questa categoria e tutti i suoi piatti?', onConfirm: async () => {
+      await fetch(`/api/menu/categorie/${id}`, { method: 'DELETE', credentials: 'include' })
+      fetchMenu()
+    }})
   }
 
   async function salvaPiatto() {
@@ -112,9 +114,10 @@ export default function MenuPage() {
   }
 
   async function eliminaPiatto(id: string) {
-    if (!confirm('Eliminare questo piatto?')) return
-    await fetch(`/api/menu/piatti/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchMenu()
+    setConferma({ msg: 'Eliminare questo piatto?', onConfirm: async () => {
+      await fetch(`/api/menu/piatti/${id}`, { method: 'DELETE', credentials: 'include' })
+      fetchMenu()
+    }})
   }
 
   function apriModificaPiatto(piatto: Piatto, categoriaId: string) {
@@ -359,6 +362,18 @@ export default function MenuPage() {
                 className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50">
                 {saving ? '...' : editPiatto ? 'Salva modifiche' : 'Aggiungi'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {conferma && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConferma(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-80 mx-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-gray-800 mb-4">{conferma.msg}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Annulla</button>
+              <button onClick={async () => { await conferma.onConfirm(); setConferma(null) }} className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Conferma</button>
             </div>
           </div>
         </div>

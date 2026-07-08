@@ -127,7 +127,10 @@ export default function Impostazioni() {
       setFaq(jp(s.faq, []))
       setDescrizioneBot(s.descrizioneBot ?? '')
       setPublicId(s.publicId ?? '')
-      setTurniServizio(jp(s.turniServizio, []))
+      const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
+      const ts: TurnoServizio[] = jp(s.turniServizio, [])
+      ts.sort((a, b) => toMin(a.oraInizio) - toMin(b.oraInizio))
+      setTurniServizio(ts)
       setFabbisogno(jp(s.fabbisognoStaff, []))
       // Marca come salvato solo le sezioni che hanno dati nel DB
       setStatus(prev => ({

@@ -64,8 +64,26 @@ export async function POST(req: Request) {
     })
 
     if (gruppo) {
-      gruppoId = gruppo.id
-      tavoloLabel = `T${gruppo.label}`
+      // Se il gruppo ha un turnoId, verifica che l'ordine arrivi dentro le ore del turno
+      let withinTurno = true
+      if (gruppo.turnoId) {
+        try {
+          const turni: { id: string; oraInizio: string; oraFine: string }[] = JSON.parse(user.turniServizio ?? '[]')
+          const turno = turni.find(t => t.id === gruppo.turnoId)
+          if (turno) {
+            const inizioT = toMinutes(turno.oraInizio)
+            const fineT = toMinutes(turno.oraFine)
+            withinTurno = inizioT > fineT
+              ? (minutiOra >= inizioT || minutiOra < fineT)
+              : (minutiOra >= inizioT && minutiOra < fineT)
+          }
+        } catch {}
+      }
+
+      if (withinTurno) {
+        gruppoId = gruppo.id
+        tavoloLabel = `T${gruppo.label}`
+      }
     }
   }
 

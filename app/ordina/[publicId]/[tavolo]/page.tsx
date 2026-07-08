@@ -112,7 +112,7 @@ export default function OrdinaPage() {
         <div className="text-6xl mb-4">✅</div>
         <h2 className="text-xl font-bold text-gray-900">Ordine inviato!</h2>
         <p className="text-gray-500 text-sm mt-2">Il tuo ordine è stato ricevuto. Portalo al tavolo <strong>{tavolo}</strong> a breve.</p>
-        <button onClick={() => setOrdinato(false)}
+        <button onClick={() => { setOrdinato(false); setVistaCarrello(false); setNoteOrdine('') }}
           className="mt-6 w-full py-2.5 rounded-xl text-white font-semibold text-sm"
           style={{ backgroundColor: coloreP }}>
           Ordina ancora

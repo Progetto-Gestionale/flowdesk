@@ -465,6 +465,7 @@ export default function TavoliPage() {
   const [fondendo, setFondendo] = useState(false)
 
   // Modal modifica
+  const [conferma, setConferma] = useState<{ msg: string; onConfirm: () => void } | null>(null)
   const [editTavolo, setEditTavolo] = useState<Tavolo | null>(null)
   const [formEdit, setFormEdit] = useState({ numero: '', etichetta: '', posti: '4', note: '' })
   const [savingEdit, setSavingEdit] = useState(false)
@@ -506,6 +507,7 @@ export default function TavoliPage() {
       setPublicId(d.user?.publicId ?? null)
       try {
         const ts = JSON.parse(d.user?.turniServizio ?? '[]')
+        ts.sort((a: TurnoServizio, b: TurnoServizio) => toMinutes(a.oraInizio) - toMinutes(b.oraInizio))
         setTurniServizio(ts)
         const primo = ts.length > 0 ? ts[0].id : null
         setTurnoSel(primo)
@@ -537,10 +539,11 @@ export default function TavoliPage() {
       if (dStr !== giornoSel) return false
       if (!turno) return true
       const oraApp = d.getHours() * 60 + d.getMinutes()
-      const fineApp = oraApp + (a.durata ?? 60)
       const inizioT = toMinutes(turno.oraInizio)
       const fineT = toMinutes(turno.oraFine)
-      return oraApp < fineT && fineApp > inizioT
+      // Se fineT < inizioT il turno attraversa mezzanotte (es. 22:00-00:30)
+      if (inizioT > fineT) return oraApp >= inizioT || oraApp < fineT
+      return oraApp < fineT && oraApp >= inizioT
     })
   })()
 
@@ -568,9 +571,10 @@ export default function TavoliPage() {
   }
 
   async function sciogliGruppo(gruppoId: string) {
-    if (!confirm('Sciogliere questo gruppo di tavoli?')) return
-    await fetch(`/api/gruppi/${gruppoId}`, { method: 'DELETE', credentials: 'include' })
-    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
+    setConferma({ msg: 'Sciogliere questo gruppo di tavoli?', onConfirm: async () => {
+      await fetch(`/api/gruppi/${gruppoId}`, { method: 'DELETE', credentials: 'include' })
+      await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
+    }})
   }
 
   function apriModifica(t: Tavolo) { setEditTavolo(t); setFormEdit({ numero: t.numero.toString(), etichetta: t.etichetta ?? '', posti: t.posti.toString(), note: t.note ?? '' }) }
@@ -582,9 +586,10 @@ export default function TavoliPage() {
   }
 
   async function eliminaTavolo(id: string) {
-    if (!confirm('Eliminare questo tavolo?')) return
-    await fetch(`/api/tavoli/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchTavoli()
+    setConferma({ msg: 'Eliminare questo tavolo?', onConfirm: async () => {
+      await fetch(`/api/tavoli/${id}`, { method: 'DELETE', credentials: 'include' })
+      fetchTavoli()
+    }})
   }
 
   async function creaTavolo() {
@@ -785,6 +790,19 @@ export default function TavoliPage() {
             <div className="flex gap-3">
               <button onClick={() => setEditTavolo(null)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-xl text-sm">Annulla</button>
               <button onClick={salvaModifica} disabled={savingEdit} className="flex-1 bg-indigo-600 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">{savingEdit ? '...' : 'Salva'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal conferma interno */}
+      {conferma && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConferma(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-80 mx-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-gray-800 mb-4">{conferma.msg}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50">Annulla</button>
+              <button onClick={async () => { await conferma.onConfirm(); setConferma(null) }} className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Conferma</button>
             </div>
           </div>
         </div>
