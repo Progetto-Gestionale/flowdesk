@@ -34,8 +34,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // Con 2+ tavoli creiamo un GruppoTavoli auto per far unire gli ordini QR
     if (ids.length >= 2 && appCorrente) {
-      const dataStr = appCorrente.data.toISOString().split('T')[0]
-      const minutiApp = appCorrente.data.getHours() * 60 + appCorrente.data.getMinutes()
+      const localApp = new Date(appCorrente.data.toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
+      const dataStr = `${localApp.getFullYear()}-${String(localApp.getMonth() + 1).padStart(2, '0')}-${String(localApp.getDate()).padStart(2, '0')}`
+      const minutiApp = localApp.getHours() * 60 + localApp.getMinutes()
 
       // Trova il turno di servizio corrispondente all'orario della prenotazione
       let turnoId: string | null = null

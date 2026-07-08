@@ -47,8 +47,9 @@ export async function POST(req: Request) {
 
   if (tavoloId) {
     const oggi = new Date()
-    const dataStr = oggi.toISOString().split('T')[0]
-    const minutiOra = oggi.getHours() * 60 + oggi.getMinutes()
+    const localOggi = new Date(oggi.toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
+    const dataStr = `${localOggi.getFullYear()}-${String(localOggi.getMonth() + 1).padStart(2, '0')}-${String(localOggi.getDate()).padStart(2, '0')}`
+    const minutiOra = localOggi.getHours() * 60 + localOggi.getMinutes()
 
     // Recupera turni di servizio dell'utente
     let turnoAttivoId: string | null = null
