@@ -94,7 +94,6 @@ export default function Impostazioni() {
   const [indirizzo, setIndirizzo] = useState('')
   const [telefono, setTelefono] = useState('')
   const [sitoWeb, setSitoWeb] = useState('')
-  const [maxCoperti, setMaxCoperti] = useState('')
   const [orari, setOrari] = useState<Orari>({})
   const [servizi, setServizi] = useState<Servizi>({})
   const [regole, setRegole] = useState<Regole>({ preavvisoMin: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, noteAggiuntive: '' })
@@ -122,7 +121,6 @@ export default function Impostazioni() {
       setIndirizzo(s.indirizzo ?? '')
       setTelefono(s.telefono ?? '')
       setSitoWeb(s.sitoWeb ?? '')
-      setMaxCoperti(s.maxCoperti?.toString() ?? '')
       setOrari(jp(s.orariApertura, {}))
       setServizi(jp(s.serviziOfferti, {}))
       setRegole(jp(s.regolePrenotazione, { preavvisoMin: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, noteAggiuntive: '' }))
@@ -210,7 +208,7 @@ export default function Impostazioni() {
 
           {sezioneAttiva === 'generale' && (
             <Section title="Il locale" subtitle="Informazioni di base che il bot usa per presentarsi ai clienti."
-              onSave={() => saveSezione('generale', { nomeLocale, indirizzo, telefono, sitoWeb, maxCoperti: maxCoperti && !isNaN(parseInt(maxCoperti)) ? parseInt(maxCoperti) : null })}
+              onSave={() => saveSezione('generale', { nomeLocale, indirizzo, telefono, sitoWeb })}
               status={st('generale')}>
               <Field label="Nome del locale *">
                 <input type="text" value={nomeLocale} onChange={e => { setNomeLocale(e.target.value); dirty('generale') }}
@@ -230,10 +228,6 @@ export default function Impostazioni() {
                     placeholder="https://ristorante.it" className={cls} />
                 </Field>
               </div>
-              <Field label="Capienza massima (coperti totali)">
-                <input type="number" value={maxCoperti} onChange={e => { setMaxCoperti(e.target.value); dirty('generale') }}
-                  placeholder="60" className={`${cls} max-w-32`} />
-              </Field>
             </Section>
           )}
 

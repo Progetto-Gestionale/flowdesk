@@ -220,10 +220,16 @@ export default function MenuPage() {
                           <p className="text-electric-blue font-bold text-sm mt-0.5">€{p.prezzo.toFixed(2)}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <button onClick={() => toggleDisponibile(p)}
-                            className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${p.disponibile ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-mist text-ink-navy/50 hover:bg-ink-navy/10'}`}>
-                            {p.disponibile ? 'Disponibile' : 'Non disp.'}
-                          </button>
+                          <div className="flex rounded-lg border border-ink-navy/10 overflow-hidden text-xs font-medium">
+                            <button onClick={() => !p.disponibile && toggleDisponibile(p)}
+                              className={`px-2.5 py-1 transition-colors ${p.disponibile ? 'bg-green-100 text-green-700' : 'text-ink-navy/35 hover:bg-mist'}`}>
+                              Disponibile
+                            </button>
+                            <button onClick={() => p.disponibile && toggleDisponibile(p)}
+                              className={`px-2.5 py-1 transition-colors border-l border-ink-navy/10 ${!p.disponibile ? 'bg-red-100 text-red-600' : 'text-ink-navy/60 hover:bg-red-50 hover:text-red-500'}`}>
+                              Non disp.
+                            </button>
+                          </div>
                           <button onClick={() => apriModificaPiatto(p, cat.id)}
                             className="text-ink-navy/35 hover:text-electric-blue p-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
                             <span className="w-3.5 h-3.5 block"><IconPencil /></span>

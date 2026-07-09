@@ -191,8 +191,8 @@ export default function OrdiniPage() {
                           <p className="font-bold text-ink-navy">€{o.totale.toFixed(2)}</p>
                           <div className="flex gap-2">
                             <button onClick={() => setConfermaElimina(o.id)}
-                              className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                              
+                              className="text-xs px-3 py-1.5 rounded-lg border border-ink-navy/10 text-ink-navy/40 hover:border-red-200 hover:text-red-500 hover:bg-red-50 transition-colors font-medium">
+                              Elimina
                             </button>
                             {confermaElimina === o.id && (
                               <div className="absolute bottom-14 right-4 z-10 bg-white border border-red-200 rounded-xl shadow-lg p-3 w-52">

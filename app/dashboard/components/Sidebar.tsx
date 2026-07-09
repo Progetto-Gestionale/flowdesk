@@ -13,7 +13,7 @@ const navFood = [
   {
     section: 'Clienti',
     items: [
-      { label: 'Contatti & Pipeline', href: '/dashboard/clienti/crm', Icon: IconUsers },
+      { label: 'Clienti', href: '/dashboard/clienti/rubrica', Icon: IconUsers },
       { label: 'Messaggi', href: '/dashboard/clienti/inbox', Icon: IconChat },
       { label: 'Richieste', href: '/dashboard/clienti/preventivi', Icon: IconClipboard },
       { label: 'Calendario', href: '/dashboard/clienti/calendario', Icon: IconCalendar },
@@ -51,8 +51,8 @@ const navCare = [
   {
     section: 'Gestione',
     items: [
-      { label: 'Analytics', href: '/dashboard/analytics', Icon: IconChartBar },
-      { label: 'Staff', href: '/dashboard/staff', Icon: IconUsers },
+      { label: 'Analytics', href: '/dashboard/care/analytics', Icon: IconChartBar },
+      { label: 'Staff', href: '/dashboard/care/staff', Icon: IconUsers },
     ],
   },
   {
