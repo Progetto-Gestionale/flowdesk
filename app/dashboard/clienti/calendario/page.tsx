@@ -301,7 +301,7 @@ export default function Calendario() {
 
   // ── Day view columns ──────────────────────────────────────
   const buildColumns = (day: Date) => {
-    const dayApps = appForDayFiltered(day).filter(a => a.status !== 'cancellato')
+    const dayApps = appForDayFiltered(day)
     // Solo per tavoli mostriamo colonne per tavolo (senza colonna "senza tavolo")
     if (sezione === 'tavoli' && tavoli.length > 0) {
       return tavoli.map(t => ({
@@ -756,7 +756,7 @@ export default function Calendario() {
                 <div className="grid grid-cols-7 gap-1">
                   {celle.map((day, i) => {
                     if (!day) return <div key={i} />
-                    const dayApps = appForDayFiltered(day).filter(a => a.status !== 'cancellato')
+                    const dayApps = appForDayFiltered(day)
                     const isT = isSameDay(day, today)
                     const isPast = day < today && !isT
                     return (
