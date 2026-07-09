@@ -304,12 +304,19 @@ export default function Calendario() {
     const dayApps = appForDayFiltered(day)
     // Solo per tavoli mostriamo colonne per tavolo (senza colonna "senza tavolo")
     if (sezione === 'tavoli' && tavoli.length > 0) {
-      return tavoli.map(t => ({
-        id: t.id,
-        label: `T${t.numero}`,
-        sublabel: `${t.posti} posti${t.note ? ` · ${t.note}` : ''}`,
-        apps: dayApps.filter(a => getTavoliIds(a).includes(t.id)),
-      }))
+      const tavoloOrdinato = [...tavoli].sort((a, b) => a.numero - b.numero)
+      return tavoloOrdinato.map(t => {
+        const primaryApps: Appuntamento[] = []
+        const ghostApps: (Appuntamento & { ghost: true; primaryTavolo: string })[] = []
+        dayApps.forEach(a => {
+          const ids = getTavoliIds(a)
+          if (!ids.includes(t.id)) return
+          const firstId = tavoloOrdinato.find(tv => ids.includes(tv.id))?.id
+          if (firstId === t.id) primaryApps.push(a)
+          else ghostApps.push({ ...a, ghost: true, primaryTavolo: `T${tavoloOrdinato.find(tv => tv.id === firstId)?.numero ?? '?'}` })
+        })
+        return { id: t.id, label: `T${t.numero}`, sublabel: `${t.posti} posti${t.note ? ` · ${t.note}` : ''}`, apps: primaryApps, ghostApps }
+      })
     }
     return [{ id: 'all', label: sezioneInfo[sezione].label, sublabel: '', apps: dayApps }]
   }
@@ -491,17 +498,18 @@ export default function Calendario() {
                         const ts = TIPO_STYLE[tipo]
                         const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
                         const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                        const [noteOrdine, noteInterna] = (a.note ?? '').split('\n')
                         return (
                           <div key={a.id} onClick={() => setSelected(a)}
                             style={{ borderLeftWidth: 3, borderLeftColor: ts.barColor }}
                             className={`${sc.bg} rounded-r-xl px-3 py-2.5 cursor-pointer hover:brightness-95 transition-all`}>
                             <span className="text-xs font-bold text-ink-navy/50">{ora}</span>
                             <p className="text-sm font-bold text-ink-navy mt-0.5">{a.clienteNome || 'Cliente'}</p>
-                            {a.servizio && <p className="text-xs text-ink-navy/50 mt-0.5 truncate">{a.servizio}</p>}
+                            {noteOrdine && <p className="text-xs font-medium text-ink-navy/70 mt-1 truncate">{noteOrdine}</p>}
                             {a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
                               <p className="text-xs text-red-500 mt-0.5">{a.allergie}</p>
                             )}
-                            {a.note && <p className="text-xs text-ink-navy/40 mt-0.5 truncate">{a.note}</p>}
+                            {noteInterna && <p className="text-xs text-ink-navy/35 mt-0.5 truncate">{noteInterna}</p>}
                           </div>
                         )
                       }
@@ -540,6 +548,7 @@ export default function Calendario() {
                             const ts = TIPO_STYLE[tipo]
                             const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
                             const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                            const [noteOrdine, noteInterna] = (a.note ?? '').split('\n')
                             return (
                               <div key={a.id} onClick={() => setSelected(a)}
                                 style={{ borderLeftWidth: 3, borderLeftColor: ts.barColor }}
@@ -547,10 +556,11 @@ export default function Calendario() {
                                 <span className="text-xs font-bold text-ink-navy/50">{ora}</span>
                                 <p className="text-sm font-bold text-ink-navy mt-0.5">{a.clienteNome || 'Cliente'}</p>
                                 {a.servizio && <p className="text-xs text-ink-navy/50 mt-0.5 truncate">{a.servizio}</p>}
+                                {noteOrdine && <p className="text-xs font-medium text-ink-navy/70 mt-1 truncate">{noteOrdine}</p>}
                                 {a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
                                   <p className="text-xs text-red-500 mt-0.5">{a.allergie}</p>
                                 )}
-                                {a.note && <p className="text-xs text-ink-navy/40 mt-0.5 truncate">{a.note}</p>}
+                                {noteInterna && <p className="text-xs text-ink-navy/35 mt-0.5 truncate">{noteInterna}</p>}
                               </div>
                             )
                           })}
@@ -582,7 +592,7 @@ export default function Calendario() {
                         {/* Body */}
                         <div className="flex">
                           {/* Colonna ore sticky a sinistra */}
-                          <div className="w-14 shrink-0 sticky left-0 z-10 bg-white border-r border-ink-navy/10 relative"
+                          <div className="w-14 shrink-0 sticky left-0 z-20 bg-white border-r border-ink-navy/10 relative"
                             style={{ height: (hourEnd - hourStart) * PX_PER_HOUR }}>
                             {hoursGrid.map(h => (
                               <div key={h} className="absolute left-0 right-0 flex items-start justify-end pr-2"
@@ -606,7 +616,7 @@ export default function Calendario() {
                               </div>
                             ))}
 
-                            {/* Prenotazioni con layout affiancato per sovrapposizioni */}
+                            {/* Prenotazioni primarie */}
                             {layoutApps(col.apps).map(({ a, col: subCol, total }) => {
                               const tipo = inferTipo(a.servizio)
                               const ts = TIPO_STYLE[tipo]
@@ -616,12 +626,10 @@ export default function Calendario() {
                               const top = Math.max(0, (startH - hourStart) * PX_PER_HOUR)
                               const height = Math.max((a.durata / 60) * PX_PER_HOUR, 28)
                               const ora = dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-                              // 1 item → 50%, 2+ → si dividono il 100%
-                              const maxPct = sezione === 'tavoli' ? 100 : (total === 1 ? 50 : 100)
-                              const pct = maxPct / total
+                              const pct = 100 / total
                               const GAP = 2
                               const MIN_H = 32
-
+                              const linkedTavoli = tavoli.filter(t => getTavoliIds(a).includes(t.id)).sort((x,y) => x.numero - y.numero)
                               return (
                                 <div key={a.id}
                                   style={{
@@ -633,7 +641,6 @@ export default function Calendario() {
                                   }}
                                   onClick={() => setSelected(a)}
                                   className={`${sc.bg} rounded-r-lg px-1.5 py-1 cursor-pointer hover:brightness-95 transition-all overflow-hidden z-10`}>
-                                  {/* Riga compatta: ora + pallino + nome sulla stessa riga se blocco piccolo */}
                                   {height <= MIN_H + 4 ? (
                                     <div className="flex items-center gap-1 min-w-0">
                                       <span className="text-[10px] font-bold text-ink-navy/40 shrink-0">{ora}</span>
@@ -643,10 +650,41 @@ export default function Calendario() {
                                     <>
                                       <span className="text-[10px] font-bold text-ink-navy/40">{ora}</span>
                                       <p className="text-[11px] font-bold leading-tight truncate text-ink-navy">{a.clienteNome || 'Cliente'}</p>
-                                      {height > 58 && <p className="text-[10px] opacity-55 truncate mt-0.5">{ts.label}{a.coperti && a.coperti > 1 ? ` · ${a.coperti}p` : ''}</p>}
+                                      {height > 58 && <p className="text-[10px] opacity-55 truncate mt-0.5">
+                                        {linkedTavoli.length > 1 ? linkedTavoli.map(t=>`T${t.numero}`).join('+') : ts.label}
+                                        {a.coperti && a.coperti > 1 ? ` · ${a.coperti}p` : ''}
+                                      </p>}
                                       {height > 76 && a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
                                         <p className="text-[10px] text-red-500 truncate">{a.allergie}</p>
                                       )}
+                                    </>
+                                  )}
+                                </div>
+                              )
+                            })}
+
+                            {/* Ghost: tavoli secondari di una prenotazione multi-tavolo */}
+                            {('ghostApps' in col ? col.ghostApps as (Appuntamento & { ghost: true; primaryTavolo: string })[] : []).map(a => {
+                              const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
+                              const dt = new Date(a.data)
+                              const startH = dt.getHours() + dt.getMinutes() / 60
+                              const top = Math.max(0, (startH - hourStart) * PX_PER_HOUR)
+                              const height = Math.max((a.durata / 60) * PX_PER_HOUR, 28)
+                              return (
+                                <div key={`ghost-${a.id}`}
+                                  style={{
+                                    position: 'absolute', top, height,
+                                    left: `calc(2px)`, width: `calc(100% - 4px)`,
+                                    borderLeftWidth: 3, borderLeftColor: '#94a3b8',
+                                  }}
+                                  onClick={() => setSelected(a)}
+                                  className={`${sc.bg} opacity-40 rounded-r-lg px-1.5 py-1 cursor-pointer hover:opacity-60 transition-all overflow-hidden z-10`}>
+                                  {height <= 36 ? (
+                                    <p className="text-[10px] font-bold text-ink-navy/60 truncate">↑ {a.primaryTavolo}</p>
+                                  ) : (
+                                    <>
+                                      <p className="text-[10px] font-bold text-ink-navy/60">↑ {a.primaryTavolo}</p>
+                                      <p className="text-[10px] text-ink-navy/40 truncate">{a.clienteNome || 'Cliente'}</p>
                                     </>
                                   )}
                                 </div>

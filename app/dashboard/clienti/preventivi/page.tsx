@@ -304,7 +304,10 @@ function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma }: {
 }) {
   const isTavolo = richiesta.tipo === 'tavolo'
   const items = JSON.parse(richiesta.items) as ItemExt[]
-  const servizioDefault = items[0]?.descrizione ?? (isTavolo ? 'Prenotazione tavolo' : '')
+  const servizioDefault = isTavolo ? 'Prenotazione tavolo'
+    : richiesta.tipo === 'delivery' ? 'Delivery'
+    : richiesta.tipo === 'ordine' ? 'Ordine asporto'
+    : (items[0]?.descrizione ?? '')
   const dataMatch = richiesta.note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
   const oraMatch = richiesta.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
   const copertiNote = richiesta.note?.match(/Coperti:\s*(\d+)/)
@@ -607,11 +610,11 @@ function Richieste() {
             body: JSON.stringify({
               clienteNome: corrente.clienteName,
               clienteEmail: corrente.clienteEmail,
-              servizio: items[0]?.descrizione ?? corrente.tipo,
+              servizio: corrente.tipo === 'delivery' ? 'Delivery' : corrente.tipo === 'ordine' ? 'Ordine asporto' : (items[0]?.descrizione ?? corrente.tipo),
               data: new Date(`${dataMatch[1]}T${ora}`).toISOString(),
               durata: 15,
               coperti: items[0]?.coperti ?? (copertiMatch ? Number(copertiMatch[1]) : 1),
-              note: `Da richiesta #${String(corrente.numero).padStart(3, '0')}`,
+              note: [items[0]?.descrizione, `Da richiesta #${String(corrente.numero).padStart(3, '0')}`].filter(Boolean).join('\n'),
             }),
           })
           setSelected(null)
