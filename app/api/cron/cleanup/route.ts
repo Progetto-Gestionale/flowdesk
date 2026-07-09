@@ -14,7 +14,25 @@ export async function GET(req: Request) {
   let leadCancellati = 0
   let convEliminate = 0
 
-  // 1. Segna come "completato" tutti gli appuntamenti confermati con data passata
+  // 1a. Auto-conferma ordini e delivery non ancora gestiti manualmente
+  //     (status non in stati finali) con data passata
+  await prisma.appuntamento.updateMany({
+    where: {
+      status: { notIn: ['confermato', 'completato', 'cancellato', 'no_show'] },
+      data: { lt: ora },
+      OR: [
+        { servizio: { contains: 'asporto',  mode: 'insensitive' } },
+        { servizio: { contains: 'ordine',   mode: 'insensitive' } },
+        { servizio: { contains: 'delivery', mode: 'insensitive' } },
+        { servizio: { contains: 'domicilio',mode: 'insensitive' } },
+        { servizio: { contains: 'pizza',    mode: 'insensitive' } },
+        { servizio: { contains: 'hamburger',mode: 'insensitive' } },
+      ],
+    },
+    data: { status: 'confermato' },
+  })
+
+  // 1b. Segna come "completato" tutti gli appuntamenti confermati con data passata
   const risultato = await prisma.appuntamento.updateMany({
     where: { status: 'confermato', data: { lt: ora } },
     data: { status: 'completato' },

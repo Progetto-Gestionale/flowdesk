@@ -5,10 +5,9 @@ import { buildSystemPrompt as buildBotPrompt } from '@/lib/botPrompt'
 
 function categorizzaRichiesta(servizio: string): string {
   const s = servizio.toLowerCase()
-  if (/tavolo|cena|pranzo|ristorante|coperti|posto|sala|ristorazione|prenotazione/.test(s)) return 'tavolo'
-  if (/appuntamento|visita|consulenza|incontro|colloquio|riunione|call|meeting/.test(s)) return 'appuntamento'
-  if (/ordine|acquisto|prodotto|articolo|spedizione|consegna|shop/.test(s)) return 'ordine'
-  if (/preventivo|offerta|quotazione|prezzo|costo|budget|stima/.test(s)) return 'preventivo'
+  if (/tavolo|cena|pranzo|coperti|posto|sala|prenotazione|ristorazione/.test(s)) return 'tavolo'
+  if (/delivery|consegna a domicilio|domicilio|spedizione/.test(s)) return 'delivery'
+  if (/asporto|take away|takeaway|da portare|ordine|acquisto|shop/.test(s)) return 'ordine'
   return 'servizio'
 }
 

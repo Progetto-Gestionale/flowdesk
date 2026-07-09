@@ -32,16 +32,33 @@ export async function POST(req: Request) {
       if (dati.nome && dati.email && dati.richiesta) {
         // Controlla capienza per quella data se maxCoperti è configurato
         let dataOccupata = false
-        if (dati.dataISO && owner.maxCoperti) {
-          const inizioGiorno = new Date(`${dati.dataISO}T00:00:00`)
-          const fineGiorno = new Date(`${dati.dataISO}T23:59:59`)
-          const appDelGiorno = await prisma.appuntamento.findMany({
-            where: { userId: owner.id, data: { gte: inizioGiorno, lte: fineGiorno }, status: { not: 'cancellato' } },
-            select: { coperti: true },
-          })
-          const copertiOccupati = appDelGiorno.reduce((s, a) => s + (a.coperti ?? 1), 0)
-          if (copertiOccupati + (dati.coperti || 1) > owner.maxCoperti) {
-            dataOccupata = true
+        if (dati.dataISO) {
+          // Calcola capienza totale dai tavoli configurati
+          const tavoli = await prisma.tavolo.findMany({ where: { userId: owner.id }, select: { posti: true } })
+          const capienzaTotale = tavoli.reduce((s, t) => s + t.posti, 0)
+
+          if (capienzaTotale > 0) {
+            // Controlla sovrapposizione con appuntamenti esistenti nella fascia oraria richiesta
+            const richiestaCoperti = dati.coperti || 1
+            const durataStandard = 120 // minuti
+            const inizioCheck = dati.oraISO
+              ? new Date(`${dati.dataISO}T${dati.oraISO}`)
+              : new Date(`${dati.dataISO}T00:00:00`)
+            const fineCheck = dati.oraISO
+              ? new Date(inizioCheck.getTime() + durataStandard * 60000)
+              : new Date(`${dati.dataISO}T23:59:59`)
+
+            const appConflitto = await prisma.appuntamento.findMany({
+              where: { userId: owner.id, status: { not: 'cancellato' }, data: { lt: fineCheck } },
+              select: { data: true, durata: true, coperti: true },
+            })
+            const copertiOccupati = appConflitto
+              .filter(a => new Date(a.data).getTime() + a.durata * 60000 > inizioCheck.getTime())
+              .reduce((s, a) => s + (a.coperti ?? 1), 0)
+
+            if (copertiOccupati + richiestaCoperti > capienzaTotale) {
+              dataOccupata = true
+            }
           }
         }
 
@@ -98,15 +115,18 @@ export async function POST(req: Request) {
         {
           const tipo = (() => {
             const s = (dati.servizio || dati.richiesta).toLowerCase()
-            if (/tavolo|cena|pranzo|coperti|posto/.test(s)) return 'tavolo'
+            if (/delivery|consegna a domicilio|domicilio/.test(s)) return 'delivery'
+            if (/asporto|take away|takeaway|da portare|ritiro|ordine|acquisto|prodotto|pizza|hamburger|sushi|cibo|piatto|menu/.test(s)) return 'ordine'
+            if (/tavolo|cena|pranzo|coperti|posto|sala|ristorante|prenotaz/.test(s)) return 'tavolo'
             if (/appuntamento|visita|consulenza/.test(s)) return 'appuntamento'
-            if (/ordine|acquisto|prodotto/.test(s)) return 'ordine'
             if (/preventivo|offerta|quotazione/.test(s)) return 'preventivo'
             return 'servizio'
           })()
           const count = await prisma.preventivo.count({ where: { userId: owner.id } })
           const itemArricchito: Record<string, unknown> = {
-            descrizione: dati.servizio || dati.richiesta,
+            // richiesta = testo libero del cliente (es. "2 pizze margherita e 1 calzone")
+            // servizio  = tipo di canale (es. "Ordine asporto") — usato solo per la categoria
+            descrizione: dati.richiesta || dati.servizio,
             quantita: dati.coperti > 0 ? dati.coperti : 1,
             prezzo: 0,
           }
@@ -114,7 +134,7 @@ export async function POST(req: Request) {
           if (dati.allergie) itemArricchito.allergie = dati.allergie
           if (dati.occasione) itemArricchito.occasione = dati.occasione
 
-          let note = 'Da widget pubblico.'
+          let note = `Canale: ${dati.servizio || tipo}.`
           if (dati.dataISO) note += ` DATA_ISO:${dati.dataISO}`
           if (dati.oraISO) note += ` ORA_ISO:${dati.oraISO}`
           if (dati.coperti > 0) note += ` Coperti: ${dati.coperti}.`

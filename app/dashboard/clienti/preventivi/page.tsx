@@ -30,6 +30,13 @@ interface ItemExt extends Item {
   occasione?: string
 }
 
+interface StoricoProfilo {
+  totaleRichieste: number
+  spesaTotale: number
+  ultimaVisita: string | null
+  noShow: number
+}
+
 function SintesiRichiesta({ items, note }: { items: ItemExt[]; note?: string }) {
   const righe = items.filter(i => i.descrizione).map(i =>
     i.quantita > 1 ? `${i.descrizione} × ${i.quantita}` : i.descrizione
@@ -84,11 +91,10 @@ function SintesiRichiesta({ items, note }: { items: ItemExt[]; note?: string }) 
 
 const TIPI: { id: string; label: string; color: string }[] = [
   { id: 'tutti', label: 'Tutte', color: 'bg-mist text-ink-navy/70' },
-  { id: 'appuntamento', label: 'Appuntamento', color: 'bg-electric-blue/15 text-electric-blue' },
   { id: 'tavolo', label: 'Tavolo', color: 'bg-orange-100 text-orange-700' },
-  { id: 'ordine', label: 'Ordine', color: 'bg-amber-100 text-amber-700' },
+  { id: 'ordine', label: 'Ordine / Asporto', color: 'bg-amber-100 text-amber-700' },
+  { id: 'delivery', label: 'Delivery', color: 'bg-teal-100 text-teal-700' },
   { id: 'servizio', label: 'Servizio', color: 'bg-teal-100 text-teal-700' },
-  { id: 'preventivo', label: 'Preventivo', color: 'bg-violet-100 text-violet-700' },
 ]
 
 const STATUS_COLORS: Record<string, string> = {
@@ -308,7 +314,7 @@ function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma }: {
   const [data, setData] = useState(dataMatch?.[1] ?? '')
   const [ora, setOra] = useState(oraMatch?.[1] ?? '19:30')
   const [servizio, setServizio] = useState(servizioDefault)
-  const [durata, setDurata] = useState(isTavolo ? 120 : 60)
+  const [durata, setDurata] = useState(isTavolo ? 90 : 15)
   const [coperti, setCoperti] = useState(String(items[0]?.coperti ?? copertiNote?.[1] ?? '2'))
   const [allergie, setAllergie] = useState(items[0]?.allergie ?? allergieNote?.[1]?.trim() ?? '')
   const [occasione, setOccasione] = useState(items[0]?.occasione ?? occasioneNote?.[1]?.trim() ?? '')
@@ -401,7 +407,7 @@ function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma }: {
             </div>
           )}
         </div>
-        {tavoli.length > 0 && (
+        {isTavolo && tavoli.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-ink-navy/70">Tavoli (opzionale)</label>
@@ -469,6 +475,9 @@ function Richieste() {
   const [confermaApp, setConfermaApp] = useState<Richiesta | null>(null)
   const [proposta, setProposta] = useState<Richiesta | null>(null)
   const [tipoAttivo, setTipoAttivo] = useState('tutti')
+  const [clienteStorico, setClienteStorico] = useState<StoricoProfilo | null>(null)
+  const [allergieMemoriate, setAllergieMemoriate] = useState<string[]>([])
+  const [preferenzeMemoriate, setPreferenzeMemoriate] = useState<string[]>([])
 
   async function fetchRichieste() {
     const res = await fetch('/api/preventivi', { credentials: 'include', cache: 'no-store' })
@@ -494,6 +503,41 @@ function Richieste() {
     const interval = setInterval(fetchRichieste, 15000)
     return () => clearInterval(interval)
   }, [])
+
+  // Carica storico e memoria del cliente quando si apre una richiesta
+  useEffect(() => {
+    if (!selected?.leadId) {
+      setClienteStorico(null)
+      setAllergieMemoriate([])
+      setPreferenzeMemoriate([])
+      return
+    }
+    const leadId = selected.leadId
+    const currentId = selected.id
+    Promise.all([
+      fetch(`/api/leads/${leadId}/storico`, { credentials: 'include', cache: 'no-store' }).then(r => r.json()),
+      fetch(`/api/preventivi?leadId=${leadId}`, { credentials: 'include', cache: 'no-store' }).then(r => r.json()),
+    ]).then(([storico, prevData]) => {
+      setClienteStorico(storico)
+      // Estrai allergie e occasioni dalle richieste passate (escludi quella corrente)
+      const passate: Richiesta[] = (prevData.preventivi ?? []).filter((p: Richiesta) => p.id !== currentId)
+      const allergie = new Set<string>()
+      const preferenze = new Set<string>()
+      passate.forEach((r: Richiesta) => {
+        const items = JSON.parse(r.items) as ItemExt[]
+        items.forEach(item => {
+          if (item.allergie && item.allergie.toLowerCase() !== 'nessuna') allergie.add(item.allergie.trim())
+          if (item.occasione) preferenze.add(item.occasione.trim())
+        })
+        const allergieNote = r.note?.match(/Allergie:\s*([^.\n]+)/)
+        if (allergieNote) allergie.add(allergieNote[1].trim())
+        const occasioneNote = r.note?.match(/Occasione:\s*([^.\n]+)/)
+        if (occasioneNote) preferenze.add(occasioneNote[1].trim())
+      })
+      setAllergieMemoriate([...allergie])
+      setPreferenzeMemoriate([...preferenze])
+    }).catch(() => {})
+  }, [selected?.id])
 
   async function handleSave(form: object) {
     try {
@@ -539,7 +583,7 @@ function Richieste() {
           body: JSON.stringify({ leadId: corrente.leadId, email: corrente.clienteEmail }),
         })
       } else if (status === 'accettato') {
-        // Sposta il lead in "chiuso" (acquisito) e apri conferma appuntamento
+        // Sposta il lead in "chiuso" (acquisito)
         if (corrente.leadId) {
           await fetch(`/api/leads/${corrente.leadId}`, {
             method: 'PATCH', credentials: 'include',
@@ -547,6 +591,36 @@ function Richieste() {
             body: JSON.stringify({ status: 'chiuso', cancellato: false }),
           })
         }
+
+        const isTavolo = corrente.tipo === 'tavolo'
+        const dataMatch = corrente.note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
+        const oraMatch = corrente.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
+
+        // Per tipi non-tavolo con data già catturata dal bot → crea appuntamento automaticamente
+        if (!isTavolo && dataMatch?.[1]) {
+          const items = (() => { try { return JSON.parse(corrente.items) } catch { return [] } })()
+          const ora = oraMatch?.[1] ?? '12:00'
+          const copertiMatch = corrente.note?.match(/Coperti:\s*(\d+)/)
+          await fetch('/api/appuntamenti', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clienteNome: corrente.clienteName,
+              clienteEmail: corrente.clienteEmail,
+              servizio: items[0]?.descrizione ?? corrente.tipo,
+              data: new Date(`${dataMatch[1]}T${ora}`).toISOString(),
+              durata: 15,
+              coperti: items[0]?.coperti ?? (copertiMatch ? Number(copertiMatch[1]) : 1),
+              note: `Da richiesta #${String(corrente.numero).padStart(3, '0')}`,
+            }),
+          })
+          setSelected(null)
+          await fetchRichieste()
+          window.dispatchEvent(new Event('refresh-richieste-count'))
+          return
+        }
+
+        // Tavolo, o non-tavolo senza data → apri modal per raccogliere i dati mancanti
         setSelected(null)
         setConfermaApp(corrente)
         await fetchRichieste()
@@ -864,6 +938,59 @@ function Richieste() {
 
               <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
 
+                {/* Profilo cliente — mostrato solo se cliente già conosciuto */}
+                {clienteStorico && clienteStorico.totaleRichieste > 1 && (
+                  <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-violet-700 uppercase tracking-wider">Cliente abituale</span>
+                      <span className="bg-violet-100 text-violet-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                        {clienteStorico.totaleRichieste - 1} {clienteStorico.totaleRichieste - 1 === 1 ? 'visita precedente' : 'visite precedenti'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {clienteStorico.spesaTotale > 0 && (
+                        <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-2 py-0.5 rounded-full">
+                          €{clienteStorico.spesaTotale.toFixed(0)} spesi in totale
+                        </span>
+                      )}
+                      {clienteStorico.ultimaVisita && (
+                        <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-2 py-0.5 rounded-full">
+                          Ultima visita: {new Date(clienteStorico.ultimaVisita).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                      {clienteStorico.noShow > 0 && (
+                        <span className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">
+                          {clienteStorico.noShow} no-show
+                        </span>
+                      )}
+                    </div>
+                    {(allergieMemoriate.length > 0 || preferenzeMemoriate.length > 0) && (
+                      <div className="border-t border-violet-200 pt-2 space-y-1">
+                        {allergieMemoriate.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs font-semibold text-violet-500 shrink-0 mt-0.5">Allergie note:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {allergieMemoriate.map(a => (
+                                <span key={a} className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">{a}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {preferenzeMemoriate.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs font-semibold text-violet-500 shrink-0 mt-0.5">Preferenze:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {preferenzeMemoriate.map(p => (
+                                <span key={p} className="text-xs bg-purple-100 text-purple-600 font-semibold px-2 py-0.5 rounded-full">{p}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Sintesi richiesta — in evidenza */}
                 <SintesiRichiesta items={items} note={selected.note} />
 
@@ -951,8 +1078,8 @@ function Richieste() {
                   </button>
                 )}
                 <button onClick={() => handleDelete(selected.id)}
-                  className="text-sm text-ink-navy/35 font-medium py-2 px-3 border border-ink-navy/10 rounded-lg hover:bg-mist" title="Elimina definitivamente">
-                  
+                  className="text-sm text-ink-navy/40 font-medium py-2 px-3 border border-ink-navy/10 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors" title="Elimina definitivamente">
+                  Elimina
                 </button>
               </div>
             </div>
