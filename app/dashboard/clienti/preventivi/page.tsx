@@ -295,7 +295,7 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
 }
 
 interface TavoloBasic { id: string; numero: number; posti: number; note: string | null }
-interface AppBasic { id: string; data: string; durata: number; status: string; tavoloId?: string | null; tavoliIds?: string | null }
+interface AppBasic { id: string; data: string; durata: number; status: string; tavoloId?: string | null; tavoliIds?: string | null; note?: string | null }
 
 function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma }: {
   richiesta: Richiesta
@@ -481,6 +481,10 @@ function Richieste() {
   const [clienteStorico, setClienteStorico] = useState<StoricoProfilo | null>(null)
   const [allergieMemoriate, setAllergieMemoriate] = useState<string[]>([])
   const [preferenzeMemoriate, setPreferenzeMemoriate] = useState<string[]>([])
+  const [tavoli, setTavoli] = useState<TavoloBasic[]>([])
+  const [appuntamenti, setAppuntamenti] = useState<AppBasic[]>([])
+  const [assegnaTavoliIds, setAssegnaTavoliIds] = useState<string[]>([])
+  const [assegnaLoading, setAssegnaLoading] = useState(false)
 
   async function fetchRichieste() {
     const res = await fetch('/api/preventivi', { credentials: 'include', cache: 'no-store' })
@@ -504,8 +508,12 @@ function Richieste() {
   useEffect(() => {
     fetchRichieste()
     const interval = setInterval(fetchRichieste, 15000)
+    fetch('/api/tavoli', { credentials: 'include' }).then(r => r.json()).then(d => setTavoli(d.tavoli ?? []))
+    fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? []))
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => { setAssegnaTavoliIds([]) }, [selected?.id])
 
   // Carica storico e memoria del cliente quando si apre una richiesta
   useEffect(() => {
@@ -1067,6 +1075,80 @@ function Richieste() {
                   )}
                 </div>
               </div>
+
+              {/* Assegna tavolo — solo per tavoli accettati senza tavolo ancora assegnato */}
+              {selected.status === 'accettato' && selected.tipo === 'tavolo' && (() => {
+                const numStr = `#${String(selected.numero).padStart(3, '0')}`
+                const appCollegato = appuntamenti.find(a => a.note?.includes(numStr) || a.note?.includes(`Da richiesta ${numStr}`))
+                if (!appCollegato) return null
+                const hasTavolo = appCollegato.tavoloId || (appCollegato.tavoliIds && appCollegato.tavoliIds !== '[]')
+                const dataApp = new Date(appCollegato.data)
+                const fineApp = new Date(dataApp.getTime() + appCollegato.durata * 60000)
+                return (
+                  <div className="border-t border-ink-navy/8 pt-4">
+                    <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">
+                      {hasTavolo ? 'Tavolo assegnato' : 'Assegna tavolo'}
+                    </p>
+                    {hasTavolo ? (
+                      <p className="text-sm text-ink-navy/60">
+                        {tavoli.filter(t => {
+                          try { return (JSON.parse(appCollegato.tavoliIds ?? '[]') as string[]).includes(t.id) } catch { return t.id === appCollegato.tavoloId }
+                        }).sort((a,b)=>a.numero-b.numero).map(t=>`T${t.numero} (${t.posti}p)`).join(' + ') || '—'}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                          {tavoli.map(t => {
+                            const checked = assegnaTavoliIds.includes(t.id)
+                            const occupato = !checked && appuntamenti.some(a => {
+                              if (a.id === appCollegato.id || a.status === 'cancellato') return false
+                              const usaTavolo = a.tavoloId === t.id || (() => { try { return (JSON.parse(a.tavoliIds ?? '[]') as string[]).includes(t.id) } catch { return false } })()
+                              if (!usaTavolo) return false
+                              const aStart = new Date(a.data).getTime()
+                              return aStart < fineApp.getTime() && aStart + a.durata * 60000 > dataApp.getTime()
+                            })
+                            return (
+                              <label key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${
+                                occupato ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60'
+                                : checked ? 'border-electric-blue/40 bg-electric-blue/10 cursor-pointer'
+                                : 'border-ink-navy/10 hover:bg-mist cursor-pointer'
+                              }`}>
+                                <input type="checkbox" checked={checked} disabled={occupato}
+                                  onChange={e => setAssegnaTavoliIds(prev => e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id))}
+                                  className="accent-electric-blue w-4 h-4 shrink-0" />
+                                <span className="text-sm text-ink-navy/70 flex-1">
+                                  <span className="font-semibold">T{t.numero}</span>
+                                  <span className="text-ink-navy/35"> · {t.posti} posti{t.note ? ` · ${t.note}` : ''}</span>
+                                </span>
+                                {occupato && <span className="text-xs text-red-500 font-medium">occupato</span>}
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {assegnaTavoliIds.length > 0 && (
+                          <button
+                            disabled={assegnaLoading}
+                            onClick={async () => {
+                              setAssegnaLoading(true)
+                              await fetch(`/api/appuntamenti/${appCollegato.id}`, {
+                                method: 'PATCH', credentials: 'include',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ tavoliIds: assegnaTavoliIds }),
+                              })
+                              const d = await fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json())
+                              setAppuntamenti(d.appuntamenti ?? [])
+                              setAssegnaTavoliIds([])
+                              setAssegnaLoading(false)
+                            }}
+                            className="w-full bg-electric-blue text-white text-sm font-semibold py-2 rounded-lg hover:bg-electric-blue/90 disabled:opacity-50">
+                            {assegnaLoading ? 'Salvataggio...' : `Assegna ${assegnaTavoliIds.length > 1 ? assegnaTavoliIds.length + ' tavoli' : 'tavolo'}`}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Footer */}
               <div className="px-5 py-3 border-t border-ink-navy/8 flex gap-2">

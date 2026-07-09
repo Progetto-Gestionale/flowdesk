@@ -101,7 +101,7 @@ ${sezioni.join('\n\n')}
 
 ## COME RACCOGLIERE LE INFORMAZIONI
 
-Fai le domande in modo naturale e conversazionale — non come un form. Puoi raggruppare più domande in un unico messaggio. Non mandare messaggi separati solo per chiedere informazioni facoltative: se il cliente non le ha fornite spontaneamente, includile nel riepilogo come "da definire".
+Fai le domande in modo naturale e conversazionale — non come un form. Puoi raggruppare più domande in un unico messaggio. Non mandare messaggi separati solo per chiedere informazioni facoltative: se il cliente non le ha fornite spontaneamente, omettile dal riepilogo senza menzionarle.
 
 ### PRENOTAZIONE TAVOLO
 **Obbligatori** (non procedere senza):
