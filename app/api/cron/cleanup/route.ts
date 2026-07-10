@@ -32,9 +32,16 @@ export async function GET(req: Request) {
     data: { status: 'confermato' },
   })
 
-  // 1b. Segna come "completato" tutti gli appuntamenti confermati con data passata
+  // 1b. Segna come "completato" gli appuntamenti confermati già terminati (data + durata < ora)
+  const tuttiConfermati = await prisma.appuntamento.findMany({
+    where: { status: 'confermato' },
+    select: { id: true, data: true, durata: true },
+  })
+  const idsDaCompletare = tuttiConfermati
+    .filter(a => new Date(a.data).getTime() + a.durata * 60000 < ora.getTime())
+    .map(a => a.id)
   const risultato = await prisma.appuntamento.updateMany({
-    where: { status: 'confermato', data: { lt: ora } },
+    where: { id: { in: idsDaCompletare } },
     data: { status: 'completato' },
   })
   appAggiornati = risultato.count
