@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(req: Request) {
-  const userId = await getAuthUserId(req)
+  const userId = await getAuthUserId()
   if (!userId) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   let user = await prisma.user.findUnique({ where: { clerkId: userId } })
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const userId = await getAuthUserId(req)
+  const userId = await getAuthUserId()
   if (!userId) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { name, niche } = await req.json()

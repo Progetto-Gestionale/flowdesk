@@ -6,7 +6,7 @@ import { generateUsername } from '@/lib/dipendenteAuth'
 
 // Il titolare imposta o resetta la password di un dipendente
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { id } = await params

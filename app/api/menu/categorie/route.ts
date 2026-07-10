@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
 
 export async function GET(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const { searchParams } = new URL(req.url)
   const tipo = searchParams.get('tipo') ?? 'locale'
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const { nome, tipo = 'locale' } = await req.json()
   const count = await prisma.menuCategoria.count({ where: { userId: user.id, tipo } })

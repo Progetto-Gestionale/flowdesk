@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   }
 
   // Titolare autenticato
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const disponibilita = await prisma.disponibilitaDipendente.findMany({

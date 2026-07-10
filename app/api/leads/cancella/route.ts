@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 
 // Cancella (soft) il lead collegato a un'email o a un leadId
 export async function POST(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   const userId = user?.id
   if (!user) return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
 

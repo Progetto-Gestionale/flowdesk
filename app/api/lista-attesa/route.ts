@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const url = new URL(req.url)
   const soloAttivi = url.searchParams.get('attivi') === 'true'
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const { clienteNome, clienteEmail, clienteTel, data, ora, coperti, note } = await req.json()
   const item = await prisma.listaAttesa.create({

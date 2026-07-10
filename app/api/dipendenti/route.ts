@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const dipendenti = await prisma.dipendente.findMany({
     where: { userId: user.id },
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const { nome, email, ruolo, fotoUrl } = await req.json()
   if (!nome || !email) return NextResponse.json({ error: 'Nome e email obbligatori' }, { status: 400 })

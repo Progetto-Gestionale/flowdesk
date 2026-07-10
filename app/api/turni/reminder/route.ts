@@ -15,7 +15,7 @@ function getDayIndex(date: Date) {
 }
 
 export async function POST(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { settimana } = await req.json()

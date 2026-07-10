@@ -4,7 +4,7 @@ import { getAuthUser } from '@/lib/getAuthUser'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const data = await req.json()
   if (data.prezzo) data.prezzo = parseFloat(data.prezzo)
@@ -14,7 +14,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   await prisma.menuPiatto.delete({ where: { id } })
   return NextResponse.json({ ok: true })

@@ -4,7 +4,7 @@ import { getAuthUser } from '@/lib/getAuthUser'
 
 // POST: copia tutto il menù da un tipo all'altro (sovrascrive la destinazione)
 export async function POST(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { da, a } = await req.json() // da: 'locale'|'asporto', a: 'locale'|'asporto'

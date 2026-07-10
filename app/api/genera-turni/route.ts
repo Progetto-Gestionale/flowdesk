@@ -14,7 +14,7 @@ function toISO(d: Date) {
 const toMin = (h: string) => { const [hh, mm] = h.split(':').map(Number); return hh * 60 + mm }
 
 export async function POST(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { settimana, requisiti, note } = await req.json()

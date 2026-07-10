@@ -3,13 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
 
 export async function GET(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   return NextResponse.json({ blockAsporto: user.blockAsporto, blockDelivery: user.blockDelivery })
 }
 
 export async function PATCH(req: Request) {
-  const user = await getAuthUser(req)
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const body = await req.json()
   const data: Record<string, boolean> = {}

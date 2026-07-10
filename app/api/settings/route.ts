@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(req: Request) {
   try {
-    const user = await getAuthUser(req)
+    const user = await getAuthUser()
     if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
     return NextResponse.json({
       nomeLocale: user.nomeLocale,
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const user = await getAuthUser(req)
+    const user = await getAuthUser()
     if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
     const data = await req.json()

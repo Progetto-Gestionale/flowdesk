@@ -20,7 +20,7 @@ async function getOrCreateUser(clerkId: string) {
 }
 
 export async function GET(req: Request) {
-  const userId = await getAuthUserId(req)
+  const userId = await getAuthUserId()
   if (!userId) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const user = await getOrCreateUser(userId)
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const userId = await getAuthUserId(req)
+  const userId = await getAuthUserId()
   if (!userId) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const user = await getOrCreateUser(userId)
