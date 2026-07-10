@@ -61,6 +61,7 @@ model MenuCategoria {
   userId    String
   nome      String
   ordine    Int          @default(0)
+  tipo      String       @default("locale") // "locale" | "asporto"
   createdAt DateTime     @default(now())
   user      User         @relation(fields: [userId], references: [id])
   piatti    MenuPiatto[]

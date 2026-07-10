@@ -79,6 +79,81 @@ const cls = 'w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus
 type SezioneStatus = { saving: boolean; saved: boolean; dirty: boolean }
 const initStatus = (): SezioneStatus => ({ saving: false, saved: false, dirty: false })
 
+// ── Strumenti menù asporto ────────────────────────────────────────────────────
+function MenuStrumenti({ publicId }: { publicId: string }) {
+  const [copiato, setCopiato] = useState<string | null>(null)
+
+  function copia(key: string, value: string) {
+    navigator.clipboard.writeText(value).catch(() => {})
+    setCopiato(key)
+    setTimeout(() => setCopiato(null), 2000)
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const menuUrl = publicId ? `${origin}/menu/${publicId}` : null
+  const qrUrl = menuUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(menuUrl)}&size=300x300` : null
+  const embedCode = menuUrl ? `<iframe src="${menuUrl}" width="100%" height="700" frameborder="0" style="border-radius:12px"></iframe>` : null
+
+  if (!publicId) return (
+    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mt-4">
+      <p className="text-sm font-semibold text-amber-800 mb-1">ID pubblico non configurato</p>
+      <p className="text-sm text-amber-700">Vai in <strong>Impostazioni → Locale</strong> e imposta un ID pubblico. Sarà parte del link del menù asporto.</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4 mt-4">
+      <h3 className="font-semibold text-ink-navy text-sm">Strumenti menù Asporto & Delivery</h3>
+
+      {/* Link */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">Link diretto</p>
+        <p className="text-xs text-ink-navy/50">Condividilo su WhatsApp, Instagram bio, Google My Business, ecc.</p>
+        <div className="flex gap-2">
+          <input readOnly value={menuUrl!}
+            className="flex-1 bg-mist border border-ink-navy/10 rounded-xl px-3 py-2 text-xs text-ink-navy/70 font-mono" />
+          <button onClick={() => copia('link', menuUrl!)}
+            className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 shrink-0">
+            {copiato === 'link' ? '✓' : 'Copia'}
+          </button>
+        </div>
+        <a href={menuUrl!} target="_blank" rel="noopener noreferrer"
+          className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
+      </div>
+
+      {/* QR */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">QR Code</p>
+        <p className="text-xs text-ink-navy/50">Da condividere sui social, in vetrina o sul packaging.</p>
+        <div className="flex gap-5 items-start">
+          <img src={qrUrl!} alt="QR menù asporto" className="w-28 h-28 rounded-xl border border-ink-navy/10" />
+          <div className="space-y-2 flex-1">
+            <a href={qrUrl!} download={`menu-asporto-qr.png`} target="_blank" rel="noopener noreferrer"
+              className="block w-full text-center px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
+              Scarica PNG
+            </a>
+            <button onClick={() => copia('qr', qrUrl!)}
+              className="block w-full text-center px-4 py-2 rounded-xl border border-ink-navy/15 text-ink-navy/70 text-sm font-medium hover:bg-mist">
+              {copiato === 'qr' ? '✓ Copiato' : 'Copia URL'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Embed */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">Incorpora sul sito web</p>
+        <p className="text-xs text-ink-navy/50">Incolla questo codice HTML nel tuo sito.</p>
+        <div className="bg-mist rounded-xl p-3 font-mono text-xs text-ink-navy/70 break-all">{embedCode}</div>
+        <button onClick={() => copia('embed', embedCode!)}
+          className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
+          {copiato === 'embed' ? '✓ Copiato' : 'Copia codice'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Impostazioni() {
   const searchParams = useSearchParams()
   const [sezioneAttiva, setSezioneAttiva] = useState(() => searchParams.get('sezione') ?? 'generale')
@@ -412,26 +487,29 @@ export default function Impostazioni() {
           )}
 
           {sezioneAttiva === 'menu' && (
-            <Section title="Menu & Offerta" subtitle="Descrivi cosa offri. Il bot potrà rispondere a domande su cucina, piatti e limitazioni."
-              onSave={() => saveSezione('menu', { menuOfferta: JSON.stringify(menu) })}
-              status={st('menu')}>
-              <Field label="Tipo di cucina">
-                <input type="text" value={menu.tipoCucina} onChange={e => { setMenu(m => ({ ...m, tipoCucina: e.target.value })); dirty('menu') }}
-                  placeholder="es. Cucina romana tradizionale, pizza napoletana" className={cls} />
-              </Field>
-              <Field label="Specialità e piatti forti">
-                <textarea value={menu.specialita} onChange={e => { setMenu(m => ({ ...m, specialita: e.target.value })); dirty('menu') }}
-                  rows={3} placeholder="es. Cacio e pepe fatta in casa, carbonara, tiramisù artigianale" className={`${cls} resize-none`} />
-              </Field>
-              <Field label="Cosa NON è disponibile / limitazioni">
-                <textarea value={menu.nonDisponibile} onChange={e => { setMenu(m => ({ ...m, nonDisponibile: e.target.value })); dirty('menu') }}
-                  rows={3} placeholder="es. Non facciamo pizza, non abbiamo menu vegetariano completo" className={`${cls} resize-none`} />
-              </Field>
-              <Field label="Allergeni e diete gestite">
-                <textarea value={menu.allergeniGestiti} onChange={e => { setMenu(m => ({ ...m, allergeniGestiti: e.target.value })); dirty('menu') }}
-                  rows={2} placeholder="es. Opzioni vegane disponibili, non gestiamo allergie ai crostacei" className={`${cls} resize-none`} />
-              </Field>
-            </Section>
+            <>
+              <Section title="Menu & Offerta" subtitle="Descrivi cosa offri. Il bot potrà rispondere a domande su cucina, piatti e limitazioni."
+                onSave={() => saveSezione('menu', { menuOfferta: JSON.stringify(menu) })}
+                status={st('menu')}>
+                <Field label="Tipo di cucina">
+                  <input type="text" value={menu.tipoCucina} onChange={e => { setMenu(m => ({ ...m, tipoCucina: e.target.value })); dirty('menu') }}
+                    placeholder="es. Cucina romana tradizionale, pizza napoletana" className={cls} />
+                </Field>
+                <Field label="Specialità e piatti forti">
+                  <textarea value={menu.specialita} onChange={e => { setMenu(m => ({ ...m, specialita: e.target.value })); dirty('menu') }}
+                    rows={3} placeholder="es. Cacio e pepe fatta in casa, carbonara, tiramisù artigianale" className={`${cls} resize-none`} />
+                </Field>
+                <Field label="Cosa NON è disponibile / limitazioni">
+                  <textarea value={menu.nonDisponibile} onChange={e => { setMenu(m => ({ ...m, nonDisponibile: e.target.value })); dirty('menu') }}
+                    rows={3} placeholder="es. Non facciamo pizza, non abbiamo menu vegetariano completo" className={`${cls} resize-none`} />
+                </Field>
+                <Field label="Allergeni e diete gestite">
+                  <textarea value={menu.allergeniGestiti} onChange={e => { setMenu(m => ({ ...m, allergeniGestiti: e.target.value })); dirty('menu') }}
+                    rows={2} placeholder="es. Opzioni vegane disponibili, non gestiamo allergie ai crostacei" className={`${cls} resize-none`} />
+                </Field>
+              </Section>
+              <MenuStrumenti publicId={publicId} />
+            </>
           )}
 
           {sezioneAttiva === 'pagamenti' && (

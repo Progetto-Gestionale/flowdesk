@@ -19,12 +19,10 @@ interface Categoria {
   piatti: Piatto[]
 }
 
-export default function MenuPage() {
-  const [tab, setTab] = useState<'menu' | 'grafica'>('menu')
-
-  // ── Menu state ──
+// ── Reusable menu editor (locale | asporto) ──────────────────────────────────
+function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   const [categorie, setCategorie] = useState<Categoria[]>([])
-  const [loadingMenu, setLoadingMenu] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [modalCat, setModalCat] = useState(false)
   const [nomeCat, setNomeCat] = useState('')
   const [editCat, setEditCat] = useState<Categoria | null>(null)
@@ -33,50 +31,50 @@ export default function MenuPage() {
   const [formPiatto, setFormPiatto] = useState({ nome: '', descrizione: '', prezzo: '', immagineUrl: '' })
   const [saving, setSaving] = useState(false)
   const [conferma, setConferma] = useState<{ msg: string; onConfirm: () => void } | null>(null)
-
-  // ── Grafica state ──
-  const [grafica, setGrafica] = useState({ menuLogoUrl: '', menuColoreP: '#4f46e5', menuColoreS: '#ffffff' })
-  const [loadingGrafica, setLoadingGrafica] = useState(true)
-  const [savingGrafica, setSavingGrafica] = useState(false)
-  const [graficaSalvata, setGraficaSalvata] = useState(false)
+  const [copiando, setCopiando] = useState(false)
+  const [copiato, setCopiato] = useState(false)
 
   async function fetchMenu() {
-    const res = await fetch('/api/menu/categorie', { credentials: 'include' })
-    const data = await res.json().catch(() => ({}))
-    setCategorie(data.categorie ?? [])
-    setLoadingMenu(false)
-  }
-
-  async function fetchGrafica() {
-    const res = await fetch('/api/settings', { credentials: 'include' })
-    const data = await res.json().catch(() => ({}))
-    setGrafica({
-      menuLogoUrl: data.menuLogoUrl ?? '',
-      menuColoreP: data.menuColoreP ?? '#4f46e5',
-      menuColoreS: data.menuColoreS ?? '#ffffff',
-    })
-    setLoadingGrafica(false)
-  }
-
-  useEffect(() => { fetchMenu(); fetchGrafica() }, [])
-
-  // ── Menu functions ──
-  async function salvaCategoria() {
-    setSaving(true)
-    if (editCat) {
-      await fetch(`/api/menu/categorie/${editCat.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nomeCat }),
-      })
-    } else {
-      await fetch('/api/menu/categorie', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nomeCat }),
-      })
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/menu/categorie?tipo=${tipo}`, { credentials: 'include' })
+      if (!res.ok) { console.error('fetchMenu error:', res.status); setLoading(false); return }
+      const data = await res.json()
+      setCategorie(data.categorie ?? [])
+    } catch (e) {
+      console.error('fetchMenu exception:', e)
     }
-    setSaving(false); setModalCat(false); setNomeCat(''); setEditCat(null); fetchMenu()
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchMenu() }, [tipo])
+
+  async function salvaCategoria() {
+    if (!nomeCat.trim()) return
+    setSaving(true)
+    try {
+      if (editCat) {
+        const res = await fetch(`/api/menu/categorie/${editCat.id}`, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome: nomeCat }),
+        })
+        if (!res.ok) throw new Error(`PATCH failed: ${res.status}`)
+      } else {
+        const res = await fetch('/api/menu/categorie', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome: nomeCat, tipo }),
+        })
+        if (!res.ok) throw new Error(`POST failed: ${res.status}`)
+      }
+    } catch (e) {
+      console.error('salvaCategoria error:', e)
+      setSaving(false)
+      return
+    }
+    setSaving(false); setModalCat(false); setNomeCat(''); setEditCat(null)
+    await fetchMenu()
   }
 
   async function eliminaCategoria(id: string) {
@@ -126,192 +124,125 @@ export default function MenuPage() {
     setFormPiatto({ nome: piatto.nome, descrizione: piatto.descrizione ?? '', prezzo: piatto.prezzo.toString(), immagineUrl: piatto.immagineUrl ?? '' })
   }
 
-  // ── Grafica functions ──
-  async function salvaGrafica() {
-    setSavingGrafica(true)
-    await fetch('/api/settings', {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(grafica),
+  async function copiaDaAltroTipo() {
+    const sorgente = tipo === 'locale' ? 'asporto' : 'locale'
+    const label = sorgente === 'locale' ? 'Menù normale' : 'Menù Asporto & Delivery'
+    setConferma({
+      msg: `Copiare tutto il contenuto da "${label}" sovrascrivendo questo menù?`,
+      onConfirm: async () => {
+        setCopiando(true)
+        await fetch('/api/menu/copia', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ da: sorgente, a: tipo }),
+        })
+        setCopiando(false); setCopiato(true)
+        setTimeout(() => setCopiato(false), 3000)
+        fetchMenu()
+      }
     })
-    setSavingGrafica(false)
-    setGraficaSalvata(true)
-    setTimeout(() => setGraficaSalvata(false), 3000)
   }
 
   const isModalOpen = modalPiatto !== null || editPiatto !== null
+  const altroLabel = tipo === 'locale' ? 'Asporto & Delivery' : 'Menù normale'
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-ink-navy">Menu</h1>
-          <p className="text-ink-navy/50 text-sm mt-0.5">Gestisci categorie, piatti e aspetto del menu digitale</p>
-        </div>
-        {tab === 'menu' && (
+        <div className="flex gap-2">
           <button onClick={() => { setEditCat(null); setNomeCat(''); setModalCat(true) }}
             className="bg-electric-blue text-white px-4 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
             + Categoria
           </button>
-        )}
-      </div>
-
-      {/* Tab */}
-      <div className="flex gap-2">
-        {[{ key: 'menu', label: 'Piatti' }, { key: 'grafica', label: 'Aspetto' }].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as any)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === t.key ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
-            {t.label}
+          <button onClick={copiaDaAltroTipo} disabled={copiando}
+            className="border border-ink-navy/15 text-ink-navy/70 px-4 py-2 rounded-xl font-medium hover:bg-mist text-sm disabled:opacity-50">
+            {copiato ? '✓ Copiato' : copiando ? 'Copia...' : `↓ Importa da ${altroLabel}`}
           </button>
-        ))}
+        </div>
       </div>
 
-      {/* ── TAB MENU ── */}
-      {tab === 'menu' && (
-        <div className="space-y-6">
-          {loadingMenu ? (
-            <p className="text-ink-navy/35 text-sm">Caricamento...</p>
-          ) : categorie.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-ink-navy/10 p-16 text-center shadow-sm">
-              <div className="w-12 h-12 rounded-xl bg-electric-blue/10 text-electric-blue flex items-center justify-center p-3 mx-auto mb-4">
-                <IconFork />
+      {loading ? (
+        <p className="text-ink-navy/35 text-sm">Caricamento...</p>
+      ) : categorie.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-ink-navy/10 p-16 text-center shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-electric-blue/10 text-electric-blue flex items-center justify-center p-3 mx-auto mb-4">
+            <IconFork />
+          </div>
+          <h3 className="text-lg font-semibold text-ink-navy">Nessuna categoria</h3>
+          <p className="text-ink-navy/50 text-sm mt-2">Crea una categoria per iniziare ad aggiungere piatti</p>
+          <div className="flex gap-2 justify-center mt-4">
+            <button onClick={() => { setEditCat(null); setNomeCat(''); setModalCat(true) }}
+              className="bg-electric-blue text-white px-5 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
+              + Aggiungi categoria
+            </button>
+            <button onClick={copiaDaAltroTipo}
+              className="border border-ink-navy/15 text-ink-navy/70 px-5 py-2 rounded-xl font-medium hover:bg-mist text-sm">
+              Importa da {altroLabel}
+            </button>
+          </div>
+        </div>
+      ) : (
+        categorie.map(cat => (
+          <div key={cat.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-ink-navy/8 bg-mist">
+              <h2 className="font-bold text-ink-navy">{cat.nome}
+                <span className="ml-2 text-xs font-normal text-ink-navy/35">{cat.piatti.length} piatt{cat.piatti.length === 1 ? 'o' : 'i'}</span>
+              </h2>
+              <div className="flex gap-2">
+                <button onClick={() => { setEditCat(cat); setNomeCat(cat.nome); setModalCat(true) }}
+                  className="text-xs px-2.5 py-1 rounded-lg text-ink-navy/50 hover:bg-ink-navy/10 transition-colors">Rinomina</button>
+                <button onClick={() => setModalPiatto({ categoriaId: cat.id })}
+                  className="text-xs px-3 py-1 rounded-lg bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/15 font-medium transition-colors">+ Piatto</button>
+                <button onClick={() => eliminaCategoria(cat.id)}
+                  className="text-xs px-2.5 py-1 rounded-lg text-red-400 hover:bg-red-50 transition-colors">
+                  <span className="w-3.5 h-3.5 inline-block"><IconTrash /></span>
+                </button>
               </div>
-              <h3 className="text-lg font-semibold text-ink-navy">Nessuna categoria</h3>
-              <p className="text-ink-navy/50 text-sm mt-2">Crea una categoria per iniziare ad aggiungere piatti</p>
-              <button onClick={() => { setEditCat(null); setNomeCat(''); setModalCat(true) }}
-                className="mt-4 bg-electric-blue text-white px-5 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
-                + Aggiungi categoria
-              </button>
             </div>
-          ) : (
-            categorie.map(cat => (
-              <div key={cat.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3.5 border-b border-ink-navy/8 bg-mist">
-                  <h2 className="font-bold text-ink-navy">{cat.nome}
-                    <span className="ml-2 text-xs font-normal text-ink-navy/35">{cat.piatti.length} piatt{cat.piatti.length === 1 ? 'o' : 'i'}</span>
-                  </h2>
-                  <div className="flex gap-2">
-                    <button onClick={() => { setEditCat(cat); setNomeCat(cat.nome); setModalCat(true) }}
-                      className="text-xs px-2.5 py-1 rounded-lg text-ink-navy/50 hover:bg-ink-navy/10 transition-colors">Rinomina</button>
-                    <button onClick={() => setModalPiatto({ categoriaId: cat.id })}
-                      className="text-xs px-3 py-1 rounded-lg bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/15 font-medium transition-colors">+ Piatto</button>
-                    <button onClick={() => eliminaCategoria(cat.id)}
-                      className="text-xs px-2.5 py-1 rounded-lg text-red-400 hover:bg-red-50 transition-colors">
-                      <span className="w-3.5 h-3.5 inline-block"><IconTrash /></span>
-                    </button>
-                  </div>
-                </div>
-                {cat.piatti.length === 0 ? (
-                  <div className="px-5 py-8 text-center">
-                    <p className="text-ink-navy/35 text-sm">Nessun piatto — clicca "+ Piatto" per aggiungerne uno</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {cat.piatti.map(p => (
-                      <div key={p.id} className={`flex items-center gap-4 px-5 py-3.5 ${!p.disponibile ? 'opacity-50' : ''}`}>
-                        {p.immagineUrl ? (
-                          <img src={p.immagineUrl} alt={p.nome} className="w-14 h-14 rounded-xl object-cover shrink-0" />
-                        ) : (
-                          <div className="w-14 h-14 rounded-xl bg-mist flex items-center justify-center p-3.5 text-ink-navy/25 shrink-0"><IconFork /></div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-ink-navy truncate">{p.nome}</p>
-                          {p.descrizione && <p className="text-sm text-ink-navy/50 truncate">{p.descrizione}</p>}
-                          <p className="text-electric-blue font-bold text-sm mt-0.5">€{p.prezzo.toFixed(2)}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="flex rounded-lg border border-ink-navy/10 overflow-hidden text-xs font-medium">
-                            <button onClick={() => !p.disponibile && toggleDisponibile(p)}
-                              className={`px-2.5 py-1 transition-colors ${p.disponibile ? 'bg-green-100 text-green-700' : 'text-ink-navy/35 hover:bg-mist'}`}>
-                              Disponibile
-                            </button>
-                            <button onClick={() => p.disponibile && toggleDisponibile(p)}
-                              className={`px-2.5 py-1 transition-colors border-l border-ink-navy/10 ${!p.disponibile ? 'bg-red-100 text-red-600' : 'text-ink-navy/60 hover:bg-red-50 hover:text-red-500'}`}>
-                              Non disp.
-                            </button>
-                          </div>
-                          <button onClick={() => apriModificaPiatto(p, cat.id)}
-                            className="text-ink-navy/35 hover:text-electric-blue p-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
-                            <span className="w-3.5 h-3.5 block"><IconPencil /></span>
-                          </button>
-                          <button onClick={() => eliminaPiatto(p.id)}
-                            className="text-ink-navy/35 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
-                            <span className="w-3.5 h-3.5 block"><IconTrash /></span>
-                          </button>
-                        </div>
+            {cat.piatti.length === 0 ? (
+              <div className="px-5 py-8 text-center">
+                <p className="text-ink-navy/35 text-sm">Nessun piatto — clicca "+ Piatto" per aggiungerne uno</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {cat.piatti.map(p => (
+                  <div key={p.id} className={`flex items-center gap-4 px-5 py-3.5 ${!p.disponibile ? 'opacity-50' : ''}`}>
+                    {p.immagineUrl ? (
+                      <img src={p.immagineUrl} alt={p.nome} className="w-14 h-14 rounded-xl object-cover shrink-0" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-xl bg-mist flex items-center justify-center p-3.5 text-ink-navy/25 shrink-0"><IconFork /></div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-ink-navy truncate">{p.nome}</p>
+                      {p.descrizione && <p className="text-sm text-ink-navy/50 truncate">{p.descrizione}</p>}
+                      <p className="text-electric-blue font-bold text-sm mt-0.5">€{p.prezzo.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex rounded-lg border border-ink-navy/10 overflow-hidden text-xs font-medium">
+                        <button onClick={() => !p.disponibile && toggleDisponibile(p)}
+                          className={`px-2.5 py-1 transition-colors ${p.disponibile ? 'bg-green-100 text-green-700' : 'text-ink-navy/35 hover:bg-mist'}`}>
+                          Disponibile
+                        </button>
+                        <button onClick={() => p.disponibile && toggleDisponibile(p)}
+                          className={`px-2.5 py-1 transition-colors border-l border-ink-navy/10 ${!p.disponibile ? 'bg-red-100 text-red-600' : 'text-ink-navy/60 hover:bg-red-50 hover:text-red-500'}`}>
+                          Non disp.
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* ── TAB GRAFICA ── */}
-      {tab === 'grafica' && (
-        <div className="space-y-5 max-w-lg">
-          {loadingGrafica ? <p className="text-ink-navy/35 text-sm">Caricamento...</p> : (
-            <>
-              {/* Logo */}
-              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
-                <h2 className="font-semibold text-ink-navy">Logo del locale</h2>
-                <p className="text-sm text-ink-navy/50">Inserisci l'URL di un'immagine — verrà mostrata in cima al menu digitale.</p>
-                <input value={grafica.menuLogoUrl} onChange={e => setGrafica(g => ({ ...g, menuLogoUrl: e.target.value }))}
-                  placeholder="https://esempio.com/logo.png"
-                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-                {grafica.menuLogoUrl && (
-                  <img src={grafica.menuLogoUrl} alt="preview logo" className="h-16 w-16 rounded-xl object-cover border border-ink-navy/10" />
-                )}
-              </div>
-
-              {/* Colori */}
-              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
-                <h2 className="font-semibold text-ink-navy">Colori del menu</h2>
-                <div className="flex gap-6 flex-wrap">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-ink-navy/70">Colore principale</label>
-                    <p className="text-xs text-ink-navy/35">Bottoni, prezzi, tab categorie</p>
-                    <div className="flex items-center gap-3">
-                      <input type="color" value={grafica.menuColoreP} onChange={e => setGrafica(g => ({ ...g, menuColoreP: e.target.value }))}
-                        className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
-                      <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreP}</span>
+                      <button onClick={() => apriModificaPiatto(p, cat.id)}
+                        className="text-ink-navy/35 hover:text-electric-blue p-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
+                        <span className="w-3.5 h-3.5 block"><IconPencil /></span>
+                      </button>
+                      <button onClick={() => eliminaPiatto(p.id)}
+                        className="text-ink-navy/35 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                        <span className="w-3.5 h-3.5 block"><IconTrash /></span>
+                      </button>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-ink-navy/70">Colore secondario</label>
-                    <p className="text-xs text-ink-navy/35">Testo sui bottoni colorati</p>
-                    <div className="flex items-center gap-3">
-                      <input type="color" value={grafica.menuColoreS} onChange={e => setGrafica(g => ({ ...g, menuColoreS: e.target.value }))}
-                        className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
-                      <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreS}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Anteprima */}
-                <div className="mt-2 p-4 rounded-xl border border-ink-navy/8 bg-mist space-y-2">
-                  <p className="text-xs text-ink-navy/35 mb-3">Anteprima</p>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm" style={{ color: grafica.menuColoreP }}>€12.00</span>
-                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold"
-                      style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>+</button>
-                  </div>
-                  <button className="w-full py-2.5 rounded-xl text-sm font-bold"
-                    style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>
-                    Vedi ordine · €24.00
-                  </button>
-                </div>
+                ))}
               </div>
-
-              <button onClick={salvaGrafica} disabled={savingGrafica}
-                className="w-full bg-electric-blue text-white font-semibold py-3 rounded-xl hover:bg-electric-blue/90 disabled:opacity-50 transition-colors">
-                {savingGrafica ? 'Salvataggio...' : graficaSalvata ? 'Salvato' : 'Salva impostazioni grafica'}
-              </button>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        ))
       )}
 
       {/* Modal categoria */}
@@ -388,11 +319,139 @@ export default function MenuPage() {
             <p className="text-sm font-medium text-ink-navy mb-4">{conferma.msg}</p>
             <div className="flex gap-3">
               <button onClick={() => setConferma(null)} className="flex-1 py-2 rounded-xl border border-ink-navy/10 text-ink-navy/60 text-sm font-medium hover:bg-mist">Annulla</button>
-              <button onClick={async () => { await conferma.onConfirm(); setConferma(null) }} className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Conferma</button>
+              <button onClick={async () => { await conferma.onConfirm(); setConferma(null) }} className="flex-1 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">Conferma</button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function MenuPage() {
+  const [tab, setTab] = useState<'locale' | 'asporto' | 'grafica'>('locale')
+
+  // ── Grafica state ──
+  const [grafica, setGrafica] = useState({ menuLogoUrl: '', menuColoreP: '#4f46e5', menuColoreS: '#ffffff' })
+  const [loadingGrafica, setLoadingGrafica] = useState(true)
+  const [savingGrafica, setSavingGrafica] = useState(false)
+  const [graficaSalvata, setGraficaSalvata] = useState(false)
+
+  async function fetchGrafica() {
+    const res = await fetch('/api/settings', { credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+    setGrafica({
+      menuLogoUrl: data.menuLogoUrl ?? '',
+      menuColoreP: data.menuColoreP ?? '#4f46e5',
+      menuColoreS: data.menuColoreS ?? '#ffffff',
+    })
+    setLoadingGrafica(false)
+  }
+
+  useEffect(() => { fetchGrafica() }, [])
+
+  async function salvaGrafica() {
+    setSavingGrafica(true)
+    await fetch('/api/settings', {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(grafica),
+    })
+    setSavingGrafica(false)
+    setGraficaSalvata(true)
+    setTimeout(() => setGraficaSalvata(false), 3000)
+  }
+
+  const TABS = [
+    { key: 'locale', label: 'Menù normale' },
+    { key: 'asporto', label: 'Asporto & Delivery' },
+    { key: 'grafica', label: 'Aspetto' },
+  ] as const
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-ink-navy">Menu</h1>
+        <p className="text-ink-navy/50 text-sm mt-0.5">Gestisci categorie e piatti per il locale e per l'asporto</p>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-2 flex-wrap">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === t.key ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TAB LOCALE / ASPORTO ── */}
+      {(tab === 'locale' || tab === 'asporto') && (
+        <MenuEditor key={tab} tipo={tab} />
+      )}
+
+      {/* ── TAB GRAFICA ── */}
+      {tab === 'grafica' && (
+        <div className="space-y-5 max-w-lg">
+          {loadingGrafica ? <p className="text-ink-navy/35 text-sm">Caricamento...</p> : (
+            <>
+              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+                <h2 className="font-semibold text-ink-navy">Logo del locale</h2>
+                <p className="text-sm text-ink-navy/50">URL dell'immagine — mostrata in cima al menù digitale.</p>
+                <input value={grafica.menuLogoUrl} onChange={e => setGrafica(g => ({ ...g, menuLogoUrl: e.target.value }))}
+                  placeholder="https://esempio.com/logo.png"
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                {grafica.menuLogoUrl && (
+                  <img src={grafica.menuLogoUrl} alt="preview logo" className="h-16 w-16 rounded-xl object-cover border border-ink-navy/10" />
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
+                <h2 className="font-semibold text-ink-navy">Colori del menu</h2>
+                <div className="flex gap-6 flex-wrap">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-ink-navy/70">Colore principale</label>
+                    <p className="text-xs text-ink-navy/35">Bottoni, prezzi, tab categorie</p>
+                    <div className="flex items-center gap-3">
+                      <input type="color" value={grafica.menuColoreP} onChange={e => setGrafica(g => ({ ...g, menuColoreP: e.target.value }))}
+                        className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
+                      <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreP}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-ink-navy/70">Colore secondario</label>
+                    <p className="text-xs text-ink-navy/35">Testo sui bottoni colorati</p>
+                    <div className="flex items-center gap-3">
+                      <input type="color" value={grafica.menuColoreS} onChange={e => setGrafica(g => ({ ...g, menuColoreS: e.target.value }))}
+                        className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
+                      <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreS}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 p-4 rounded-xl border border-ink-navy/8 bg-mist space-y-2">
+                  <p className="text-xs text-ink-navy/35 mb-3">Anteprima</p>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm" style={{ color: grafica.menuColoreP }}>€12.00</span>
+                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold"
+                      style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>+</button>
+                  </div>
+                  <button className="w-full py-2.5 rounded-xl text-sm font-bold"
+                    style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>
+                    Vedi ordine · €24.00
+                  </button>
+                </div>
+              </div>
+
+              <button onClick={salvaGrafica} disabled={savingGrafica}
+                className="w-full bg-electric-blue text-white font-semibold py-3 rounded-xl hover:bg-electric-blue/90 disabled:opacity-50 transition-colors">
+                {savingGrafica ? 'Salvataggio...' : graficaSalvata ? '✓ Salvato' : 'Salva impostazioni grafica'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
     </div>
   )
 }

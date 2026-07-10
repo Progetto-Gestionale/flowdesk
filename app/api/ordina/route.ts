@@ -16,6 +16,7 @@ export async function GET(req: Request) {
     where: { publicId },
     include: {
       menuCategorie: {
+        where: { tipo: 'locale' },
         orderBy: { ordine: 'asc' as const },
         include: {
           piatti: { where: { disponibile: true }, orderBy: { ordine: 'asc' as const } },

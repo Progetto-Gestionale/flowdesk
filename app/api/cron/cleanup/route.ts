@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   //     (status non in stati finali) con data passata
   await prisma.appuntamento.updateMany({
     where: {
-      status: { notIn: ['confermato', 'completato', 'cancellato', 'no_show'] },
+      status: { notIn: ['confermato', 'pronto', 'completato', 'cancellato', 'no_show'] },
       data: { lt: ora },
       OR: [
         { servizio: { contains: 'asporto',  mode: 'insensitive' } },
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 
   // 1b. Segna come "completato" gli appuntamenti confermati già terminati (data + durata < ora)
   const tuttiConfermati = await prisma.appuntamento.findMany({
-    where: { status: 'confermato' },
+    where: { status: { in: ['confermato', 'pronto'] } },
     select: { id: true, data: true, durata: true },
   })
   const idsDaCompletare = tuttiConfermati
