@@ -229,16 +229,17 @@ export default function StaffPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: nuovaPasswordDip }),
       })
-      const d = await res.json()
+      const text = await res.text()
       if (res.ok) {
+        const d = JSON.parse(text)
         setUsernameGenerato(d.username)
         setNuovaPasswordDip('')
         await fetchAll()
       } else {
-        alert(d.error || `Errore ${res.status}`)
+        alert(`Errore ${res.status}: ${text || '(risposta vuota)'}`)
       }
     } catch (err) {
-      alert('Errore di rete: ' + String(err))
+      alert('Errore: ' + String(err))
     } finally {
       setSavingPassword(false)
     }
