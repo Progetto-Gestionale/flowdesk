@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { QRCodeSVG } from 'qrcode.react'
 import { IconUsers, IconTrash, IconPencil } from '../../components/icons'
 
 interface Dipendente {
@@ -67,7 +69,21 @@ function toISO(d: Date) {
 }
 
 export default function StaffPage() {
-  const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste'>('turni')
+  const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste' | 'presenze'>('dipendenti')
+  const [qrDip, setQrDip] = useState<{ nome: string; url: string } | null>(null)
+
+  // Presenze
+  const oggiStr = new Date().toISOString().split('T')[0]
+  const [presenzeData, setPresenzeData] = useState(oggiStr)
+  const [presenzeList, setPresenzeList] = useState<{ id: string; tipo: string; timestamp: string; dipendente: { nome: string; ruolo: string | null } }[]>([])
+  const [presenzeLoading, setPresenzeLoading] = useState(false)
+
+  async function fetchPresenze(d: string) {
+    setPresenzeLoading(true)
+    const res = await fetch(`/api/qr-timbratura/storico?data=${d}`, { credentials: 'include' })
+    if (res.ok) { const j = await res.json(); setPresenzeList(j.timbrature) }
+    setPresenzeLoading(false)
+  }
   const [dipendenti, setDipendenti] = useState<Dipendente[]>([])
   const [turni, setTurni] = useState<Turno[]>([])
   const [richieste, setRichieste] = useState<Richiesta[]>([])
@@ -170,6 +186,12 @@ export default function StaffPage() {
 
   useEffect(() => { fetchAll(); fetchDisp(settimana) }, [settimana])
   useEffect(() => { if (vistaTurni === 'mese') fetchTurniMese() }, [meseCal, vistaTurni])
+  useEffect(() => { if (tab === 'presenze') fetchPresenze(presenzeData) }, [tab, presenzeData])
+  useEffect(() => {
+    if (tab !== 'presenze' || presenzeData !== oggiStr) return
+    const t = setInterval(() => fetchPresenze(oggiStr), 15000)
+    return () => clearInterval(t)
+  }, [tab, presenzeData])
 
 
   async function apriDispModal(dip: Dipendente) {
@@ -397,8 +419,9 @@ export default function StaffPage() {
       {/* Tab */}
       <div className="flex gap-2 flex-wrap">
         {([
-          ['turni', 'Turni'],
           ['dipendenti', 'Dipendenti'],
+          ['presenze', 'Presenze'],
+          ['turni', 'Turni'],
           ['richieste', `Richieste${richiesteInAttesa.length > 0 ? ` (${richiesteInAttesa.length})` : ''}`],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
@@ -662,19 +685,26 @@ export default function StaffPage() {
       {/* ── TAB DIPENDENTI ── */}
       {tab === 'dipendenti' && (
         <div className="space-y-3">
-          {/* Banner link area dipendenti */}
-          <div className="bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
-            <div>
+          {/* Banner link + QR area dipendenti */}
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-purple-800">Link area dipendenti</p>
-              <p className="text-xs text-purple-600 font-mono mt-0.5">
+              <p className="text-xs text-purple-600 font-mono mt-0.5 truncate">
                 {typeof window !== 'undefined' ? window.location.origin : ''}/dipendente/login
               </p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/dipendente/login`)}
+                  className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors">
+                  Copia link
+                </button>
+                <button
+                  onClick={() => setQrDip({ nome: 'Area dipendenti', url: `${window.location.origin}/dipendente/login` })}
+                  className="text-xs px-3 py-1.5 bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-100 font-medium transition-colors">
+                  Mostra QR
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/dipendente/login`)}
-              className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shrink-0 transition-colors">
-              Copia link
-            </button>
           </div>
 
           {dipendenti.length === 0 ? (
@@ -686,37 +716,32 @@ export default function StaffPage() {
               <p className="text-ink-navy/50 text-sm mt-2">Aggiungi i tuoi dipendenti per gestire i turni</p>
             </div>
           ) : dipendenti.map((d, i) => (
-            <div key={d.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+            <div key={d.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm hover:border-electric-blue/30 hover:shadow-none hover:translate-y-[2px] active:translate-y-[3px] active:shadow-none transition-all group">
+              <div className="flex items-center justify-between gap-3 p-4">
+                {/* Parte cliccabile → pagina dettaglio */}
+                <Link href={`/dashboard/staff/${d.id}`} className="flex items-center gap-3 flex-1 min-w-0">
                   {d.fotoUrl ? (
-                    <img src={d.fotoUrl} alt={d.nome} className="w-10 h-10 rounded-full object-cover" />
+                    <img src={d.fotoUrl} alt={d.nome} className="w-10 h-10 rounded-full object-cover shrink-0" />
                   ) : (
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${COLORI[i % COLORI.length]}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${COLORI[i % COLORI.length]}`}>
                       {d.nome[0].toUpperCase()}
                     </div>
                   )}
-                  <div>
-                    <p className="font-semibold text-ink-navy">{d.nome}</p>
-                    <p className="text-sm text-ink-navy/50">{d.email}</p>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink-navy group-hover:text-electric-blue transition-colors truncate">{d.nome}</p>
+                    <p className="text-sm text-ink-navy/50 truncate">{d.email}</p>
                     {d.ruolo && <p className="text-xs text-ink-navy/35">{d.ruolo}</p>}
-                    {d.username && <p className="text-xs text-purple-600 font-medium mt-0.5">@{d.username}</p>}
+                    {d.username
+                      ? <p className="text-xs text-electric-blue font-mono mt-0.5">@{d.username}</p>
+                      : <p className="text-xs text-amber-500 font-medium mt-0.5">Accesso non configurato</p>
+                    }
                   </div>
-                </div>
-                <div className="flex gap-2 flex-wrap justify-end">
-                  <button onClick={() => apriDispModal(d)}
-                    className="text-xs px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors font-medium">
-                    Disponibilità
-                  </button>
-                  <button onClick={() => inviaLink(d.email, d.nome)}
-                    className="text-xs px-3 py-1.5 bg-electric-blue/10 text-electric-blue rounded-lg hover:bg-electric-blue/15 transition-colors font-medium">
-                    Invia link
-                  </button>
-                  <button onClick={() => { setDipPasswordModal(d); setNuovaPasswordDip(''); setUsernameGenerato('') }}
-                    className="text-xs px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors font-medium">
-                    {d.username ? '🔑 Reset pw' : '🔑 Imposta accesso'}
-                  </button>
-                  <button onClick={() => apriModifica(d)}
+                  <span className="text-ink-navy/20 group-hover:text-electric-blue/40 transition-colors text-lg shrink-0">›</span>
+                </Link>
+
+                {/* Azioni rapide */}
+                <div className="flex gap-1.5 shrink-0">
+<button onClick={() => apriModifica(d)}
                     className="text-ink-navy/35 hover:text-electric-blue p-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
                     <span className="w-3.5 h-3.5 block"><IconPencil /></span>
                   </button>
@@ -783,6 +808,126 @@ export default function StaffPage() {
           ))}
         </div>
       )}
+
+      {/* ── TAB PRESENZE ── */}
+      {tab === 'presenze' && (() => {
+        const fmtOra = (ts: string) => new Date(ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+        const fmtGiorno = (d: string) => {
+          if (d === oggiStr) return 'Oggi'
+          const ieri = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+          if (d === ieri) return 'Ieri'
+          return new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+        }
+        const goBack = () => {
+          const d = new Date(presenzeData + 'T12:00:00')
+          d.setDate(d.getDate() - 1)
+          setPresenzeData(d.toISOString().split('T')[0])
+        }
+        const goForward = () => {
+          if (presenzeData >= oggiStr) return
+          const d = new Date(presenzeData + 'T12:00:00')
+          d.setDate(d.getDate() + 1)
+          setPresenzeData(d.toISOString().split('T')[0])
+        }
+
+        // Raggruppa per dipendente
+        const perDip = presenzeList.reduce<Record<string, { nome: string; ruolo: string | null; entrate: string[]; uscite: string[] }>>((acc, t) => {
+          const k = t.dipendente.nome
+          if (!acc[k]) acc[k] = { nome: t.dipendente.nome, ruolo: t.dipendente.ruolo, entrate: [], uscite: [] }
+          if (t.tipo === 'entrata') acc[k].entrate.push(t.timestamp)
+          else acc[k].uscite.push(t.timestamp)
+          return acc
+        }, {})
+        const dipList = Object.values(perDip).sort((a, b) => {
+          const aLast = [...a.entrate, ...a.uscite].sort().pop() ?? ''
+          const bLast = [...b.entrate, ...b.uscite].sort().pop() ?? ''
+          return bLast.localeCompare(aLast)
+        })
+        const presenti = dipList.filter(d => {
+          const ul = [...d.entrate].sort().pop()
+          const uu = [...d.uscite].sort().pop()
+          return ul && (!uu || uu < ul)
+        })
+
+        return (
+          <div className="space-y-4 max-w-2xl">
+            {/* Nav data */}
+            <div className="flex items-center justify-between bg-white rounded-2xl border border-ink-navy/10 shadow-sm px-4 py-3 gap-3">
+              <button onClick={goBack} className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50 hover:text-ink-navy transition-colors shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <div className="flex-1 flex flex-col items-center gap-1">
+                <p className="font-semibold text-ink-navy capitalize text-sm">{fmtGiorno(presenzeData)}</p>
+                <input
+                  type="date" value={presenzeData} max={oggiStr}
+                  onChange={e => e.target.value && setPresenzeData(e.target.value)}
+                  className="text-xs border border-ink-navy/15 rounded-lg px-2 py-1 text-ink-navy/50 focus:outline-none focus:ring-2 focus:ring-electric-blue/40 bg-white"
+                />
+              </div>
+              <button onClick={goForward} disabled={presenzeData >= oggiStr}
+                className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50 hover:text-ink-navy transition-colors disabled:opacity-20 disabled:cursor-not-allowed shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+
+            {/* Badge presenti ora */}
+            {presenzeData === oggiStr && !presenzeLoading && presenti.length > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl">
+                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <p className="text-sm font-semibold text-green-700">
+                  {presenti.length === 1 ? '1 dipendente presente' : `${presenti.length} dipendenti presenti`}:&nbsp;
+                  <span className="font-normal">{presenti.map(d => d.nome.split(' ')[0]).join(', ')}</span>
+                </p>
+              </div>
+            )}
+
+            {presenzeLoading ? (
+              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-10 text-center">
+                <p className="text-sm text-ink-navy/30 font-mono">Caricamento...</p>
+              </div>
+            ) : presenzeList.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-12 text-center">
+                <p className="text-ink-navy/25 text-sm">Nessuna timbratura per questo giorno</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {dipList.map(d => {
+                  const entrate = [...d.entrate].sort()
+                  const uscite = [...d.uscite].sort()
+                  const primaEntrata = entrate[0]
+                  const ultimaUscita = uscite[uscite.length - 1]
+                  const presente = primaEntrata && (!ultimaUscita || ultimaUscita < entrate[entrate.length - 1])
+                  let ore: string | null = null
+                  if (primaEntrata && ultimaUscita) {
+                    const ms = new Date(ultimaUscita).getTime() - new Date(primaEntrata).getTime()
+                    ore = `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`
+                  }
+                  return (
+                    <div key={d.nome} className="bg-white rounded-xl border border-ink-navy/10 shadow-sm px-5 py-4 flex items-center gap-4">
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${presente ? 'bg-green-400' : 'bg-ink-navy/15'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-ink-navy text-sm">{d.nome}</p>
+                        {d.ruolo && <p className="text-xs text-ink-navy/40">{d.ruolo}</p>}
+                      </div>
+                      <div className="text-right shrink-0 space-y-0.5">
+                        <div className="flex items-center gap-2 justify-end">
+                          <span className="text-xs text-ink-navy/35">Entrata</span>
+                          <span className="text-sm font-semibold text-ink-navy">{primaEntrata ? fmtOra(primaEntrata) : '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 justify-end">
+                          <span className="text-xs text-ink-navy/35">Uscita</span>
+                          <span className="text-sm font-semibold text-ink-navy">{ultimaUscita ? fmtOra(ultimaUscita) : presente ? <span className="text-green-500 text-xs font-semibold">Presente</span> : '—'}</span>
+                        </div>
+                        {ore && <p className="text-xs text-electric-blue font-semibold">{ore}</p>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Modal aggiungi turno da cella */}
       {cellModal && (() => {
@@ -1166,6 +1311,41 @@ export default function StaffPage() {
               <button onClick={aggiungiTurno} disabled={saving || !formTurno.dipendenteId || !formTurno.data}
                 className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 text-sm disabled:opacity-50">
                 {saving ? 'Salvataggio...' : 'Aggiungi turno'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal QR accesso dipendente */}
+      {qrDip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setQrDip(null)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-80 mx-4 flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <p className="font-bold text-ink-navy">{qrDip.nome}</p>
+              <p className="text-xs text-ink-navy/40 mt-0.5">QR per accedere all'area personale</p>
+            </div>
+            <div className="p-3 border-2 border-ink-navy/8 rounded-xl">
+              <QRCodeSVG value={qrDip.url} size={200} bgColor="#ffffff" fgColor="#0f172a" level="M" id="qr-dip-canvas" />
+            </div>
+            <p className="text-xs font-mono text-ink-navy/30 text-center break-all">{qrDip.url}</p>
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={() => {
+                  const svg = document.querySelector('#qr-dip-canvas') as SVGSVGElement | null
+                  if (!svg) return
+                  const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' })
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(blob)
+                  a.download = `qr-${qrDip.nome.replace(/\s+/g, '-').toLowerCase()}.svg`
+                  a.click()
+                }}
+                className="flex-1 py-2 bg-electric-blue text-white text-sm font-semibold rounded-xl hover:bg-electric-blue/90 transition-colors">
+                Scarica QR
+              </button>
+              <button onClick={() => setQrDip(null)}
+                className="flex-1 py-2 border border-ink-navy/10 text-ink-navy/50 text-sm font-semibold rounded-xl hover:bg-mist transition-colors">
+                Chiudi
               </button>
             </div>
           </div>

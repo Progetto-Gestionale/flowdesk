@@ -29,7 +29,7 @@ const navFood = [
       { label: 'Tavoli & QR', href: '/dashboard/tavoli', Icon: IconTable },
       { label: 'Analytics', href: '/dashboard/analytics', Icon: IconChartBar },
       { label: 'Staff', href: '/dashboard/staff', Icon: IconUsers },
-      { label: 'Timbrature', href: '/dashboard/timbrature', Icon: IconClock },
+      { label: 'QR Timbratura', href: '/dashboard/timbrature', Icon: IconClock },
     ],
   },
   {

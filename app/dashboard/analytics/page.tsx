@@ -214,6 +214,7 @@ export default function AnalyticsPage() {
   const [mesiDisponibili, setMesiDisponibili] = useState<string[]>([])
   const [meseSel, setMeseSel] = useState<string>('')
   const [loadingStaff, setLoadingStaff] = useState(false)
+  const [fonteStaff, setFonteStaff] = useState<'turni' | 'cartellino'>('turni')
   const [preventivi, setPreventivi] = useState<Preventivo[]>([])
   const [loadingOrdini, setLoadingOrdini] = useState(false)
 
@@ -226,7 +227,7 @@ export default function AnalyticsPage() {
 
   function apriDettaglio(dipId: string) {
     setLoadingDett(true)
-    fetch(`/api/analytics/staff?mese=${meseSel}&dipendenteId=${dipId}`, { credentials: 'include' })
+    fetch(`/api/analytics/staff?mese=${meseSel}&dipendenteId=${dipId}&fonte=${fonteStaff}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { setDettaglio(d); setLoadingDett(false) })
   }
@@ -260,6 +261,14 @@ export default function AnalyticsPage() {
   }, [])
 
   useEffect(() => {
+    if (!meseSel) return
+    setLoadingStaff(true)
+    fetch(`/api/analytics/staff?mese=${meseSel}&fonte=${fonteStaff}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setStaff(d.staff ?? []); setLoadingStaff(false) })
+  }, [fonteStaff])
+
+  useEffect(() => {
     if (tabAnalytics !== 'ordini' || preventivi.length > 0) return
     setLoadingOrdini(true)
     fetch('/api/preventivi', { credentials: 'include' })
@@ -270,7 +279,7 @@ export default function AnalyticsPage() {
   function cambiaMe(mese: string) {
     setMeseSel(mese)
     setLoadingStaff(true)
-    fetch(`/api/analytics/staff?mese=${mese}`, { credentials: 'include' })
+    fetch(`/api/analytics/staff?mese=${mese}&fonte=${fonteStaff}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { setStaff(d.staff ?? []); setLoadingStaff(false) })
   }
@@ -604,21 +613,34 @@ export default function AnalyticsPage() {
       {/* ── TAB PERSONALE ── */}
       {tabAnalytics === 'personale' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 className="text-lg font-bold text-ink-navy">Statistiche staff</h2>
               <p className="text-ink-navy/50 text-sm mt-0.5">Ore, presenze e richieste per dipendente</p>
             </div>
-            {mesiDisponibili.length > 0 && (
-              <select value={meseSel} onChange={e => cambiaMe(e.target.value)}
-                className="text-sm border border-ink-navy/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-electric-blue bg-white">
-                {mesiDisponibili.map(m => (
-                  <option key={m} value={m}>
-                    {MESI_LABEL[m.split('-')[1]]} {m.split('-')[0]}
-                  </option>
-                ))}
-              </select>
-            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Toggle fonte */}
+              <div className="flex bg-mist rounded-lg p-0.5">
+                <button onClick={() => setFonteStaff('turni')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${fonteStaff === 'turni' ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy'}`}>
+                  Turni
+                </button>
+                <button onClick={() => setFonteStaff('cartellino')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${fonteStaff === 'cartellino' ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy'}`}>
+                  Cartellino
+                </button>
+              </div>
+              {mesiDisponibili.length > 0 && (
+                <select value={meseSel} onChange={e => cambiaMe(e.target.value)}
+                  className="text-sm border border-ink-navy/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-electric-blue bg-white">
+                  {mesiDisponibili.map(m => (
+                    <option key={m} value={m}>
+                      {MESI_LABEL[m.split('-')[1]]} {m.split('-')[0]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
 
           {loadingStaff ? (

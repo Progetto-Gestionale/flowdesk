@@ -25,7 +25,9 @@ export async function GET(req: Request) {
   const inizioMese = new Date(year, month - 1, 1)
   const fineMese = new Date(year, month, 1)
 
-  const [dipendenti, turni, richieste] = await Promise.all([
+  const fonte = searchParams.get('fonte') ?? 'turni' // 'turni' | 'cartellino'
+
+  const [dipendenti, turni, timbrature, richieste] = await Promise.all([
     prisma.dipendente.findMany({
       where: { userId: user.id },
       select: { id: true, nome: true, ruolo: true },
@@ -33,6 +35,14 @@ export async function GET(req: Request) {
     prisma.turno.findMany({
       where: { userId: user.id, data: { gte: inizioMese, lt: fineMese <= ora ? fineMese : ora } },
       select: { dipendenteId: true, data: true, oraInizio: true, oraFine: true },
+    }),
+    prisma.timbratura.findMany({
+      where: {
+        dipendente: { userId: user.id },
+        timestamp: { gte: inizioMese, lt: fineMese <= ora ? fineMese : ora },
+      },
+      select: { dipendenteId: true, tipo: true, timestamp: true },
+      orderBy: { timestamp: 'asc' },
     }),
     prisma.richiestaDipendente.findMany({
       where: {
@@ -50,18 +60,46 @@ export async function GET(req: Request) {
 
   const staff = dipendenti.map(dip => {
     const mieiTurni = turni.filter(t => t.dipendenteId === dip.id)
+    const mieTimbrature = timbrature.filter(t => t.dipendenteId === dip.id)
     const mieRichieste = richieste.filter(r => r.dipendenteId === dip.id)
 
-    // Ore e giorni lavorati
-    const minutiTotali = mieiTurni.reduce((s, t) => s + diffOreMinuti(t.oraInizio, t.oraFine), 0)
-    const oreLavorate = Math.round(minutiTotali / 60 * 10) / 10
-    const giorniLavorati = new Set(mieiTurni.map(t => t.data.toISOString().split('T')[0])).size
+    let oreLavorate: number
+    let giorniLavorati: number
+    let giornoTop: string | null
 
-    // Giorno della settimana più frequente
-    const perGiorno = [0, 0, 0, 0, 0, 0, 0]
-    mieiTurni.forEach(t => perGiorno[t.data.getDay()]++)
-    const giornoTopIdx = perGiorno.indexOf(Math.max(...perGiorno))
-    const giornoTop = giorniLavorati > 0 ? GIORNI[giornoTopIdx] : null
+    if (fonte === 'cartellino') {
+      // Raggruppa timbrature per giorno, calcola entrata→uscita
+      const perGiornoTimb: Record<string, { entrate: Date[]; uscite: Date[] }> = {}
+      mieTimbrature.forEach(t => {
+        const g = t.timestamp.toISOString().split('T')[0]
+        if (!perGiornoTimb[g]) perGiornoTimb[g] = { entrate: [], uscite: [] }
+        if (t.tipo === 'entrata') perGiornoTimb[g].entrate.push(t.timestamp)
+        else perGiornoTimb[g].uscite.push(t.timestamp)
+      })
+      let minutiTotali = 0
+      const perDow = [0, 0, 0, 0, 0, 0, 0]
+      Object.entries(perGiornoTimb).forEach(([g, { entrate, uscite }]) => {
+        const primaEntrata = entrate.sort((a, b) => a.getTime() - b.getTime())[0]
+        const ultimaUscita = uscite.sort((a, b) => a.getTime() - b.getTime()).pop()
+        if (primaEntrata && ultimaUscita) {
+          minutiTotali += (ultimaUscita.getTime() - primaEntrata.getTime()) / 60000
+        }
+        const dow = new Date(g + 'T12:00:00').getDay()
+        perDow[dow]++
+      })
+      oreLavorate = Math.round(minutiTotali / 60 * 10) / 10
+      giorniLavorati = Object.keys(perGiornoTimb).length
+      const giornoTopIdx = perDow.indexOf(Math.max(...perDow))
+      giornoTop = giorniLavorati > 0 ? GIORNI[giornoTopIdx] : null
+    } else {
+      const minutiTotali = mieiTurni.reduce((s, t) => s + diffOreMinuti(t.oraInizio, t.oraFine), 0)
+      oreLavorate = Math.round(minutiTotali / 60 * 10) / 10
+      giorniLavorati = new Set(mieiTurni.map(t => t.data.toISOString().split('T')[0])).size
+      const perGiorno = [0, 0, 0, 0, 0, 0, 0]
+      mieiTurni.forEach(t => perGiorno[t.data.getDay()]++)
+      const giornoTopIdx = perGiorno.indexOf(Math.max(...perGiorno))
+      giornoTop = giorniLavorati > 0 ? GIORNI[giornoTopIdx] : null
+    }
 
     // Richieste per tipo (solo del mese)
     const richiesteAssenza = mieRichieste.filter(r => tipiAssenza.includes(r.tipo))
@@ -99,19 +137,46 @@ export async function GET(req: Request) {
     if (!dip) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
 
     const mieiTurni = turni.filter(t => t.dipendenteId === dipId)
+    const mieTimbratureDip = timbrature.filter(t => t.dipendenteId === dipId)
     const mieRichieste = richieste.filter(r => r.dipendenteId === dipId)
 
-    // Turni per giorno (per calendario)
+    // Turni/cartellino per giorno (per calendario)
     const turniPerGiorno: Record<string, { oraInizio: string; oraFine: string; ore: number }[]> = {}
-    mieiTurni.forEach(t => {
-      const k = t.data.toISOString().split('T')[0]
-      if (!turniPerGiorno[k]) turniPerGiorno[k] = []
-      turniPerGiorno[k].push({ oraInizio: t.oraInizio, oraFine: t.oraFine, ore: Math.round(diffOreMinuti(t.oraInizio, t.oraFine) / 60 * 10) / 10 })
-    })
+
+    if (fonte === 'cartellino') {
+      const perG: Record<string, { entrate: Date[]; uscite: Date[] }> = {}
+      mieTimbratureDip.forEach(t => {
+        const g = t.timestamp.toISOString().split('T')[0]
+        if (!perG[g]) perG[g] = { entrate: [], uscite: [] }
+        if (t.tipo === 'entrata') perG[g].entrate.push(t.timestamp)
+        else perG[g].uscite.push(t.timestamp)
+      })
+      Object.entries(perG).forEach(([g, { entrate, uscite }]) => {
+        const e = entrate.sort((a, b) => a.getTime() - b.getTime())[0]
+        const u = uscite.sort((a, b) => a.getTime() - b.getTime()).pop()
+        const oraI = e ? e.toTimeString().slice(0, 5) : '—'
+        const oraF = u ? u.toTimeString().slice(0, 5) : '—'
+        const ore = (e && u) ? Math.round((u.getTime() - e.getTime()) / 360000) / 10 : 0
+        turniPerGiorno[g] = [{ oraInizio: oraI, oraFine: oraF, ore }]
+      })
+    } else {
+      mieiTurni.forEach(t => {
+        const k = t.data.toISOString().split('T')[0]
+        if (!turniPerGiorno[k]) turniPerGiorno[k] = []
+        turniPerGiorno[k].push({ oraInizio: t.oraInizio, oraFine: t.oraFine, ore: Math.round(diffOreMinuti(t.oraInizio, t.oraFine) / 60 * 10) / 10 })
+      })
+    }
 
     // Ore per giorno settimana
     const orePerDow = [0, 0, 0, 0, 0, 0, 0]
-    mieiTurni.forEach(t => { orePerDow[t.data.getDay()] += diffOreMinuti(t.oraInizio, t.oraFine) / 60 })
+    if (fonte === 'cartellino') {
+      Object.entries(turniPerGiorno).forEach(([g, ts]) => {
+        const dow = new Date(g + 'T12:00:00').getDay()
+        orePerDow[dow] += ts.reduce((s, t) => s + t.ore, 0)
+      })
+    } else {
+      mieiTurni.forEach(t => { orePerDow[t.data.getDay()] += diffOreMinuti(t.oraInizio, t.oraFine) / 60 })
+    }
     const orePerDowRound = orePerDow.map(v => Math.round(v * 10) / 10)
 
     // Lista richieste con dettaglio
