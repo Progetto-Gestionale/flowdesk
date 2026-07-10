@@ -38,6 +38,7 @@ export default function Inbox() {
   const [risposta, setRisposta] = useState('')
   const [invioInCorso, setInvioInCorso] = useState(false)
   const [messaggiLocali, setMessaggiLocali] = useState<Messaggio[]>([])
+  const [ricerca, setRicerca] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   async function fetchConversazioni() {
@@ -172,9 +173,10 @@ export default function Inbox() {
     return acc
   }, {})
 
-  const listaGruppi = Object.values(gruppi).sort((a, b) =>
-    new Date(b.ultimaData).getTime() - new Date(a.ultimaData).getTime()
-  )
+  const query = ricerca.trim().toLowerCase()
+  const listaGruppi = Object.values(gruppi)
+    .sort((a, b) => new Date(b.ultimaData).getTime() - new Date(a.ultimaData).getTime())
+    .filter(g => !query || g.nome.toLowerCase().includes(query) || g.email.toLowerCase().includes(query))
 
   const nonLetteTotale = listaGruppi.reduce((sum, g) => sum + g.nonLette, 0)
 
@@ -221,6 +223,21 @@ export default function Inbox() {
         </div>
       </div>
 
+      {!loading && (
+        <div className="mb-4 relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-navy/30 w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            value={ricerca}
+            onChange={e => setRicerca(e.target.value)}
+            placeholder="Cerca per nome o email..."
+            className="w-full pl-9 pr-4 py-2.5 border border-ink-navy/15 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue bg-white"
+          />
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center text-ink-navy/35 py-12">Caricamento...</div>
       ) : listaGruppi.length === 0 ? (
@@ -228,8 +245,8 @@ export default function Inbox() {
           <div className="w-11 h-11 rounded-xl bg-mist flex items-center justify-center p-2.5 mx-auto mb-4">
             <IconChat />
           </div>
-          <p className="font-medium">Nessun messaggio ancora</p>
-          <p className="text-sm mt-1">I messaggi dal chatbot appariranno qui</p>
+          <p className="font-medium">{query ? 'Nessun risultato' : 'Nessun messaggio ancora'}</p>
+          <p className="text-sm mt-1">{query ? `Nessuna chat trovata per "${ricerca}"` : 'I messaggi dal chatbot appariranno qui'}</p>
         </div>
       ) : (
         <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden">

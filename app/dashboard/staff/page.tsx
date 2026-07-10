@@ -1,12 +1,13 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { IconUsers, IconTrash, IconPencil, IconBot } from '../../components/icons'
+import { IconUsers, IconTrash, IconPencil } from '../../components/icons'
 
 interface Dipendente {
   id: string
   nome: string
   email: string
   ruolo: string | null
+  fotoUrl: string | null
 }
 
 interface Turno {
@@ -46,16 +47,6 @@ interface Requisito {
   ruolo: string
 }
 
-interface TurnoGenerato {
-  dipendenteId: string
-  nome: string
-  giorno: number
-  data: string
-  oraInizio: string
-  oraFine: string
-  ruolo: string | null
-  note: string | null
-}
 
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_LUNGHI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
@@ -75,19 +66,19 @@ function toISO(d: Date) {
 }
 
 export default function StaffPage() {
-  const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste' | 'genera'>('turni')
+  const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste'>('turni')
   const [dipendenti, setDipendenti] = useState<Dipendente[]>([])
   const [turni, setTurni] = useState<Turno[]>([])
   const [richieste, setRichieste] = useState<Richiesta[]>([])
   const [settimana, setSettimana] = useState(getLunedi(new Date()))
   const [showModalDip, setShowModalDip] = useState(false)
   const [showModalTurno, setShowModalTurno] = useState(false)
-  const [formDip, setFormDip] = useState({ nome: '', email: '', ruolo: '' })
+  const [formDip, setFormDip] = useState({ nome: '', email: '', ruolo: '', fotoUrl: '' })
   const [formTurno, setFormTurno] = useState({ dipendenteId: '', data: '', oraInizio: '09:00', oraFine: '17:00', ruolo: '', note: '' })
   const [saving, setSaving] = useState(false)
   const [linkInviato, setLinkInviato] = useState<string | null>(null)
   const [dipendenteDaModificare, setDipendenteDaModificare] = useState<Dipendente | null>(null)
-  const [formModifica, setFormModifica] = useState({ nome: '', email: '', ruolo: '' })
+  const [formModifica, setFormModifica] = useState({ nome: '', email: '', ruolo: '', fotoUrl: '' })
 
   // Vista turni
   const [vistaTurni, setVistaTurni] = useState<'settimana' | 'mese'>('settimana')
@@ -102,13 +93,6 @@ export default function StaffPage() {
   const [fabbisogno, setFabbisogno] = useState<Requisito[]>([])
   const fabbisognoLoaded = useRef(false)
 
-  // Genera turni
-  const [fabbisognoSett, setFabbisognoSett] = useState<Requisito[]>([])
-  const [noteGenerazione, setNoteGenerazione] = useState('')
-  const [generando, setGenerando] = useState(false)
-  const [turniGenerati, setTurniGenerati] = useState<TurnoGenerato[] | null>(null)
-  const [spiegazioneAI, setSpiegazioneAI] = useState('')
-  const [salvandoTurni, setSalvandoTurni] = useState(false)
   const [inviandoReminder, setInviandoReminder] = useState(false)
   const [reminderOk, setReminderOk] = useState<string | null>(null)
   const [copiando, setCopiando] = useState(false)
@@ -178,26 +162,6 @@ export default function StaffPage() {
 
   useEffect(() => { fetchFabbisogno() }, [])
 
-  // Quando arriva il template dalle impostazioni: carica da localStorage se esiste, altrimenti usa template
-  useEffect(() => {
-    if (fabbisogno.length === 0) return
-    const key = `fabb_${toISO(settimana)}`
-    const saved = localStorage.getItem(key)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) { setFabbisognoSett(parsed); return }
-      } catch {}
-    }
-    setFabbisognoSett(fabbisogno)
-  }, [settimana, fabbisogno])
-
-  // Salva fabbisognoSett in localStorage quando viene modificato dall'utente
-  useEffect(() => {
-    if (fabbisognoSett.length === 0) return
-    const key = `fabb_${toISO(settimana)}`
-    localStorage.setItem(key, JSON.stringify(fabbisognoSett))
-  }, [fabbisognoSett, settimana])
 
   useEffect(() => { fetchAll(); fetchDisp(settimana) }, [settimana])
   useEffect(() => { if (vistaTurni === 'mese') fetchTurniMese() }, [meseCal, vistaTurni])
@@ -229,13 +193,13 @@ export default function StaffPage() {
     setSaving(false)
     if (!res.ok) { alert(data.error || 'Errore nel salvataggio'); return }
     setShowModalDip(false)
-    setFormDip({ nome: '', email: '', ruolo: '' })
+    setFormDip({ nome: '', email: '', ruolo: '', fotoUrl: '' })
     await fetchAll()
   }
 
   function apriModifica(d: Dipendente) {
     setDipendenteDaModificare(d)
-    setFormModifica({ nome: d.nome, email: d.email, ruolo: d.ruolo ?? '' })
+    setFormModifica({ nome: d.nome, email: d.email, ruolo: d.ruolo ?? '', fotoUrl: d.fotoUrl ?? '' })
   }
 
   async function salvaDipendente() {
@@ -244,7 +208,7 @@ export default function StaffPage() {
     await fetch(`/api/dipendenti/${dipendenteDaModificare.id}`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: formModifica.nome, email: formModifica.email, ruolo: formModifica.ruolo || null }),
+      body: JSON.stringify({ nome: formModifica.nome, email: formModifica.email, ruolo: formModifica.ruolo || null, fotoUrl: formModifica.fotoUrl || null }),
     })
     setSaving(false)
     setDipendenteDaModificare(null)
@@ -308,21 +272,6 @@ export default function StaffPage() {
     setTimeout(() => setLinkInviato(null), 3000)
   }
 
-  async function generaTurni() {
-    setGenerando(true)
-    setTurniGenerati(null)
-    const res = await fetch('/api/genera-turni', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settimana: toISO(settimana), requisiti: fabbisognoSett, note: noteGenerazione }),
-    })
-    const data = await res.json().catch(() => ({}))
-    setGenerando(false)
-    if (!res.ok) { alert(data.error || 'Errore nella generazione'); return }
-    setTurniGenerati(data.turni)
-    setSpiegazioneAI(data.spiegazione)
-  }
-
   async function cancellaSettimana() {
     const turniDaCancellare = turni.filter(t => {
       const d = toISO(new Date(t.data))
@@ -371,23 +320,6 @@ export default function StaffPage() {
     setTimeout(() => setReminderOk(null), 4000)
   }
 
-  async function salvaTurniGenerati() {
-    if (!turniGenerati) return
-    setSalvandoTurni(true)
-    await Promise.all(turniGenerati.map(t =>
-      fetch('/api/turni', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dipendenteId: t.dipendenteId, data: t.data, oraInizio: t.oraInizio, oraFine: t.oraFine, ruolo: t.ruolo, note: t.note }),
-      })
-    ))
-    setSalvandoTurni(false)
-    setTurniGenerati(null)
-    setSpiegazioneAI('')
-    setTab('turni')
-    await fetchAll()
-  }
-
   const giorni = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(settimana)
     d.setDate(d.getDate() + i)
@@ -432,7 +364,6 @@ export default function StaffPage() {
           ['turni', 'Turni'],
           ['dipendenti', 'Dipendenti'],
           ['richieste', `Richieste${richiesteInAttesa.length > 0 ? ` (${richiesteInAttesa.length})` : ''}`],
-          ['genera', 'Genera con AI'],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === id ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
@@ -707,9 +638,13 @@ export default function StaffPage() {
             <div key={d.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${COLORI[i % COLORI.length]}`}>
-                    {d.nome[0].toUpperCase()}
-                  </div>
+                  {d.fotoUrl ? (
+                    <img src={d.fotoUrl} alt={d.nome} className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${COLORI[i % COLORI.length]}`}>
+                      {d.nome[0].toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <p className="font-semibold text-ink-navy">{d.nome}</p>
                     <p className="text-sm text-ink-navy/50">{d.email}</p>
@@ -790,142 +725,6 @@ export default function StaffPage() {
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* ── TAB GENERA CON AI ── */}
-      {tab === 'genera' && (
-        <div className="space-y-5">
-
-          {/* ── Genera turni ── */}
-          <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
-            <h3 className="font-bold text-ink-navy">Genera piano turni con AI</h3>
-
-            {/* Settimana */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-ink-navy/50 font-medium w-20">Settimana</span>
-              <button onClick={() => { const d = new Date(settimana); d.setDate(d.getDate() - 7); setSettimana(d) }}
-                className="p-1.5 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60 text-sm">←</button>
-              <span className="text-sm font-semibold text-electric-blue flex-1 text-center">
-                {settimana.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })} – {giorni[6].toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </span>
-              <button onClick={() => { const d = new Date(settimana); d.setDate(d.getDate() + 7); setSettimana(d) }}
-                className="p-1.5 rounded-lg border border-ink-navy/15 hover:bg-mist text-ink-navy/60 text-sm">→</button>
-              <button onClick={() => setSettimana(getLunedi(new Date()))}
-                className="text-xs text-electric-blue hover:text-ink-navy font-medium">Oggi</button>
-            </div>
-
-            {/* Fabbisogno modificabile per questa settimana */}
-            <div className="border border-ink-navy/10 rounded-xl p-3 space-y-2 bg-mist/50">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-ink-navy/60">Fabbisogno per questa settimana <span className="font-normal text-ink-navy/35">(copia del template, modificabile)</span></p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { localStorage.removeItem(`fabb_${toISO(settimana)}`); setFabbisognoSett(fabbisogno) }}
-                    className="text-xs text-ink-navy/35 hover:text-electric-blue font-medium transition-colors">↺ Ripristina</button>
-                  <button onClick={() => setFabbisognoSett(s => [...s, { giorno: 0, fascia: 'libera', oraInizio: '09:00', oraFine: '17:00', persone: 1, ruolo: '' }])}
-                    className="text-xs px-2.5 py-1 bg-white border border-ink-navy/15 text-ink-navy/60 rounded-lg hover:bg-mist font-medium">+ Aggiungi</button>
-                </div>
-              </div>
-              {fabbisognoSett.length === 0 ? (
-                <p className="text-xs text-ink-navy/35 py-2 text-center">
-                  Nessun fabbisogno configurato —{' '}
-                  <a href="/dashboard/impostazioni?sezione=staff" className="text-electric-blue hover:underline">configuralo in Impostazioni → Staff</a>
-                </p>
-              ) : (
-                <>
-                  <div className="grid grid-cols-[110px_1fr_1fr_1fr_1fr_24px] gap-1.5 px-0.5">
-                    {['Giorno', 'Dalle', 'Alle', 'N°', 'Ruolo', ''].map((h, i) => (
-                      <span key={i} className="text-xs font-semibold text-ink-navy/35 uppercase">{h}</span>
-                    ))}
-                  </div>
-                  {fabbisognoSett.map((r, i) => (
-                    <div key={i} className="grid grid-cols-[110px_1fr_1fr_1fr_1fr_24px] gap-1.5 items-center">
-                      <select value={r.giorno} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, giorno: Number(e.target.value) } : x))}
-                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white">
-                        {GIORNI_LUNGHI.map((g, idx) => <option key={idx} value={idx}>{g}</option>)}
-                      </select>
-                      <input type="time" value={r.oraInizio} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, oraInizio: e.target.value } : x))}
-                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
-                      <input type="time" value={r.oraFine} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, oraFine: e.target.value } : x))}
-                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
-                      <input type="number" min={1} max={20} value={r.persone} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, persone: Number(e.target.value) } : x))}
-                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
-                      <input placeholder="ruolo" value={r.ruolo} onChange={e => setFabbisognoSett(s => s.map((x, idx) => idx === i ? { ...x, ruolo: e.target.value } : x))}
-                        className="border border-ink-navy/15 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
-                      <button onClick={() => setFabbisognoSett(s => s.filter((_, idx) => idx !== i))}
-                        className="text-ink-navy/25 hover:text-red-500 text-sm font-bold transition-colors">✕</button>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-
-            {/* Note aggiuntive */}
-            <div>
-              <label className="block text-sm font-medium text-ink-navy/70 mb-1.5">Note aggiuntive <span className="text-ink-navy/35 font-normal">(opzionale)</span></label>
-              <textarea value={noteGenerazione} onChange={e => setNoteGenerazione(e.target.value)}
-                placeholder="es. questa settimana abbiamo un evento sabato sera, servono 2 persone in più..."
-                rows={2} className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
-            </div>
-
-            <button onClick={generaTurni} disabled={generando || dipendenti.length === 0}
-              className="w-full bg-electric-blue text-white font-semibold py-3 rounded-xl hover:bg-electric-blue/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 text-sm">
-              {generando ? <><span className="animate-spin inline-block">⟳</span> L'AI sta elaborando il piano...</> : 'Genera piano turni'}
-            </button>
-            {dipendenti.length === 0 && (
-              <p className="text-center text-xs text-ink-navy/35">Aggiungi almeno un dipendente prima di generare i turni</p>
-            )}
-          </div>
-
-          {/* ── Risultato AI ── */}
-          {turniGenerati && (
-            <div className="bg-white rounded-2xl border border-electric-blue/25 shadow-sm p-5 space-y-4">
-              <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-lg bg-electric-blue/10 text-electric-blue flex items-center justify-center p-2 shrink-0"><IconBot /></span>
-                <div>
-                  <h3 className="font-bold text-ink-navy">Piano turni generato</h3>
-                  {spiegazioneAI && <p className="text-sm text-ink-navy/50 mt-1">{spiegazioneAI}</p>}
-                </div>
-              </div>
-              <p className="text-xs text-ink-navy/35">Modifica i turni se vuoi, poi conferma per salvarli nella griglia.</p>
-              <div className="space-y-3">
-                {GIORNI_LUNGHI.map((giorno, idx) => {
-                  const turniGiorno = turniGenerati.map((t, gIdx) => ({ ...t, gIdx })).filter(t => t.giorno === idx)
-                  if (turniGiorno.length === 0) return null
-                  return (
-                    <div key={idx} className="border border-ink-navy/8 rounded-xl p-3 space-y-2">
-                      <p className="text-xs font-bold text-ink-navy/50 uppercase">{giorno}</p>
-                      {turniGiorno.map(({ gIdx, ...t }) => (
-                        <div key={gIdx} className="grid grid-cols-[1fr_80px_80px_28px] gap-2 items-center bg-mist rounded-lg p-2">
-                          <select value={t.dipendenteId}
-                            onChange={e => { const dip = dipendenti.find(d => d.id === e.target.value); setTurniGenerati(prev => prev!.map((x, i) => i === gIdx ? { ...x, dipendenteId: e.target.value, nome: dip?.nome ?? x.nome } : x)) }}
-                            className="border border-ink-navy/15 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white">
-                            {dipendenti.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
-                          </select>
-                          <input type="time" value={t.oraInizio}
-                            onChange={e => setTurniGenerati(prev => prev!.map((x, i) => i === gIdx ? { ...x, oraInizio: e.target.value } : x))}
-                            className="border border-ink-navy/15 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
-                          <input type="time" value={t.oraFine}
-                            onChange={e => setTurniGenerati(prev => prev!.map((x, i) => i === gIdx ? { ...x, oraFine: e.target.value } : x))}
-                            className="border border-ink-navy/15 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-electric-blue bg-white" />
-                          <button onClick={() => setTurniGenerati(prev => prev!.filter((_, i) => i !== gIdx))}
-                            className="text-ink-navy/25 hover:text-red-500 text-sm font-bold transition-colors">✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => { setTurniGenerati(null); setSpiegazioneAI('') }}
-                  className="flex-1 border border-red-300 text-red-600 font-semibold py-2.5 rounded-xl hover:bg-red-50 text-sm">✕ Annulla proposta</button>
-                <button onClick={salvaTurniGenerati} disabled={salvandoTurni}
-                  className="flex-1 bg-green-600 text-white font-semibold py-2.5 rounded-xl hover:bg-green-700 text-sm disabled:opacity-50">
-                  {salvandoTurni ? 'Salvataggio...' : 'Conferma e salva'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1013,6 +812,11 @@ export default function StaffPage() {
                 <input placeholder="es. Cameriere, Chef..." value={formModifica.ruolo} onChange={e => setFormModifica(f => ({ ...f, ruolo: e.target.value }))}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">URL foto <span className="text-ink-navy/35 font-normal">(opzionale)</span></label>
+                <input type="url" placeholder="https://..." value={formModifica.fotoUrl} onChange={e => setFormModifica(f => ({ ...f, fotoUrl: e.target.value }))}
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+              </div>
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={() => setDipendenteDaModificare(null)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
@@ -1044,6 +848,11 @@ export default function StaffPage() {
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ruolo</label>
                 <input placeholder="es. Cameriere, Chef, Cassiere..." value={formDip.ruolo} onChange={e => setFormDip(f => ({ ...f, ruolo: e.target.value }))}
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">URL foto <span className="text-ink-navy/35 font-normal">(opzionale)</span></label>
+                <input type="url" placeholder="https://..." value={formDip.fotoUrl} onChange={e => setFormDip(f => ({ ...f, fotoUrl: e.target.value }))}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>

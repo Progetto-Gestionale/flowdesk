@@ -213,6 +213,7 @@ model Dipendente {
   nome        String
   email       String
   ruolo       String?
+  fotoUrl     String?
   token       String?               @unique
   tokenExpiry DateTime?
   createdAt   DateTime              @default(now())

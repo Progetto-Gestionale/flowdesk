@@ -15,11 +15,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const user = await getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
-  const { nome, email, ruolo } = await req.json()
+  const { nome, email, ruolo, fotoUrl } = await req.json()
   if (!nome || !email) return NextResponse.json({ error: 'Nome e email obbligatori' }, { status: 400 })
   try {
     const dipendente = await prisma.dipendente.create({
-      data: { userId: user.id, nome, email, ruolo: ruolo || null },
+      data: { userId: user.id, nome, email, ruolo: ruolo || null, fotoUrl: fotoUrl || null },
     })
     return NextResponse.json({ dipendente })
   } catch (e: any) {

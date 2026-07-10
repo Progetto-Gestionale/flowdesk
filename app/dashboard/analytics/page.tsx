@@ -92,6 +92,15 @@ const MESI: Record<string, string> = {
 }
 
 type Periodo = 'settimana' | 'mese' | 'anno'
+type TabAnalytics = 'servizi' | 'tavoli' | 'ordini' | 'personale'
+
+interface Preventivo {
+  id: string
+  tipo: string | null
+  totale: number
+  status: string
+  createdAt: string
+}
 
 function spostaRiferimento(rif: Date, periodo: Periodo, direzione: 1 | -1): Date {
   const d = new Date(rif)
@@ -195,6 +204,7 @@ function MiniCalendario({ periodo, riferimento, onScegli, onChiudi }: {
 }
 
 export default function AnalyticsPage() {
+  const [tabAnalytics, setTabAnalytics] = useState<TabAnalytics>('servizi')
   const [data, setData] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState<Periodo>('anno')
@@ -204,6 +214,8 @@ export default function AnalyticsPage() {
   const [mesiDisponibili, setMesiDisponibili] = useState<string[]>([])
   const [meseSel, setMeseSel] = useState<string>('')
   const [loadingStaff, setLoadingStaff] = useState(false)
+  const [preventivi, setPreventivi] = useState<Preventivo[]>([])
+  const [loadingOrdini, setLoadingOrdini] = useState(false)
 
   // Dettaglio dipendente
   type TurnoGiorno = { oraInizio: string; oraFine: string; ore: number }
@@ -247,6 +259,14 @@ export default function AnalyticsPage() {
       })
   }, [])
 
+  useEffect(() => {
+    if (tabAnalytics !== 'ordini' || preventivi.length > 0) return
+    setLoadingOrdini(true)
+    fetch('/api/preventivi', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setPreventivi(d.preventivi ?? []); setLoadingOrdini(false) })
+  }, [tabAnalytics])
+
   function cambiaMe(mese: string) {
     setMeseSel(mese)
     setLoadingStaff(true)
@@ -255,7 +275,7 @@ export default function AnalyticsPage() {
       .then(d => { setStaff(d.staff ?? []); setLoadingStaff(false) })
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>
+  if (loading && !data) return <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>
   if (!data) return null
 
   const maxTotale = Math.max(...data.perMese.map(m => m.totale), 1)
@@ -263,8 +283,8 @@ export default function AnalyticsPage() {
 
   function bucketLabel(mese: string) {
     if (periodo === 'anno') return MESI[mese.split('-')[1]] ?? mese
-    if (periodo === 'settimana') return mese // già "Lun", "Mar"...
-    return mese // numero del giorno
+    if (periodo === 'settimana') return mese
+    return mese
   }
   function bucketFull(mese: string) {
     if (periodo === 'anno') return `${MESI[mese.split('-')[1]]} ${mese.split('-')[0]}`
@@ -272,250 +292,393 @@ export default function AnalyticsPage() {
     return `${mese} ${new Date().toLocaleDateString('it-IT', { month: 'long' })}`
   }
 
+  // Aggregazioni ordini
+  const ordiniList = preventivi.filter(p => p.tipo === 'ordine')
+  const deliveryList = preventivi.filter(p => p.tipo === 'delivery')
+  const totOrdini = ordiniList.reduce((s, p) => s + p.totale, 0)
+  const totDelivery = deliveryList.reduce((s, p) => s + p.totale, 0)
+
+  const TABS: { key: TabAnalytics; label: string }[] = [
+    { key: 'servizi', label: 'Servizi' },
+    { key: 'tavoli', label: 'Tavoli' },
+    { key: 'ordini', label: 'Ordini & Asporto' },
+    { key: 'personale', label: 'Personale' },
+  ]
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-ink-navy">Analytics</h1>
-          <p className="text-ink-navy/50 text-sm mt-0.5">Statistiche sull&apos;andamento del tuo locale</p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
+      <div>
+        <h1 className="text-2xl font-bold text-ink-navy">Analytics</h1>
+        <p className="text-ink-navy/50 text-sm mt-0.5">Statistiche sull&apos;andamento del tuo locale</p>
+      </div>
+
+      {/* Tab selector */}
+      <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTabAnalytics(t.key)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tabAnalytics === t.key ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TAB SERVIZI ── */}
+      {tabAnalytics === 'servizi' && (
+        <div className="space-y-6">
           {/* Selettore periodo */}
-          <div className="flex rounded-xl border border-ink-navy/10 bg-white overflow-hidden shadow-sm text-sm font-medium">
-            {(['settimana', 'mese', 'anno'] as Periodo[]).map(p => (
-              <button key={p} onClick={() => { setPeriodo(p); setRiferimento(new Date()) }}
-                className={`px-4 py-2 capitalize transition-colors ${periodo === p ? 'bg-electric-blue text-white' : 'text-ink-navy/50 hover:bg-mist'}`}>
-                {p.charAt(0).toUpperCase() + p.slice(1)}
-              </button>
-            ))}
-          </div>
-          {/* Navigazione prev/next */}
-          <div className="flex items-center gap-2 relative">
-            <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, -1))}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg">
-              ‹
-            </button>
-            <button onClick={() => setCalendarioAperto(v => !v)}
-              className="text-sm font-medium text-ink-navy/70 min-w-[160px] text-center px-3 py-1.5 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors">
-              {data?.labelPeriodo ?? '—'}
-            </button>
-            {calendarioAperto && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setCalendarioAperto(false)} />
-                <MiniCalendario periodo={periodo} riferimento={riferimento}
-                  onScegli={d => { setRiferimento(d); setCalendarioAperto(false) }}
-                  onChiudi={() => setCalendarioAperto(false)} />
-              </>
-            )}
-            <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, 1))}
-              disabled={isFuturo}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg disabled:opacity-30 disabled:cursor-not-allowed">
-              ›
-            </button>
-            {!isOggi && (
-              <button onClick={() => setRiferimento(new Date())}
-                className="text-xs text-electric-blue hover:underline ml-1">
-                Oggi
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Prenotazioni totali</p>
-          <p className="text-3xl font-bold text-ink-navy mt-1">{data.totaleApp}</p>
-          <p className="text-xs text-ink-navy/35 mt-1">{periodo === 'settimana' ? 'questa settimana' : periodo === 'mese' ? 'questo mese' : 'ultimi 12 mesi'}</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Tasso no-show</p>
-          <p className={`text-3xl font-bold mt-1 ${data.tassoNoShow > 15 ? 'text-red-500' : data.tassoNoShow > 8 ? 'text-amber-500' : 'text-green-500'}`}>
-            {data.tassoNoShow}%
-          </p>
-          <p className="text-xs text-ink-navy/35 mt-1">{data.noShow} no-show · {data.cancellati} cancellate</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Giorno più gettonato</p>
-          <p className="text-3xl font-bold text-electric-blue mt-1">{data.giornoTop ?? '—'}</p>
-          <p className="text-xs text-ink-navy/35 mt-1">giorno della settimana</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Orario più richiesto</p>
-          <p className="text-3xl font-bold text-electric-blue mt-1">{data.oraTop ?? '—'}</p>
-          <p className="text-xs text-ink-navy/35 mt-1">fascia oraria</p>
-        </div>
-      </div>
-
-      {/* Grafico prenotazioni per mese */}
-      <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-ink-navy mb-4">
-          {periodo === 'settimana' ? 'Prenotazioni questa settimana' : periodo === 'mese' ? 'Prenotazioni questo mese' : 'Prenotazioni ultimi 12 mesi'}
-        </h2>
-        <div className="flex items-end gap-3 h-40">
-          {data.perMese.map(m => {
-            const label = bucketLabel(m.mese)
-            const hTot = Math.round((m.totale / maxTotale) * 130)
-            const hNS = m.totale > 0 ? Math.round((m.noShow / m.totale) * hTot) : 0
-            const hCanc = m.totale > 0 ? Math.round((m.cancellati / m.totale) * hTot) : 0
-            const hOk = Math.max(hTot - hNS - hCanc, 0)
-            return (
-              <div key={m.mese} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-xs text-ink-navy/50 font-medium">{m.totale}</span>
-                <div className="w-full flex flex-col justify-end rounded-t-lg overflow-hidden" style={{ height: `${Math.max(hTot, 4)}px` }}>
-                  <div className="w-full bg-red-300" style={{ height: `${hNS}px` }} title={`No-show: ${m.noShow}`} />
-                  <div className="w-full bg-orange-300" style={{ height: `${hCanc}px` }} title={`Cancellate: ${m.cancellati}`} />
-                  <div className="w-full bg-electric-blue" style={{ height: `${hOk}px` }} />
-                </div>
-                <span className="text-xs text-ink-navy/35">{label}</span>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex flex-col items-start gap-2">
+              <div className="flex rounded-xl border border-ink-navy/10 bg-white overflow-hidden shadow-sm text-sm font-medium">
+                {(['settimana', 'mese', 'anno'] as Periodo[]).map(p => (
+                  <button key={p} onClick={() => { setPeriodo(p); setRiferimento(new Date()) }}
+                    className={`px-4 py-2 capitalize transition-colors ${periodo === p ? 'bg-electric-blue text-white' : 'text-ink-navy/50 hover:bg-mist'}`}>
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
               </div>
-            )
-          })}
-        </div>
-        <div className="flex gap-4 mt-3 text-xs text-ink-navy/50">
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-electric-blue inline-block" /> Prenotazioni</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-300 inline-block" /> Cancellate</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-300 inline-block" /> No-show</span>
-        </div>
-      </div>
+              <div className="flex items-center gap-2 relative">
+                <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, -1))}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg">‹</button>
+                <button onClick={() => setCalendarioAperto(v => !v)}
+                  className="text-sm font-medium text-ink-navy/70 min-w-[160px] text-center px-3 py-1.5 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors">
+                  {data?.labelPeriodo ?? '—'}
+                </button>
+                {calendarioAperto && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setCalendarioAperto(false)} />
+                    <MiniCalendario periodo={periodo} riferimento={riferimento}
+                      onScegli={d => { setRiferimento(d); setCalendarioAperto(false) }}
+                      onChiudi={() => setCalendarioAperto(false)} />
+                  </>
+                )}
+                <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, 1))} disabled={isFuturo}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg disabled:opacity-30 disabled:cursor-not-allowed">›</button>
+                {!isOggi && (
+                  <button onClick={() => setRiferimento(new Date())} className="text-xs text-electric-blue hover:underline ml-1">Oggi</button>
+                )}
+              </div>
+            </div>
+          </div>
 
-      {/* Grafico revenue */}
-      {maxRevenue > 0 && (
-        <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-          <h2 className="text-base font-semibold text-ink-navy mb-4">Revenue tavoli</h2>
-          <div className="flex items-end gap-3 h-32">
-            {data.perMese.map(m => {
-              const label = bucketLabel(m.mese)
-              const h = Math.round((m.revenue / maxRevenue) * 110)
-              return (
-                <div key={m.mese} className="flex-1 flex flex-col items-center gap-1">
-                  {m.revenue > 0 && <span className="text-xs text-ink-navy/50 font-medium">€{m.revenue.toLocaleString('it-IT')}</span>}
-                  <div className="w-full flex flex-col justify-end" style={{ height: '110px' }}>
-                    <div className="w-full bg-emerald-500 rounded-t-lg" style={{ height: `${Math.max(h, m.revenue > 0 ? 4 : 0)}px` }} />
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Prenotazioni totali</p>
+              <p className="text-3xl font-bold text-ink-navy mt-1">{data.totaleApp}</p>
+              <p className="text-xs text-ink-navy/35 mt-1">{periodo === 'settimana' ? 'questa settimana' : periodo === 'mese' ? 'questo mese' : 'ultimi 12 mesi'}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Tasso no-show</p>
+              <p className={`text-3xl font-bold mt-1 ${data.tassoNoShow > 15 ? 'text-red-500' : data.tassoNoShow > 8 ? 'text-amber-500' : 'text-green-500'}`}>
+                {data.tassoNoShow}%
+              </p>
+              <p className="text-xs text-ink-navy/35 mt-1">{data.noShow} no-show · {data.cancellati} cancellate</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Giorno più gettonato</p>
+              <p className="text-3xl font-bold text-electric-blue mt-1">{data.giornoTop ?? '—'}</p>
+              <p className="text-xs text-ink-navy/35 mt-1">giorno della settimana</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Orario più richiesto</p>
+              <p className="text-3xl font-bold text-electric-blue mt-1">{data.oraTop ?? '—'}</p>
+              <p className="text-xs text-ink-navy/35 mt-1">fascia oraria</p>
+            </div>
+          </div>
+
+          {/* Grafico prenotazioni */}
+          <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+            <h2 className="text-base font-semibold text-ink-navy mb-4">
+              {periodo === 'settimana' ? 'Prenotazioni questa settimana' : periodo === 'mese' ? 'Prenotazioni questo mese' : 'Prenotazioni ultimi 12 mesi'}
+            </h2>
+            <div className="flex items-end gap-3 h-40">
+              {data.perMese.map(m => {
+                const label = bucketLabel(m.mese)
+                const hTot = Math.round((m.totale / maxTotale) * 130)
+                const hNS = m.totale > 0 ? Math.round((m.noShow / m.totale) * hTot) : 0
+                const hCanc = m.totale > 0 ? Math.round((m.cancellati / m.totale) * hTot) : 0
+                const hOk = Math.max(hTot - hNS - hCanc, 0)
+                return (
+                  <div key={m.mese} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-xs text-ink-navy/50 font-medium">{m.totale}</span>
+                    <div className="w-full flex flex-col justify-end rounded-t-lg overflow-hidden" style={{ height: `${Math.max(hTot, 4)}px` }}>
+                      <div className="w-full bg-red-300" style={{ height: `${hNS}px` }} title={`No-show: ${m.noShow}`} />
+                      <div className="w-full bg-orange-300" style={{ height: `${hCanc}px` }} title={`Cancellate: ${m.cancellati}`} />
+                      <div className="w-full bg-electric-blue" style={{ height: `${hOk}px` }} />
+                    </div>
+                    <span className="text-xs text-ink-navy/35">{label}</span>
                   </div>
-                  <span className="text-xs text-ink-navy/35">{label}</span>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
+            <div className="flex gap-4 mt-3 text-xs text-ink-navy/50">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-electric-blue inline-block" /> Prenotazioni</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-300 inline-block" /> Cancellate</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-300 inline-block" /> No-show</span>
+            </div>
+          </div>
+
+          {/* Tabella dettaglio */}
+          <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-ink-navy/8">
+              <h2 className="text-base font-semibold text-ink-navy">Dettaglio mensile</h2>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-6 py-3">Periodo</th>
+                  <th className="text-right px-4 py-3">Totale</th>
+                  <th className="text-right px-4 py-3">Completate</th>
+                  <th className="text-right px-4 py-3">Cancellate</th>
+                  <th className="text-right px-4 py-3">No-show</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...data.perMese].reverse().map(m => (
+                  <tr key={m.mese} className="hover:bg-mist">
+                    <td className="px-6 py-3 font-medium text-ink-navy">{bucketFull(m.mese)}</td>
+                    <td className="text-right px-4 py-3 text-ink-navy/70">{m.totale}</td>
+                    <td className="text-right px-4 py-3 text-green-600">{m.completati}</td>
+                    <td className="text-right px-4 py-3 text-orange-500">{m.cancellati > 0 ? m.cancellati : '—'}</td>
+                    <td className="text-right px-4 py-3 text-red-500">{m.noShow > 0 ? m.noShow : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Tabella dettaglio mesi */}
-      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-ink-navy/8">
-          <h2 className="text-base font-semibold text-ink-navy">Dettaglio mensile</h2>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
-            <tr>
-              <th className="text-left px-6 py-3">Periodo</th>
-              <th className="text-right px-4 py-3">Totale</th>
-              <th className="text-right px-4 py-3">Completate</th>
-              <th className="text-right px-4 py-3">Cancellate</th>
-              <th className="text-right px-4 py-3">No-show</th>
-              <th className="text-right px-6 py-3">Revenue</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {[...data.perMese].reverse().map(m => (
-              <tr key={m.mese} className="hover:bg-mist">
-                <td className="px-6 py-3 font-medium text-ink-navy">{bucketFull(m.mese)}</td>
-                <td className="text-right px-4 py-3 text-ink-navy/70">{m.totale}</td>
-                <td className="text-right px-4 py-3 text-green-600">{m.completati}</td>
-                <td className="text-right px-4 py-3 text-orange-500">{m.cancellati > 0 ? m.cancellati : '—'}</td>
-                <td className="text-right px-4 py-3 text-red-500">{m.noShow > 0 ? m.noShow : '—'}</td>
-                <td className="text-right px-6 py-3 text-emerald-600 font-medium">
-                  {m.revenue > 0 ? `€${m.revenue.toLocaleString('it-IT')}` : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── Sezione staff ── */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-xl font-bold text-ink-navy">Analytics staff</h2>
-            <p className="text-ink-navy/50 text-sm mt-0.5">Ore, presenze e richieste per dipendente</p>
+      {/* ── TAB TAVOLI ── */}
+      {tabAnalytics === 'tavoli' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Revenue totale</p>
+              <p className="text-3xl font-bold text-emerald-600 mt-1">
+                €{data.perMese.reduce((s, m) => s + m.revenue, 0).toLocaleString('it-IT')}
+              </p>
+              <p className="text-xs text-ink-navy/35 mt-1">ultimi 12 mesi</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Prenotazioni tavoli</p>
+              <p className="text-3xl font-bold text-ink-navy mt-1">{data.totaleApp}</p>
+              <p className="text-xs text-ink-navy/35 mt-1">nel periodo selezionato</p>
+            </div>
           </div>
-          {mesiDisponibili.length > 0 && (
-            <select value={meseSel} onChange={e => cambiaMe(e.target.value)}
-              className="text-sm border border-ink-navy/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-electric-blue bg-white">
-              {mesiDisponibili.map(m => (
-                <option key={m} value={m}>
-                  {MESI_LABEL[m.split('-')[1]]} {m.split('-')[0]}
-                </option>
-              ))}
-            </select>
+
+          {maxRevenue > 0 ? (
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+              <h2 className="text-base font-semibold text-ink-navy mb-4">Revenue tavoli per periodo</h2>
+              <div className="flex items-end gap-3 h-40">
+                {data.perMese.map(m => {
+                  const label = bucketLabel(m.mese)
+                  const h = Math.round((m.revenue / maxRevenue) * 130)
+                  return (
+                    <div key={m.mese} className="flex-1 flex flex-col items-center gap-1">
+                      {m.revenue > 0 && <span className="text-xs text-ink-navy/50 font-medium">€{m.revenue.toLocaleString('it-IT')}</span>}
+                      <div className="w-full flex flex-col justify-end" style={{ height: '130px' }}>
+                        <div className="w-full bg-emerald-500 rounded-t-lg" style={{ height: `${Math.max(h, m.revenue > 0 ? 4 : 0)}px` }} />
+                      </div>
+                      <span className="text-xs text-ink-navy/35">{label}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
+              <p className="text-ink-navy/35 text-sm">Nessun dato revenue disponibile</p>
+              <p className="text-xs text-ink-navy/25 mt-1">I dati appariranno quando i tavoli avranno un valore associato</p>
+            </div>
           )}
-        </div>
 
-        {loadingStaff ? (
-          <div className="text-ink-navy/35 text-sm py-8 text-center">Caricamento...</div>
-        ) : staff.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
-            <p className="text-ink-navy/35 text-sm">Nessun dipendente trovato</p>
+          <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-ink-navy/8">
+              <h2 className="text-base font-semibold text-ink-navy">Dettaglio revenue mensile</h2>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-6 py-3">Periodo</th>
+                  <th className="text-right px-4 py-3">Prenotazioni</th>
+                  <th className="text-right px-6 py-3">Revenue</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...data.perMese].reverse().map(m => (
+                  <tr key={m.mese} className="hover:bg-mist">
+                    <td className="px-6 py-3 font-medium text-ink-navy">{bucketFull(m.mese)}</td>
+                    <td className="text-right px-4 py-3 text-ink-navy/70">{m.totale}</td>
+                    <td className="text-right px-6 py-3 text-emerald-600 font-medium">
+                      {m.revenue > 0 ? `€${m.revenue.toLocaleString('it-IT')}` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {staff.map(dip => (
-              <div key={dip.id} onClick={() => apriDettaglio(dip.id)} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4 cursor-pointer hover:border-electric-blue/40 hover:shadow-md transition-all">
-                {/* Header */}
-                <div>
-                  <p className="font-bold text-ink-navy">{dip.nome}</p>
-                  {dip.ruolo && <p className="text-xs text-ink-navy/35">{dip.ruolo}</p>}
-                </div>
+        </div>
+      )}
 
-                {/* KPI principali */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center bg-electric-blue/10 rounded-xl py-2">
-                    <p className="text-lg font-bold text-electric-blue">{dip.oreLavorate}</p>
-                    <p className="text-[10px] text-electric-blue font-medium">ore</p>
-                  </div>
-                  <div className="text-center bg-electric-blue/10 rounded-xl py-2">
-                    <p className="text-lg font-bold text-electric-blue">{dip.giorniLavorati}</p>
-                    <p className="text-[10px] text-electric-blue font-medium">giorni</p>
-                  </div>
-                  <div className="text-center bg-electric-blue/10 rounded-xl py-2">
-                    <p className="text-lg font-bold text-electric-blue">{dip.giornoTop ?? '—'}</p>
-                    <p className="text-[10px] text-electric-blue font-medium">giorno top</p>
-                  </div>
+      {/* ── TAB ORDINI & ASPORTO ── */}
+      {tabAnalytics === 'ordini' && (
+        <div className="space-y-6">
+          {loadingOrdini ? (
+            <div className="text-center text-ink-navy/35 py-12">Caricamento...</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+                  <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Ordini asporto</p>
+                  <p className="text-3xl font-bold text-ink-navy mt-1">{ordiniList.length}</p>
+                  <p className="text-xs text-ink-navy/35 mt-1">totale ordini</p>
                 </div>
-
-                {/* Richieste */}
-                <div className="space-y-1.5">
-                  {[
-                    { label: 'Ferie', tot: dip.ferie.totale, app: dip.ferie.approvate, color: 'text-blue-600' },
-                    { label: 'Malattie', tot: dip.malattie.totale, app: dip.malattie.approvate, color: 'text-red-500' },
-                    { label: 'Permessi', tot: dip.permessi.totale, app: dip.permessi.approvati, color: 'text-amber-600' },
-                  ].map(r => r.tot > 0 && (
-                    <div key={r.label} className="flex items-center justify-between text-sm">
-                      <span className="text-ink-navy/50">{r.label}</span>
-                      <span className={`font-semibold ${r.color}`}>
-                        {r.app}/{r.tot}
-                        <span className="text-ink-navy/35 font-normal text-xs ml-1">approv.</span>
-                      </span>
-                    </div>
-                  ))}
-                  {dip.preferenze > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-ink-navy/50">Pref. orario</span>
-                      <span className="font-semibold text-purple-600">{dip.preferenze}</span>
-                    </div>
-                  )}
-                  {dip.ferie.totale === 0 && dip.malattie.totale === 0 && dip.permessi.totale === 0 && dip.preferenze === 0 && (
-                    <p className="text-xs text-ink-navy/25 italic">Nessuna richiesta questo mese</p>
-                  )}
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+                  <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Revenue asporto</p>
+                  <p className="text-3xl font-bold text-emerald-600 mt-1">€{totOrdini.toLocaleString('it-IT')}</p>
+                  <p className="text-xs text-ink-navy/35 mt-1">valore totale</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+                  <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Delivery</p>
+                  <p className="text-3xl font-bold text-ink-navy mt-1">{deliveryList.length}</p>
+                  <p className="text-xs text-ink-navy/35 mt-1">totale delivery</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+                  <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Revenue delivery</p>
+                  <p className="text-3xl font-bold text-emerald-600 mt-1">€{totDelivery.toLocaleString('it-IT')}</p>
+                  <p className="text-xs text-ink-navy/35 mt-1">valore totale</p>
                 </div>
               </div>
-            ))}
+
+              {preventivi.filter(p => p.tipo === 'ordine' || p.tipo === 'delivery').length === 0 ? (
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
+                  <p className="text-ink-navy/35 text-sm">Nessun ordine o delivery ancora</p>
+                  <p className="text-xs text-ink-navy/25 mt-1">Gli ordini ricevuti tramite il widget appariranno qui</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-ink-navy/8">
+                    <h2 className="text-base font-semibold text-ink-navy">Ultimi ordini</h2>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
+                      <tr>
+                        <th className="text-left px-6 py-3">Data</th>
+                        <th className="text-left px-4 py-3">Tipo</th>
+                        <th className="text-left px-4 py-3">Cliente</th>
+                        <th className="text-right px-4 py-3">Status</th>
+                        <th className="text-right px-6 py-3">Totale</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {preventivi
+                        .filter(p => p.tipo === 'ordine' || p.tipo === 'delivery')
+                        .slice(0, 30)
+                        .map((p: Preventivo & { clienteName?: string; clienteEmail?: string }) => (
+                          <tr key={p.id} className="hover:bg-mist">
+                            <td className="px-6 py-3 text-ink-navy/70">{new Date(p.createdAt).toLocaleDateString('it-IT')}</td>
+                            <td className="px-4 py-3">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.tipo === 'delivery' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {p.tipo === 'delivery' ? 'Delivery' : 'Asporto'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-ink-navy/70">{(p as Preventivo & { clienteName?: string }).clienteName ?? '—'}</td>
+                            <td className="text-right px-4 py-3">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.status === 'confermato' ? 'bg-green-100 text-green-700' : p.status === 'da_verificare' ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
+                                {p.status === 'da_verificare' ? 'Da verificare' : p.status === 'confermato' ? 'Confermato' : p.status}
+                              </span>
+                            </td>
+                            <td className="text-right px-6 py-3 text-emerald-600 font-medium">€{p.totale.toLocaleString('it-IT')}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB PERSONALE ── */}
+      {tabAnalytics === 'personale' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-ink-navy">Statistiche staff</h2>
+              <p className="text-ink-navy/50 text-sm mt-0.5">Ore, presenze e richieste per dipendente</p>
+            </div>
+            {mesiDisponibili.length > 0 && (
+              <select value={meseSel} onChange={e => cambiaMe(e.target.value)}
+                className="text-sm border border-ink-navy/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-electric-blue bg-white">
+                {mesiDisponibili.map(m => (
+                  <option key={m} value={m}>
+                    {MESI_LABEL[m.split('-')[1]]} {m.split('-')[0]}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-        )}
-      </div>
+
+          {loadingStaff ? (
+            <div className="text-ink-navy/35 text-sm py-8 text-center">Caricamento...</div>
+          ) : staff.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
+              <p className="text-ink-navy/35 text-sm">Nessun dipendente trovato</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {staff.map(dip => (
+                <div key={dip.id} onClick={() => apriDettaglio(dip.id)} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4 cursor-pointer hover:border-electric-blue/40 hover:shadow-md transition-all">
+                  <div>
+                    <p className="font-bold text-ink-navy">{dip.nome}</p>
+                    {dip.ruolo && <p className="text-xs text-ink-navy/35">{dip.ruolo}</p>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center bg-electric-blue/10 rounded-xl py-2">
+                      <p className="text-lg font-bold text-electric-blue">{dip.oreLavorate}</p>
+                      <p className="text-[10px] text-electric-blue font-medium">ore</p>
+                    </div>
+                    <div className="text-center bg-electric-blue/10 rounded-xl py-2">
+                      <p className="text-lg font-bold text-electric-blue">{dip.giorniLavorati}</p>
+                      <p className="text-[10px] text-electric-blue font-medium">giorni</p>
+                    </div>
+                    <div className="text-center bg-electric-blue/10 rounded-xl py-2">
+                      <p className="text-lg font-bold text-electric-blue">{dip.giornoTop ?? '—'}</p>
+                      <p className="text-[10px] text-electric-blue font-medium">giorno top</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {[
+                      { label: 'Ferie', tot: dip.ferie.totale, app: dip.ferie.approvate, color: 'text-blue-600' },
+                      { label: 'Malattie', tot: dip.malattie.totale, app: dip.malattie.approvate, color: 'text-red-500' },
+                      { label: 'Permessi', tot: dip.permessi.totale, app: dip.permessi.approvati, color: 'text-amber-600' },
+                    ].map(r => r.tot > 0 && (
+                      <div key={r.label} className="flex items-center justify-between text-sm">
+                        <span className="text-ink-navy/50">{r.label}</span>
+                        <span className={`font-semibold ${r.color}`}>
+                          {r.app}/{r.tot}
+                          <span className="text-ink-navy/35 font-normal text-xs ml-1">approv.</span>
+                        </span>
+                      </div>
+                    ))}
+                    {dip.preferenze > 0 && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-ink-navy/50">Pref. orario</span>
+                        <span className="font-semibold text-purple-600">{dip.preferenze}</span>
+                      </div>
+                    )}
+                    {dip.ferie.totale === 0 && dip.malattie.totale === 0 && dip.permessi.totale === 0 && dip.preferenze === 0 && (
+                      <p className="text-xs text-ink-navy/25 italic">Nessuna richiesta questo mese</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modal dettaglio dipendente */}
       {(dettaglio || loadingDett) && (
