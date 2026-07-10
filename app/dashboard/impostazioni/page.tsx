@@ -180,6 +180,8 @@ export default function Impostazioni() {
   const [publicId, setPublicId] = useState('')
   const [turniServizio, setTurniServizio] = useState<TurnoServizio[]>([])
   const [fabbisogno, setFabbisogno] = useState<FabbisognoFascia[]>([])
+  const [grafica, setGrafica] = useState({ menuLogoUrl: '', menuColoreP: '#4f46e5', menuColoreS: '#ffffff' })
+  const [graficaStatus, setGraficaStatus] = useState<SezioneStatus>(initStatus())
 
   // Marca la sezione come dirty quando l'utente modifica qualcosa
   const dirty = useCallback((id: string) => {
@@ -205,6 +207,7 @@ export default function Impostazioni() {
       setFaq(jp(s.faq, []))
       setDescrizioneBot(s.descrizioneBot ?? '')
       setPublicId(s.publicId ?? '')
+      setGrafica({ menuLogoUrl: s.menuLogoUrl ?? '', menuColoreP: s.menuColoreP ?? '#4f46e5', menuColoreS: s.menuColoreS ?? '#ffffff' })
       const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
       const ts: TurnoServizio[] = jp(s.turniServizio, [])
       ts.sort((a, b) => toMin(a.oraInizio) - toMin(b.oraInizio))
@@ -243,6 +246,20 @@ export default function Impostazioni() {
     } catch (e) {
       console.error('[saveSezione] catch:', e)
       setStatus(prev => ({ ...prev, [id]: { saving: false, saved: false, dirty: true } }))
+    }
+  }
+
+  async function salvaGrafica() {
+    setGraficaStatus(s => ({ ...s, saving: true }))
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(grafica),
+      })
+      setGraficaStatus({ saving: false, saved: true, dirty: false })
+    } catch {
+      setGraficaStatus(s => ({ ...s, saving: false }))
     }
   }
 
@@ -509,6 +526,65 @@ export default function Impostazioni() {
                 </Field>
               </Section>
               <MenuStrumenti publicId={publicId} />
+
+              {/* Aspetto menu */}
+              <div className="bg-white border border-ink-navy/10 rounded-xl p-5 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="font-semibold text-ink-navy">Aspetto del menu digitale</h2>
+                    <p className="text-sm text-ink-navy/50 mt-0.5">Logo e colori mostrati sul menu digitale e sulla pagina asporto.</p>
+                  </div>
+                  <button onClick={salvaGrafica} disabled={graficaStatus.saving}
+                    className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors ${graficaStatus.saved && !graficaStatus.dirty ? 'bg-emerald-100 text-emerald-700' : 'bg-electric-blue text-white hover:bg-electric-blue/90'} disabled:opacity-50`}>
+                    {graficaStatus.saving ? 'Salvataggio...' : graficaStatus.saved && !graficaStatus.dirty ? '✓ Salvato' : 'Salva'}
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">URL logo</label>
+                    <input value={grafica.menuLogoUrl}
+                      onChange={e => { setGrafica(g => ({ ...g, menuLogoUrl: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
+                      placeholder="https://esempio.com/logo.png" className={cls} />
+                    {grafica.menuLogoUrl && (
+                      <img src={grafica.menuLogoUrl} alt="preview logo" className="mt-2 h-14 w-14 rounded-xl object-cover border border-ink-navy/10" />
+                    )}
+                  </div>
+                  <div className="flex gap-6 flex-wrap">
+                    <div className="space-y-1">
+                      <label className="block text-sm font-medium text-ink-navy/70">Colore principale</label>
+                      <p className="text-xs text-ink-navy/35">Bottoni, prezzi, tab categorie</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <input type="color" value={grafica.menuColoreP}
+                          onChange={e => { setGrafica(g => ({ ...g, menuColoreP: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
+                          className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
+                        <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreP}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-sm font-medium text-ink-navy/70">Colore secondario</label>
+                      <p className="text-xs text-ink-navy/35">Testo sui bottoni colorati</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <input type="color" value={grafica.menuColoreS}
+                          onChange={e => { setGrafica(g => ({ ...g, menuColoreS: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
+                          className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
+                        <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreS}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl border border-ink-navy/8 bg-mist space-y-2">
+                    <p className="text-xs text-ink-navy/35 mb-3">Anteprima</p>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm" style={{ color: grafica.menuColoreP }}>€12.00</span>
+                      <button className="w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold"
+                        style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>+</button>
+                    </div>
+                    <button className="w-full py-2.5 rounded-xl text-sm font-bold"
+                      style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>
+                      Vedi ordine · €24.00
+                    </button>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 

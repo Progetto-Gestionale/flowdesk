@@ -330,43 +330,11 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MenuPage() {
-  const [tab, setTab] = useState<'locale' | 'asporto' | 'grafica'>('locale')
-
-  // ── Grafica state ──
-  const [grafica, setGrafica] = useState({ menuLogoUrl: '', menuColoreP: '#4f46e5', menuColoreS: '#ffffff' })
-  const [loadingGrafica, setLoadingGrafica] = useState(true)
-  const [savingGrafica, setSavingGrafica] = useState(false)
-  const [graficaSalvata, setGraficaSalvata] = useState(false)
-
-  async function fetchGrafica() {
-    const res = await fetch('/api/settings', { credentials: 'include' })
-    const data = await res.json().catch(() => ({}))
-    setGrafica({
-      menuLogoUrl: data.menuLogoUrl ?? '',
-      menuColoreP: data.menuColoreP ?? '#4f46e5',
-      menuColoreS: data.menuColoreS ?? '#ffffff',
-    })
-    setLoadingGrafica(false)
-  }
-
-  useEffect(() => { fetchGrafica() }, [])
-
-  async function salvaGrafica() {
-    setSavingGrafica(true)
-    await fetch('/api/settings', {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(grafica),
-    })
-    setSavingGrafica(false)
-    setGraficaSalvata(true)
-    setTimeout(() => setGraficaSalvata(false), 3000)
-  }
+  const [tab, setTab] = useState<'locale' | 'asporto'>('locale')
 
   const TABS = [
     { key: 'locale', label: 'Menù normale' },
     { key: 'asporto', label: 'Asporto & Delivery' },
-    { key: 'grafica', label: 'Aspetto' },
   ] as const
 
   return (
@@ -387,70 +355,11 @@ export default function MenuPage() {
       </div>
 
       {/* ── TAB LOCALE / ASPORTO ── */}
-      {(tab === 'locale' || tab === 'asporto') && (
-        <MenuEditor key={tab} tipo={tab} />
-      )}
+      <MenuEditor key={tab} tipo={tab} />
 
-      {/* ── TAB GRAFICA ── */}
-      {tab === 'grafica' && (
-        <div className="space-y-5 max-w-lg">
-          {loadingGrafica ? <p className="text-ink-navy/35 text-sm">Caricamento...</p> : (
-            <>
-              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
-                <h2 className="font-semibold text-ink-navy">Logo del locale</h2>
-                <p className="text-sm text-ink-navy/50">URL dell'immagine — mostrata in cima al menù digitale.</p>
-                <input value={grafica.menuLogoUrl} onChange={e => setGrafica(g => ({ ...g, menuLogoUrl: e.target.value }))}
-                  placeholder="https://esempio.com/logo.png"
-                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-                {grafica.menuLogoUrl && (
-                  <img src={grafica.menuLogoUrl} alt="preview logo" className="h-16 w-16 rounded-xl object-cover border border-ink-navy/10" />
-                )}
-              </div>
-
-              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
-                <h2 className="font-semibold text-ink-navy">Colori del menu</h2>
-                <div className="flex gap-6 flex-wrap">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-ink-navy/70">Colore principale</label>
-                    <p className="text-xs text-ink-navy/35">Bottoni, prezzi, tab categorie</p>
-                    <div className="flex items-center gap-3">
-                      <input type="color" value={grafica.menuColoreP} onChange={e => setGrafica(g => ({ ...g, menuColoreP: e.target.value }))}
-                        className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
-                      <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreP}</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-ink-navy/70">Colore secondario</label>
-                    <p className="text-xs text-ink-navy/35">Testo sui bottoni colorati</p>
-                    <div className="flex items-center gap-3">
-                      <input type="color" value={grafica.menuColoreS} onChange={e => setGrafica(g => ({ ...g, menuColoreS: e.target.value }))}
-                        className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
-                      <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreS}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-2 p-4 rounded-xl border border-ink-navy/8 bg-mist space-y-2">
-                  <p className="text-xs text-ink-navy/35 mb-3">Anteprima</p>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm" style={{ color: grafica.menuColoreP }}>€12.00</span>
-                    <button className="w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold"
-                      style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>+</button>
-                  </div>
-                  <button className="w-full py-2.5 rounded-xl text-sm font-bold"
-                    style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>
-                    Vedi ordine · €24.00
-                  </button>
-                </div>
-              </div>
-
-              <button onClick={salvaGrafica} disabled={savingGrafica}
-                className="w-full bg-electric-blue text-white font-semibold py-3 rounded-xl hover:bg-electric-blue/90 disabled:opacity-50 transition-colors">
-                {savingGrafica ? 'Salvataggio...' : graficaSalvata ? '✓ Salvato' : 'Salva impostazioni grafica'}
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      <p className="text-xs text-ink-navy/35 text-center">
+        Per logo e colori vai in <a href="/dashboard/impostazioni?sezione=menu" className="text-electric-blue underline">Impostazioni → Menu & Offerta</a>
+      </p>
 
     </div>
   )

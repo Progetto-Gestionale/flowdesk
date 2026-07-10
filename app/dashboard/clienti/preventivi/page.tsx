@@ -622,6 +622,7 @@ function Richieste() {
           const items = (() => { try { return JSON.parse(corrente.items) } catch { return [] } })()
           const ora = oraMatch?.[1] ?? '12:00'
           const copertiMatch = corrente.note?.match(/Coperti:\s*(\d+)/)
+          const indirizzoMatch = corrente.note?.match(/Indirizzo:\s*([^.]+)/)
           await fetch('/api/appuntamenti', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -633,6 +634,7 @@ function Richieste() {
               durata: 15,
               coperti: items[0]?.coperti ?? (copertiMatch ? Number(copertiMatch[1]) : 1),
               note: [items[0]?.descrizione, `Da richiesta #${String(corrente.numero).padStart(3, '0')}`].filter(Boolean).join('\n'),
+              allergie: indirizzoMatch?.[1]?.trim() ?? null,
             }),
           })
           setSelected(null)

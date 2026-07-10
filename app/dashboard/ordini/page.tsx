@@ -49,7 +49,6 @@ const GRUPPI = [
   { key: 'nuovo', label: 'Nuovi' },
   { key: 'in_preparazione', label: 'In preparazione' },
   { key: 'pronto', label: 'Pronti' },
-  { key: 'consegnato', label: 'Consegnati' },
 ]
 
 function inferTipoOrdine(servizio?: string): 'ordine' | 'delivery' | null {
@@ -83,6 +82,7 @@ export default function OrdiniPage() {
   const [cambioTavolo, setCambioTavolo] = useState<string | null>(null)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [confermaAnnullaApp, setConfermaAnnullaApp] = useState<string | null>(null)
+  const [storicoAperto, setStoricoAperto] = useState(false)
 
   async function fetchOrdini() {
     const res = await fetch('/api/ordini', { credentials: 'include' })
@@ -164,7 +164,8 @@ export default function OrdiniPage() {
   const ordiniTavolo = ordini.filter(o => o.tavolo !== 'Asporto')
   const ordiniAsportoWeb = ordini.filter(o => o.tavolo === 'Asporto')
   const ordiniAttivi = ordiniTavolo.filter(o => o.status !== 'consegnato')
-  const hasTavoloOrdini = ordiniTavolo.length > 0
+  const ordiniConsegnati = ordiniTavolo.filter(o => o.status === 'consegnato')
+  const hasTavoloOrdini = ordiniTavolo.filter(o => o.status !== 'consegnato').length > 0
   const hasCalendarioOrdini = appOggi.length > 0 || ordiniAsportoWeb.length > 0
 
   return (
@@ -331,8 +332,6 @@ export default function OrdiniPage() {
               ...appCompletati.map(toApp),
               ...ordiniAsportoWeb.filter(o => o.status === 'consegnato').map(toOrdine),
             ]
-            const totAttivi = daPrepItems.length + prontiItems.length
-
             const CardFooter = ({ item, stepLabel, stepColor, onStep }: {
               item: Item; stepLabel?: string; stepColor?: string; onStep?: () => void
             }) => (
@@ -436,21 +435,140 @@ export default function OrdiniPage() {
                       </div>
                     </div>
                   )}
-                  {evasiItems.length > 0 && (
-                    <div>
-                      <h3 className="text-base font-bold text-ink-navy mb-3 flex items-center gap-2">
-                        {totAttivi > 0 ? 'Già evasi' : 'Evasi oggi'} <span className="text-xs font-semibold bg-mist text-ink-navy/60 px-2 py-0.5 rounded-full">{evasiItems.length}</span>
-                      </h3>
-                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {evasiItems.map(item => renderCard(item,
-                          'border-ink-navy/10',
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-mist text-ink-navy/50 border-ink-navy/10">Completato</span>,
-                          undefined, undefined, undefined, true,
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
+              </div>
+            )
+
+          })()}
+
+          {/* ── STORICO DI OGGI (collassabile) ── */}
+          {(() => {
+            const asportoSection = (() => {
+              type ItemApp = { kind: 'app'; id: string; isDelivery: boolean; label: string; ora: string; note: string }
+              type ItemOrdine = { kind: 'ordine'; id: string; righe: RigaOrdine[]; totale: number; note: string | null; ora: string }
+              type Item = ItemApp | ItemOrdine
+              const toApp = (a: AppuntamentoOrdine): ItemApp => {
+                const isDelivery = inferTipoOrdine(a.servizio) === 'delivery'
+                const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                const [desc] = (a.note ?? '').split('\n')
+                return { kind: 'app', id: a.id, isDelivery, label: a.clienteNome || 'Cliente', ora, note: (desc ?? '').replace(/^Da richiesta #\d+$/, '').trim() }
+              }
+              return {
+                evasiItems: [
+                  ...appCompletati.map(toApp),
+                  ...ordiniAsportoWeb.filter(o => o.status === 'consegnato').map((o): ItemOrdine => ({
+                    kind: 'ordine', id: o.id, righe: o.righe, totale: o.totale, note: o.note,
+                    ora: new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                  })),
+                ] as Item[],
+              }
+            })()
+
+            const totaleStorico = ordiniConsegnati.length + asportoSection.evasiItems.length
+            if (totaleStorico === 0) return null
+
+            return (
+              <div>
+                <button
+                  onClick={() => setStoricoAperto(v => !v)}
+                  className="w-full flex items-center gap-3 text-left group"
+                >
+                  <div className="h-px flex-1 bg-ink-navy/8" />
+                  <span className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider group-hover:text-ink-navy/60 transition-colors flex items-center gap-1.5">
+                    Storico di oggi
+                    <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{totaleStorico}</span>
+                    <span className="text-ink-navy/30">{storicoAperto ? '▲' : '▼'}</span>
+                  </span>
+                  <div className="h-px flex-1 bg-ink-navy/8" />
+                </button>
+
+                {storicoAperto && (
+                  <div className="mt-4 space-y-6">
+                    {/* Ordini tavolo consegnati */}
+                    {ordiniConsegnati.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mb-3">Tavolo · Consegnati</p>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {ordiniConsegnati.map(o => {
+                            const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                            const tavoloAssegnato = tavoli.find(t => t.id === o.tavoloId)
+                            const labelTavolo = tavoloAssegnato ? (tavoloAssegnato.etichetta ?? `Tavolo ${tavoloAssegnato.numero}`) : `Tavolo ${o.tavolo}`
+                            return (
+                              <div key={o.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden opacity-60">
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-ink-navy/8">
+                                  <div>
+                                    <p className="font-bold text-ink-navy">{labelTavolo}</p>
+                                    <p className="text-xs text-ink-navy/35">{ora}</p>
+                                  </div>
+                                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-mist text-ink-navy/50 border-ink-navy/10">Consegnato</span>
+                                </div>
+                                <div className="px-4 py-3 space-y-1.5">
+                                  {o.righe.map(r => (
+                                    <div key={r.id} className="flex justify-between text-sm">
+                                      <span className="text-ink-navy/50">{r.quantita}× {r.nome}</span>
+                                      <span className="text-ink-navy/35 font-medium">€{(r.prezzo * r.quantita).toFixed(2)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="px-4 py-3 border-t border-ink-navy/8 flex items-center justify-between">
+                                  <p className="font-bold text-ink-navy/50">€{o.totale.toFixed(2)}</p>
+                                  <button onClick={() => cancellaOrdine(o.id)} className="text-xs px-2.5 py-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors">Elimina</button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Asporto/delivery evasi */}
+                    {asportoSection.evasiItems.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mb-3">Asporto & Delivery · Completati</p>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {asportoSection.evasiItems.map(item => (
+                            <div key={item.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden opacity-60">
+                              <div className="flex items-center justify-between px-4 py-3 border-b border-ink-navy/8">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    {item.kind === 'app'
+                                      ? <><p className="font-bold text-ink-navy">{item.label}</p>
+                                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.isDelivery ? 'bg-teal-100 text-teal-700' : 'bg-violet-100 text-violet-700'}`}>
+                                            {item.isDelivery ? 'Delivery' : 'Asporto'}
+                                          </span></>
+                                      : <><p className="font-bold text-ink-navy">Ordine online</p>
+                                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">Asporto</span></>
+                                    }
+                                  </div>
+                                  <p className="text-xs text-ink-navy/35">{item.ora}</p>
+                                </div>
+                                <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-mist text-ink-navy/50 border-ink-navy/10">Completato</span>
+                              </div>
+                              <div className="px-4 py-3 space-y-1.5">
+                                {item.kind === 'app'
+                                  ? <>{item.note && <p className="text-sm text-ink-navy/50">{item.note}</p>}</>
+                                  : <>{item.righe.map(r => (
+                                      <div key={r.id} className="flex justify-between text-sm">
+                                        <span className="text-ink-navy/50">{r.quantita}× {r.nome}</span>
+                                        <span className="text-ink-navy/35 font-medium">€{(r.prezzo * r.quantita).toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                    <p className="text-sm font-bold text-ink-navy/50 pt-1">€{item.totale.toFixed(2)}</p>
+                                  </>
+                                }
+                              </div>
+                              <div className="px-4 py-3 border-t border-ink-navy/8 flex justify-end">
+                                <button onClick={() => {
+                                  item.kind === 'app' ? eliminaAppuntamento(item.id) : cancellaOrdine(item.id)
+                                }} className="text-xs px-2.5 py-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors">Elimina</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })()}
