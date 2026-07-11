@@ -32,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     await prisma.dipendente.update({
       where: { id },
-      data: { passwordHash: hash, username, mustChangePassword: true },
+      data: { passwordHash: hash, username, mustChangePassword: false },
     })
 
     return NextResponse.json({ ok: true, username })

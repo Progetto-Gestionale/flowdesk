@@ -4,17 +4,26 @@ import { prisma } from '@/lib/prisma'
 
 const GIORNI = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
 
-// Data locale italiana da un timestamp UTC
 function romeDate(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+}
+
+function romeTime(d: Date): string {
+  return d.toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' })
 }
 
 function diffOreMinuti(oraInizio: string, oraFine: string): number {
   const [h1, m1] = oraInizio.split(':').map(Number)
   const [h2, m2] = oraFine.split(':').map(Number)
   let minuti = (h2 * 60 + m2) - (h1 * 60 + m1)
-  if (minuti < 0) minuti += 24 * 60 // turno mezzanotte
+  if (minuti < 0) minuti += 24 * 60
   return minuti
+}
+
+function oraToMin(ora: string): number {
+  if (!ora || ora === '—') return NaN
+  const [h, m] = ora.split(':').map(Number)
+  return h * 60 + m
 }
 
 export async function GET(req: Request) {
@@ -22,15 +31,160 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const meseParam = searchParams.get('mese') // YYYY-MM, default mese corrente
+  const dipId = searchParams.get('dipendenteId')
+  const fonte = (searchParams.get('fonte') ?? 'turni') as 'turni' | 'cartellino'
 
+  // ── DETAIL ENDPOINT ──
+  if (dipId) {
+    const periodoParam = (searchParams.get('periodo') ?? 'mese') as 'settimana' | 'mese' | 'anno'
+    const rifParam = searchParams.get('riferimento')
+    let rif: Date
+    if (rifParam) {
+      const [y, m, d] = rifParam.split('-').map(Number)
+      rif = new Date(y, m - 1, d)
+    } else {
+      rif = new Date()
+    }
+
+    let inizio: Date, fine: Date, rangeLabel: string
+
+    if (periodoParam === 'settimana') {
+      const dow = (rif.getDay() + 6) % 7 // 0=lun
+      inizio = new Date(rif.getFullYear(), rif.getMonth(), rif.getDate() - dow)
+      fine = new Date(inizio.getFullYear(), inizio.getMonth(), inizio.getDate() + 7)
+      const fineDisplay = new Date(fine.getTime() - 86400000)
+      rangeLabel = `${inizio.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} – ${fineDisplay.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}`
+    } else if (periodoParam === 'mese') {
+      inizio = new Date(rif.getFullYear(), rif.getMonth(), 1)
+      fine = new Date(rif.getFullYear(), rif.getMonth() + 1, 1)
+      rangeLabel = inizio.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+    } else {
+      inizio = new Date(rif.getFullYear(), 0, 1)
+      fine = new Date(rif.getFullYear() + 1, 0, 1)
+      rangeLabel = String(rif.getFullYear())
+    }
+
+    const fineBuffer = new Date(fine.getTime() + 8 * 3600000)
+
+    const [dip, turni, timbrature, richieste, anyTimbriLocale] = await Promise.all([
+      prisma.dipendente.findFirst({
+        where: { id: dipId, userId: user.id },
+        select: { id: true, nome: true, ruolo: true },
+      }),
+      prisma.turno.findMany({
+        where: { dipendenteId: dipId, userId: user.id, data: { gte: inizio, lt: fine } },
+        select: { data: true, oraInizio: true, oraFine: true },
+        orderBy: { data: 'asc' },
+      }),
+      prisma.timbratura.findMany({
+        where: { dipendenteId: dipId, timestamp: { gte: inizio, lt: fineBuffer } },
+        select: { tipo: true, timestamp: true },
+        orderBy: { timestamp: 'asc' },
+      }),
+      prisma.richiestaDipendente.findMany({
+        where: {
+          dipendenteId: dipId,
+          OR: [
+            { data: { gte: inizio, lt: fine } },
+            { dataFine: { gte: inizio } },
+          ],
+        },
+        select: { tipo: true, status: true, data: true, dataFine: true, oraInizio: true, oraFine: true },
+        orderBy: { data: 'asc' },
+      }),
+      prisma.timbratura.findFirst({ where: { dipendente: { userId: user.id } }, select: { id: true } }),
+    ])
+
+    if (!dip) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
+
+    const usaTimbri = Boolean(anyTimbriLocale)
+
+    // turniPerGiorno
+    const turniPerGiorno: Record<string, { oraInizio: string; oraFine: string; ore: number }[]> = {}
+    turni.forEach(t => {
+      const k = romeDate(t.data)
+      if (!turniPerGiorno[k]) turniPerGiorno[k] = []
+      turniPerGiorno[k].push({
+        oraInizio: t.oraInizio,
+        oraFine: t.oraFine,
+        ore: Math.round(diffOreMinuti(t.oraInizio, t.oraFine) / 60 * 10) / 10,
+      })
+    })
+
+    // timbraturePerGiorno — pairing globale entrata→uscita
+    const timbraturePerGiorno: Record<string, { oraInizio: string; oraFine: string; ore: number }[]> = {}
+    const sortedTimbr = [...timbrature].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    let ti = 0
+    while (ti < sortedTimbr.length) {
+      if (sortedTimbr[ti].tipo === 'entrata') {
+        const e = sortedTimbr[ti].timestamp
+        const u = sortedTimbr[ti + 1]?.tipo === 'uscita' ? sortedTimbr[ti + 1].timestamp : null
+        const k = romeDate(e)
+        const oraI = romeTime(e)
+        const oraF = u ? romeTime(u) : '—'
+        const ore = u ? Math.round((u.getTime() - e.getTime()) / 360000) / 10 : 0
+        if (!timbraturePerGiorno[k]) timbraturePerGiorno[k] = []
+        timbraturePerGiorno[k].push({ oraInizio: oraI, oraFine: oraF, ore })
+        ti += u ? 2 : 1
+      } else { ti++ }
+    }
+
+    // Ritardi & Straordinari — confronto turni vs timbrature per giorno
+    const ritardi: {
+      data: string
+      turnoInizio: string; turnoFine: string
+      entrataEff: string | null; uscitaEff: string | null
+      ritardoMin: number; straordinarioMin: number
+    }[] = []
+
+    for (const [data, ts] of Object.entries(turniPerGiorno)) {
+      const timbriGiorno = timbraturePerGiorno[data] ?? []
+      ts.forEach((t, i) => {
+        const tb = timbriGiorno[i]
+        const entrataMin = tb ? oraToMin(tb.oraInizio) : NaN
+        const uscitaMin = tb ? oraToMin(tb.oraFine) : NaN
+        const ritardoMin = !isNaN(entrataMin) ? entrataMin - oraToMin(t.oraInizio) : 0
+        const straordinarioMin = !isNaN(uscitaMin) ? uscitaMin - oraToMin(t.oraFine) : 0
+        ritardi.push({
+          data,
+          turnoInizio: t.oraInizio, turnoFine: t.oraFine,
+          entrataEff: tb?.oraInizio ?? null,
+          uscitaEff: tb?.oraFine && tb.oraFine !== '—' ? tb.oraFine : null,
+          ritardoMin,
+          straordinarioMin,
+        })
+      })
+    }
+
+    const pd = `${inizio.getFullYear()}-${String(inizio.getMonth() + 1).padStart(2, '0')}-${String(inizio.getDate()).padStart(2, '0')}`
+    const pf = `${fine.getFullYear()}-${String(fine.getMonth() + 1).padStart(2, '0')}-${String(fine.getDate()).padStart(2, '0')}`
+
+    return NextResponse.json({
+      dip,
+      turniPerGiorno,
+      timbraturePerGiorno,
+      richieste: richieste.map(r => ({
+        tipo: r.tipo, status: r.status,
+        data: r.data ? romeDate(r.data) : null,
+        dataFine: r.dataFine ? romeDate(r.dataFine) : null,
+        oraInizio: r.oraInizio, oraFine: r.oraFine,
+      })),
+      usaTimbri,
+      ritardi,
+      periodo: periodoParam,
+      inizioPeriodo: pd,
+      finePeriodo: pf,
+      rangeLabel,
+    })
+  }
+
+  // ── LIST ENDPOINT ──
+  const meseParam = searchParams.get('mese')
   const ora = new Date()
   const meseStr = meseParam ?? `${ora.getFullYear()}-${String(ora.getMonth() + 1).padStart(2, '0')}`
   const [year, month] = meseStr.split('-').map(Number)
   const inizioMese = new Date(year, month - 1, 1)
   const fineMese = new Date(year, month, 1)
-
-  const fonte = searchParams.get('fonte') ?? 'turni' // 'turni' | 'cartellino'
 
   const [dipendenti, turni, timbrature, richieste] = await Promise.all([
     prisma.dipendente.findMany({
@@ -44,7 +198,6 @@ export async function GET(req: Request) {
     prisma.timbratura.findMany({
       where: {
         dipendente: { userId: user.id },
-        // +8h per catturare uscite notturne a cavallo di mezzanotte
         timestamp: { gte: inizioMese, lt: new Date(Math.min((fineMese <= ora ? fineMese : ora).getTime() + 8 * 3600000, ora.getTime())) },
       },
       select: { dipendenteId: true, tipo: true, timestamp: true },
@@ -58,7 +211,7 @@ export async function GET(req: Request) {
           { dataFine: { gte: inizioMese } },
         ],
       },
-      select: { dipendenteId: true, tipo: true, status: true, data: true, dataFine: true, oraInizio: true, oraFine: true },
+      select: { dipendenteId: true, tipo: true, status: true, data: true, dataFine: true },
     }),
   ])
 
@@ -69,12 +222,9 @@ export async function GET(req: Request) {
     const mieTimbrature = timbrature.filter(t => t.dipendenteId === dip.id)
     const mieRichieste = richieste.filter(r => r.dipendenteId === dip.id)
 
-    let oreLavorate: number
-    let giorniLavorati: number
-    let giornoTop: string | null
+    let oreLavorate: number, giorniLavorati: number, giornoTop: string | null
 
     if (fonte === 'cartellino') {
-      // Pairing globale entrata→uscita (gestisce cross-mezzanotte)
       const sorted = [...mieTimbrature].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
       const coppie: { entrata: Date; uscita: Date | null; giorno: string }[] = []
       let ci = 0
@@ -95,32 +245,26 @@ export async function GET(req: Request) {
       })
       oreLavorate = Math.round(minutiTotali / 60 * 10) / 10
       giorniLavorati = giorniSet.size
-      const giornoTopIdx = perDow.indexOf(Math.max(...perDow))
-      giornoTop = giorniLavorati > 0 ? GIORNI[giornoTopIdx] : null
+      const idx = perDow.indexOf(Math.max(...perDow))
+      giornoTop = giorniLavorati > 0 ? GIORNI[idx] : null
     } else {
-      const minutiTotali = mieiTurni.reduce((s, t) => s + diffOreMinuti(t.oraInizio, t.oraFine), 0)
-      oreLavorate = Math.round(minutiTotali / 60 * 10) / 10
+      const min = mieiTurni.reduce((s, t) => s + diffOreMinuti(t.oraInizio, t.oraFine), 0)
+      oreLavorate = Math.round(min / 60 * 10) / 10
       giorniLavorati = new Set(mieiTurni.map(t => romeDate(t.data))).size
       const perGiorno = [0, 0, 0, 0, 0, 0, 0]
       mieiTurni.forEach(t => perGiorno[t.data.getDay()]++)
-      const giornoTopIdx = perGiorno.indexOf(Math.max(...perGiorno))
-      giornoTop = giorniLavorati > 0 ? GIORNI[giornoTopIdx] : null
+      const idx = perGiorno.indexOf(Math.max(...perGiorno))
+      giornoTop = giorniLavorati > 0 ? GIORNI[idx] : null
     }
 
-    // Richieste per tipo (solo del mese)
-    const richiesteAssenza = mieRichieste.filter(r => tipiAssenza.includes(r.tipo))
-    const ferie = richiesteAssenza.filter(r => r.tipo === 'ferie')
-    const malattie = richiesteAssenza.filter(r => r.tipo === 'malattia')
-    const permessi = richiesteAssenza.filter(r => r.tipo === 'permesso')
+    const ferie = mieRichieste.filter(r => r.tipo === 'ferie')
+    const malattie = mieRichieste.filter(r => r.tipo === 'malattia')
+    const permessi = mieRichieste.filter(r => r.tipo === 'permesso')
     const preferenze = mieRichieste.filter(r => r.tipo === 'preferenza_orario')
 
     return {
-      id: dip.id,
-      nome: dip.nome,
-      ruolo: dip.ruolo,
-      oreLavorate,
-      giorniLavorati,
-      giornoTop,
+      id: dip.id, nome: dip.nome, ruolo: dip.ruolo,
+      oreLavorate, giorniLavorati, giornoTop,
       ferie: { totale: ferie.length, approvate: ferie.filter(r => r.status === 'approvata').length },
       malattie: { totale: malattie.length, approvate: malattie.filter(r => r.status === 'approvata').length },
       permessi: { totale: permessi.length, approvati: permessi.filter(r => r.status === 'approvata').length },
@@ -128,76 +272,12 @@ export async function GET(req: Request) {
     }
   })
 
-  // Lista mesi disponibili: tutti i mesi passati dell'anno corrente
-  const mesiDisponibili = []
+  const mesiDisponibili: string[] = []
   for (let i = 0; i <= ora.getMonth(); i++) {
     const d = new Date(ora.getFullYear(), i, 1)
     mesiDisponibili.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
-  mesiDisponibili.reverse() // più recente prima
-
-  // Dettaglio singolo dipendente
-  const dipId = searchParams.get('dipendenteId')
-  if (dipId) {
-    const dip = staff.find(d => d.id === dipId)
-    if (!dip) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
-
-    const mieiTurni = turni.filter(t => t.dipendenteId === dipId)
-    const mieTimbratureDip = timbrature.filter(t => t.dipendenteId === dipId)
-    const mieRichieste = richieste.filter(r => r.dipendenteId === dipId)
-
-    // Turni/cartellino per giorno (per calendario)
-    const turniPerGiorno: Record<string, { oraInizio: string; oraFine: string; ore: number }[]> = {}
-
-    if (fonte === 'cartellino') {
-      // Pairing globale entrata→uscita (gestisce cross-mezzanotte)
-      const sortedDip = [...mieTimbratureDip].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
-      let di = 0
-      while (di < sortedDip.length) {
-        if (sortedDip[di].tipo === 'entrata') {
-          const e = sortedDip[di].timestamp
-          const u = sortedDip[di + 1]?.tipo === 'uscita' ? sortedDip[di + 1].timestamp : null
-          const g = romeDate(e)
-          const oraI = e.toTimeString().slice(0, 5)
-          const oraF = u ? u.toTimeString().slice(0, 5) : '—'
-          const ore = u ? Math.round((u.getTime() - e.getTime()) / 360000) / 10 : 0
-          if (!turniPerGiorno[g]) turniPerGiorno[g] = []
-          turniPerGiorno[g].push({ oraInizio: oraI, oraFine: oraF, ore })
-          di += u ? 2 : 1
-        } else { di++ }
-      }
-    } else {
-      mieiTurni.forEach(t => {
-        const k = romeDate(t.data)
-        if (!turniPerGiorno[k]) turniPerGiorno[k] = []
-        turniPerGiorno[k].push({ oraInizio: t.oraInizio, oraFine: t.oraFine, ore: Math.round(diffOreMinuti(t.oraInizio, t.oraFine) / 60 * 10) / 10 })
-      })
-    }
-
-    // Ore per giorno settimana
-    const orePerDow = [0, 0, 0, 0, 0, 0, 0]
-    if (fonte === 'cartellino') {
-      Object.entries(turniPerGiorno).forEach(([g, ts]) => {
-        const dow = new Date(g + 'T12:00:00').getDay()
-        orePerDow[dow] += ts.reduce((s, t) => s + t.ore, 0)
-      })
-    } else {
-      mieiTurni.forEach(t => { orePerDow[t.data.getDay()] += diffOreMinuti(t.oraInizio, t.oraFine) / 60 })
-    }
-    const orePerDowRound = orePerDow.map(v => Math.round(v * 10) / 10)
-
-    // Lista richieste con dettaglio
-    const richiesteDettaglio = mieRichieste.map(r => ({
-      tipo: r.tipo,
-      status: r.status,
-      data: r.data,
-      dataFine: r.dataFine,
-      oraInizio: r.oraInizio,
-      oraFine: r.oraFine,
-    }))
-
-    return NextResponse.json({ dip, turniPerGiorno, orePerDow: orePerDowRound, richieste: richiesteDettaglio, mese: meseStr })
-  }
+  mesiDisponibili.reverse()
 
   return NextResponse.json({ staff, mese: meseStr, mesiDisponibili })
 }
