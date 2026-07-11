@@ -112,6 +112,11 @@ export default function StaffPage() {
   const [cellModal, setCellModal] = useState<{ dipendenteId: string; nome: string; data: string; dataLabel: string; oraInizio: string; oraFine: string } | null>(null)
   const [savingCell, setSavingCell] = useState(false)
 
+  // Modifica turno
+  const [editTurno, setEditTurno] = useState<Turno | null>(null)
+  const [editForm, setEditForm] = useState({ oraInizio: '09:00', oraFine: '17:00', ruolo: '', note: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
+
   // Fabbisogno (caricato dalle impostazioni, usato come base per la settimana)
   const [fabbisogno, setFabbisogno] = useState<Requisito[]>([])
   const fabbisognoLoaded = useRef(false)
@@ -294,6 +299,25 @@ export default function StaffPage() {
   async function eliminaTurno(id: string) {
     await fetch(`/api/turni/${id}`, { method: 'DELETE', credentials: 'include' })
     fetchAll()
+  }
+
+  async function modificaTurno() {
+    if (!editTurno) return
+    setSavingEdit(true)
+    await fetch(`/api/turni/${editTurno.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editForm),
+    })
+    setSavingEdit(false)
+    setEditTurno(null)
+    setTurnoDettaglio(null)
+    fetchAll(); fetchTurniMese()
+  }
+
+  function apriEditTurno(t: Turno) {
+    setEditForm({ oraInizio: t.oraInizio, oraFine: t.oraFine, ruolo: t.ruolo ?? '', note: t.note ?? '' })
+    setEditTurno(t)
   }
 
   async function salvaDaCella() {
@@ -570,7 +594,7 @@ export default function StaffPage() {
                           const warnTitle = assenzaApp ? `${assenza!.tipo.replace('_',' ')} approvata` : noDisp ? 'Non disponibile questo giorno' : fuoriOrario ? `Disponibile ${dispGiorno?.oraInizio}–${dispGiorno?.oraFine}` : undefined
                           return (
                             <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${assenzaApp ? 'bg-red-100 text-red-700' : warnTurno ? 'bg-amber-100 text-amber-800' : colorMap[dip.id]} relative`}
-                              onClick={e => e.stopPropagation()}
+                              onClick={e => { e.stopPropagation(); apriEditTurno(t) }}
                               title={warnTitle}>
                               <p className="font-semibold">{warnTurno ? ' ' : ''}{t.oraInizio}–{t.oraFine}</p>
                               {t.ruolo && <p className="opacity-75 truncate">{t.ruolo}</p>}
@@ -664,6 +688,8 @@ export default function StaffPage() {
                   {turnoDettaglio.ruolo && <p className="text-ink-navy/50 text-sm mt-0.5">{turnoDettaglio.ruolo}</p>}
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={() => apriEditTurno(turnoDettaglio)}
+                    className="text-xs px-2 py-1 bg-electric-blue/10 text-electric-blue rounded-lg hover:bg-electric-blue/20 font-medium">Modifica</button>
                   <button onClick={() => eliminaTurno(turnoDettaglio.id).then(() => setTurnoDettaglio(null))}
                     className="text-xs px-2 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium">Elimina</button>
                   <button onClick={() => setTurnoDettaglio(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-lg">✕</button>
@@ -1400,6 +1426,58 @@ export default function StaffPage() {
               <button onClick={() => setQrDip(null)}
                 className="flex-1 py-2 border border-ink-navy/10 text-ink-navy/50 text-sm font-semibold rounded-xl hover:bg-mist transition-colors">
                 Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal modifica turno */}
+      {editTurno && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-navy/40" onClick={() => setEditTurno(null)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl p-6 w-full sm:max-w-sm mx-0 sm:mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="font-semibold text-ink-navy">{editTurno.dipendente.nome}</p>
+                <p className="text-xs text-ink-navy/50 mt-0.5">
+                  {new Date(editTurno.data).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+              </div>
+              <button onClick={() => setEditTurno(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
+            </div>
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Inizio</label>
+                  <input type="time" value={editForm.oraInizio}
+                    onChange={e => setEditForm(f => ({ ...f, oraInizio: e.target.value }))}
+                    className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Fine</label>
+                  <input type="time" value={editForm.oraFine}
+                    onChange={e => setEditForm(f => ({ ...f, oraFine: e.target.value }))}
+                    className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Ruolo</label>
+                <input type="text" value={editForm.ruolo} placeholder="es. Sala, Cucina…"
+                  onChange={e => setEditForm(f => ({ ...f, ruolo: e.target.value }))}
+                  className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Note</label>
+                <input type="text" value={editForm.note} placeholder="Note opzionali"
+                  onChange={e => setEditForm(f => ({ ...f, note: e.target.value }))}
+                  className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditTurno(null)} className="flex-1 py-2.5 rounded-xl border border-ink-navy/10 text-ink-navy/60 text-sm font-medium hover:bg-mist">Annulla</button>
+              <button onClick={modificaTurno} disabled={savingEdit}
+                className="flex-1 py-2.5 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 disabled:opacity-50">
+                {savingEdit ? 'Salvo…' : 'Salva'}
               </button>
             </div>
           </div>

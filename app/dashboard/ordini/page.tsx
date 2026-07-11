@@ -241,7 +241,7 @@ export default function OrdiniPage() {
 
       {loading ? (
         <p className="text-ink-navy/35 text-sm">Caricamento...</p>
-      ) : !hasTavoloOrdini && !hasCalendarioOrdini ? (
+      ) : !hasTavoloOrdini && !hasCalendarioOrdini && ordiniConsegnati.length === 0 ? (
         <div className="bg-white rounded-2xl border border-ink-navy/10 p-20 text-center shadow-sm">
           <div className="w-12 h-12 rounded-xl bg-electric-blue/10 text-electric-blue flex items-center justify-center p-3 mx-auto mb-4">
             <IconReceipt />
