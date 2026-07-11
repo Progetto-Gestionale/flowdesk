@@ -26,6 +26,24 @@ function oraToMin(ora: string): number {
   return h * 60 + m
 }
 
+function intervalDiff(a: [number, number][], b: [number, number][]): number {
+  let total = 0
+  for (const [as, ae] of a) {
+    let gaps: [number, number][] = [[as, ae]]
+    for (const [bs, be] of b) {
+      gaps = gaps.flatMap(([gs, ge]): [number, number][] => {
+        if (bs >= ge || be <= gs) return [[gs, ge]]
+        const r: [number, number][] = []
+        if (gs < bs) r.push([gs, bs])
+        if (be < ge) r.push([be, ge])
+        return r
+      })
+    }
+    total += gaps.reduce((s, [gs, ge]) => s + ge - gs, 0)
+  }
+  return total
+}
+
 export async function GET(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
@@ -129,30 +147,35 @@ export async function GET(req: Request) {
       } else { ti++ }
     }
 
-    // Ritardi & Straordinari — confronto turni vs timbrature per giorno
+    // Ritardi & Straordinari — confronto turni vs timbrature per giorno (interval-based)
     const ritardi: {
       data: string
-      turnoInizio: string; turnoFine: string
-      entrataEff: string | null; uscitaEff: string | null
-      ritardoMin: number; straordinarioMin: number
+      turni: { inizio: string; fine: string }[]
+      timbri: { inizio: string; fine: string }[]
+      ritardoMin: number
+      straordinarioMin: number
+      hasTimbro: boolean
     }[] = []
 
     for (const [data, ts] of Object.entries(turniPerGiorno)) {
       const timbriGiorno = timbraturePerGiorno[data] ?? []
-      ts.forEach((t, i) => {
-        const tb = timbriGiorno[i]
-        const entrataMin = tb ? oraToMin(tb.oraInizio) : NaN
-        const uscitaMin = tb ? oraToMin(tb.oraFine) : NaN
-        const ritardoMin = !isNaN(entrataMin) ? entrataMin - oraToMin(t.oraInizio) : 0
-        const straordinarioMin = !isNaN(uscitaMin) ? uscitaMin - oraToMin(t.oraFine) : 0
-        ritardi.push({
-          data,
-          turnoInizio: t.oraInizio, turnoFine: t.oraFine,
-          entrataEff: tb?.oraInizio ?? null,
-          uscitaEff: tb?.oraFine && tb.oraFine !== '—' ? tb.oraFine : null,
-          ritardoMin,
-          straordinarioMin,
-        })
+      const hasTimbro = timbriGiorno.length > 0
+      const turniInv: [number, number][] = ts
+        .map(t => [oraToMin(t.oraInizio), oraToMin(t.oraFine)] as [number, number])
+        .filter(([s, e]) => !isNaN(s) && !isNaN(e))
+      const timbriInv: [number, number][] = timbriGiorno
+        .filter(tb => tb.oraFine !== '—')
+        .map(tb => [oraToMin(tb.oraInizio), oraToMin(tb.oraFine)] as [number, number])
+        .filter(([s, e]) => !isNaN(s) && !isNaN(e))
+      const ritardoMin = hasTimbro ? intervalDiff(turniInv, timbriInv) : 0
+      const straordinarioMin = intervalDiff(timbriInv, turniInv)
+      ritardi.push({
+        data,
+        turni: ts.map(t => ({ inizio: t.oraInizio, fine: t.oraFine })),
+        timbri: timbriGiorno.map(tb => ({ inizio: tb.oraInizio, fine: tb.oraFine })),
+        ritardoMin,
+        straordinarioMin,
+        hasTimbro,
       })
     }
 
@@ -186,26 +209,28 @@ export async function GET(req: Request) {
   const inizioMese = new Date(year, month - 1, 1)
   const fineMese = new Date(year, month, 1)
 
-  const [dipendenti, turni, timbrature, richieste] = await Promise.all([
-    prisma.dipendente.findMany({
-      where: { userId: user.id },
-      select: { id: true, nome: true, ruolo: true },
-    }),
+  const dipendenti = await prisma.dipendente.findMany({
+    where: { userId: user.id },
+    select: { id: true, nome: true, ruolo: true },
+  })
+  const dipIds = dipendenti.map(d => d.id)
+
+  const [turni, timbrature, richieste] = await Promise.all([
     prisma.turno.findMany({
-      where: { userId: user.id, data: { gte: inizioMese, lt: fineMese <= ora ? fineMese : ora } },
+      where: { userId: user.id, data: { gte: inizioMese, lt: new Date(Math.min(fineMese.getTime(), ora.getTime())) } },
       select: { dipendenteId: true, data: true, oraInizio: true, oraFine: true },
     }),
     prisma.timbratura.findMany({
       where: {
-        dipendente: { userId: user.id },
-        timestamp: { gte: inizioMese, lt: new Date(Math.min((fineMese <= ora ? fineMese : ora).getTime() + 8 * 3600000, ora.getTime())) },
+        dipendenteId: { in: dipIds },
+        timestamp: { gte: inizioMese, lt: new Date(Math.min(fineMese.getTime() + 8 * 3600000, ora.getTime())) },
       },
       select: { dipendenteId: true, tipo: true, timestamp: true },
       orderBy: { timestamp: 'asc' },
     }),
     prisma.richiestaDipendente.findMany({
       where: {
-        dipendente: { userId: user.id },
+        dipendenteId: { in: dipIds },
         OR: [
           { data: { gte: inizioMese, lt: fineMese } },
           { dataFine: { gte: inizioMese } },

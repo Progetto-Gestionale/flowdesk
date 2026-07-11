@@ -32,6 +32,8 @@ function scaricaPdf(
   perGiorno: PerGiorno,
   inizioPeriodo: string,
   ritardi: RitardoItem[],
+  richieste: RichiestaDettaglio[],
+  opzioni: { includiRitardi: boolean; includiRichieste: boolean },
 ) {
   const GIORNI_ITA = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
 
@@ -60,20 +62,40 @@ function scaricaPdf(
 
   const totaleOre = Math.round(righe.reduce((s, r) => s + r.ore, 0) * 10) / 10
 
-  const ritardiRows = ritardi.filter(r => r.ritardoMin > 2 || r.straordinarioMin > 5)
-  const ritardiHtml = ritardiRows.length > 0 ? `
-    <h2 style="font-size:15px;font-weight:700;margin:28px 0 10px">Ritardi & Straordinari</h2>
+  const ritardiRows = ritardi.filter(r => r.hasTimbro && (r.ritardoMin > 2 || r.straordinarioMin > 5))
+  const ritardiHtml = opzioni.includiRitardi && ritardiRows.length > 0 ? `
+    <h2 style="font-size:15px;font-weight:700;margin:28px 0 10px">Ritardi &amp; Straordinari</h2>
     <table>
-      <thead><tr><th>Data</th><th>Turno</th><th>Entrata eff.</th><th>Uscita eff.</th><th class="ore">Ritardo</th><th class="ore">Straordinario</th></tr></thead>
+      <thead><tr><th>Data</th><th>Turni</th><th>Timbri</th><th class="ore">Ritardo</th><th class="ore">Straordinario</th></tr></thead>
       <tbody>
         ${ritardiRows.map(r => `
           <tr>
             <td>${fmtData(r.data)}</td>
-            <td>${r.turnoInizio}–${r.turnoFine}</td>
-            <td>${r.entrataEff ?? '—'}</td>
-            <td>${r.uscitaEff ?? '—'}</td>
-            <td class="ore" style="color:${r.ritardoMin > 2 ? '#dc2626' : '#16a34a'}">${r.ritardoMin !== 0 ? minToLabel(r.ritardoMin) : '—'}</td>
-            <td class="ore" style="color:${r.straordinarioMin > 0 ? '#2563eb' : '#6b7280'}">${r.straordinarioMin !== 0 ? minToLabel(r.straordinarioMin) : '—'}</td>
+            <td>${r.turni.map(t => t.inizio + '–' + t.fine).join(', ')}</td>
+            <td>${r.timbri.map(t => t.inizio + '–' + t.fine).join(', ') || '—'}</td>
+            <td class="ore" style="color:${r.ritardoMin > 2 ? '#dc2626' : '#16a34a'}">${r.ritardoMin > 2 ? minToLabel(r.ritardoMin) : '—'}</td>
+            <td class="ore" style="color:${r.straordinarioMin > 5 ? '#2563eb' : '#6b7280'}">${r.straordinarioMin > 5 ? minToLabel(r.straordinarioMin) : '—'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>` : ''
+
+  const tipiLabel: Record<string, string> = {
+    ferie: 'Ferie', malattia: 'Malattia', permesso: 'Permesso', assenza: 'Assenza',
+  }
+  const statusLabel: Record<string, string> = {
+    approvata: 'Approvata', in_attesa: 'In attesa', rifiutata: 'Rifiutata',
+  }
+  const richiesteFiltered = richieste.filter(r => ['ferie','malattia','permesso','assenza'].includes(r.tipo))
+  const richiesteHtml = opzioni.includiRichieste && richiesteFiltered.length > 0 ? `
+    <h2 style="font-size:15px;font-weight:700;margin:28px 0 10px">Assenze &amp; Richieste</h2>
+    <table>
+      <thead><tr><th>Tipo</th><th>Data</th><th>Stato</th></tr></thead>
+      <tbody>
+        ${richiesteFiltered.map(r => `
+          <tr>
+            <td>${tipiLabel[r.tipo] ?? r.tipo}</td>
+            <td>${fmtData(r.data)}${r.dataFine && r.dataFine !== r.data ? ' → ' + fmtData(r.dataFine) : ''}${r.oraInizio ? ' · ' + r.oraInizio + '–' + r.oraFine : ''}</td>
+            <td>${statusLabel[r.status] ?? r.status}</td>
           </tr>`).join('')}
       </tbody>
     </table>` : ''
@@ -85,6 +107,7 @@ function scaricaPdf(
   body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 32px; }
   h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
   .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 28px 0 10px; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
   th { background: #4f46e5; color: #fff; text-align: left; padding: 9px 12px; font-size: 12px; letter-spacing: .04em; }
   td { padding: 9px 12px; border-bottom: 1px solid #e5e7eb; }
@@ -108,6 +131,7 @@ function scaricaPdf(
   </tbody>
 </table>
 ${ritardiHtml}
+${richiesteHtml}
 <div style="margin-top:24px;font-size:11px;color:#aaa;">Generato il ${new Date().toLocaleDateString('it-IT')}</div>
 </body></html>`
 
@@ -147,9 +171,12 @@ interface Analytics {
 }
 
 interface RitardoItem {
-  data: string; turnoInizio: string; turnoFine: string
-  entrataEff: string | null; uscitaEff: string | null
-  ritardoMin: number; straordinarioMin: number
+  data: string
+  turni: { inizio: string; fine: string }[]
+  timbri: { inizio: string; fine: string }[]
+  ritardoMin: number
+  straordinarioMin: number
+  hasTimbro: boolean
 }
 
 interface RichiestaDettaglio {
@@ -306,12 +333,15 @@ export default function AnalyticsPage() {
 
   // Modal sezione dettaglio
   const [modalSezione, setModalSezione] = useState<'turni' | 'ferie' | 'malattia' | 'permesso' | null>(null)
+  const [modalKpi, setModalKpi] = useState<'ritardi' | 'straordinari' | null>(null)
 
   // Modal PDF
   const [pdfModal, setPdfModal] = useState(false)
   const [pdfAnno, setPdfAnno] = useState(new Date().getFullYear())
   const [pdfMese, setPdfMese] = useState(new Date().getMonth()) // 0-indexed
   const [pdfFonte, setPdfFonte] = useState<'turni' | 'cartellino'>('turni')
+  const [pdfIncludiRitardi, setPdfIncludiRitardi] = useState(true)
+  const [pdfIncludiRichieste, setPdfIncludiRichieste] = useState(true)
   const [pdfLoading, setPdfLoading] = useState(false)
 
   async function scaricaPdfConScelta() {
@@ -322,7 +352,7 @@ export default function AnalyticsPage() {
       const res = await fetch(`/api/analytics/staff?dipendenteId=${dettaglioDipId}&periodo=mese&riferimento=${rifStr}`, { credentials: 'include' })
       const d: DettaglioDip = await res.json()
       const pg = pdfFonte === 'cartellino' ? d.timbraturePerGiorno : d.turniPerGiorno
-      scaricaPdf(dettaglio.dip.nome, dettaglio.dip.ruolo, d.rangeLabel, 'mese', pg, d.inizioPeriodo, d.ritardi)
+      scaricaPdf(dettaglio.dip.nome, dettaglio.dip.ruolo, d.rangeLabel, 'mese', pg, d.inizioPeriodo, d.ritardi, d.richieste, { includiRitardi: pdfIncludiRitardi, includiRichieste: pdfIncludiRichieste })
       setPdfModal(false)
     } finally {
       setPdfLoading(false)
@@ -399,6 +429,14 @@ export default function AnalyticsPage() {
   }, [fonteStaff, meseSel])
 
   useEffect(() => {
+    if (tabAnalytics !== 'personale' || !meseSel) return
+    setLoadingStaff(true)
+    fetch(`/api/analytics/staff?mese=${meseSel}&fonte=${fonteStaff}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setStaff(d.staff ?? []); setLoadingStaff(false) })
+  }, [tabAnalytics]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (tabAnalytics !== 'ordini' || preventivi.length > 0) return
     setLoadingOrdini(true)
     fetch('/api/preventivi', { credentials: 'include' })
@@ -453,10 +491,19 @@ export default function AnalyticsPage() {
 
   const giorniLavoratiDettaglio = Object.keys(perGiornoDettaglio).length
 
-  const ritardiCount = dettaglio ? dettaglio.ritardi.filter(r => r.ritardoMin > 2).length : 0
-  const ritardiMin = dettaglio ? dettaglio.ritardi.filter(r => r.ritardoMin > 2).reduce((s, r) => s + r.ritardoMin, 0) : 0
-  const straordCount = dettaglio ? dettaglio.ritardi.filter(r => r.straordinarioMin > 5).length : 0
-  const straordMin = dettaglio ? dettaglio.ritardi.filter(r => r.straordinarioMin > 5).reduce((s, r) => s + r.straordinarioMin, 0) : 0
+  const ritardiConTimbro = dettaglio ? dettaglio.ritardi.filter(r => r.hasTimbro) : []
+  const ritardiMin = ritardiConTimbro.reduce((s, r) => s + r.ritardoMin, 0)
+  const straordMin = ritardiConTimbro.reduce((s, r) => s + r.straordinarioMin, 0)
+  const ritardiCount = ritardiConTimbro.filter(r => r.ritardoMin > 2).length
+  const straordCount = ritardiConTimbro.filter(r => r.straordinarioMin > 5).length
+  // aggregazione per mese (per vista anno nel modal)
+  const ritardiPerMese: Record<string, { ritardoMin: number; straordinarioMin: number }> = {}
+  ritardiConTimbro.forEach(r => {
+    const mm = r.data.substring(0, 7)
+    if (!ritardiPerMese[mm]) ritardiPerMese[mm] = { ritardoMin: 0, straordinarioMin: 0 }
+    ritardiPerMese[mm].ritardoMin += r.ritardoMin
+    ritardiPerMese[mm].straordinarioMin += r.straordinarioMin
+  })
 
   const richiesteDettaglio = dettaglio?.richieste ?? []
   const ferieR = richiesteDettaglio.filter(r => r.tipo === 'ferie')
@@ -882,9 +929,7 @@ export default function AnalyticsPage() {
 
               const maxOre = Math.max(...barre.map(b => b.ore), 1)
 
-              // barre ritardi: una barra per ogni turno (ritardo vs straordinario)
-              const ritardiConTimbro = dettaglio.ritardi.filter(r => r.entrataEff !== null)
-              const maxRitMin = Math.max(...ritardiConTimbro.map(r => Math.abs(r.ritardoMin)), ...ritardiConTimbro.map(r => Math.abs(r.straordinarioMin)), 1)
+              // (ritardiConTimbro e maxRitMin calcolati fuori dal render)
 
               return (
                 <div className="space-y-6">
@@ -950,18 +995,32 @@ export default function AnalyticsPage() {
 
                   {/* ── KPI hero row ── */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    {[
-                      { label: 'Giorni lavorati', val: giorniLavoratiDettaglio, unit: 'giorni', color: 'text-ink-navy', bg: 'bg-mist' },
-                      { label: 'Ore totali', val: oreLavorateDettaglio, unit: 'ore', color: 'text-electric-blue', bg: 'bg-electric-blue/8' },
-                      { label: 'Ritardi', val: ritardiCount, unit: ritardiCount === 1 ? 'ritardo' : 'ritardi', color: ritardiCount > 0 ? 'text-red-500' : 'text-green-500', bg: ritardiCount > 0 ? 'bg-red-50' : 'bg-green-50' },
-                      { label: 'Straordinari', val: straordCount, unit: straordCount === 1 ? 'turno' : 'turni', color: straordCount > 0 ? 'text-electric-blue' : 'text-ink-navy/25', bg: 'bg-electric-blue/8' },
-                    ].map(k => (
-                      <div key={k.label} className={`${k.bg} rounded-2xl p-4`}>
-                        <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wide">{k.label}</p>
-                        <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.val}</p>
-                        <p className="text-xs text-ink-navy/35 mt-0.5">{k.unit}</p>
-                      </div>
-                    ))}
+                    <div className="bg-mist rounded-2xl p-4">
+                      <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wide">Giorni lavorati</p>
+                      <p className="text-3xl font-bold mt-1 text-ink-navy">{giorniLavoratiDettaglio}</p>
+                      <p className="text-xs text-ink-navy/35 mt-0.5">giorni</p>
+                    </div>
+                    <div className="bg-electric-blue/8 rounded-2xl p-4">
+                      <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wide">Ore totali</p>
+                      <p className="text-3xl font-bold mt-1 text-electric-blue">{oreLavorateDettaglio}</p>
+                      <p className="text-xs text-ink-navy/35 mt-0.5">ore</p>
+                    </div>
+                    <button onClick={() => dettaglio.usaTimbri && ritardiMin > 0 && setModalKpi('ritardi')}
+                      className={`rounded-2xl p-4 text-left transition-colors ${ritardiMin > 0 ? 'bg-red-50 hover:bg-red-100 cursor-pointer' : 'bg-green-50 cursor-default'}`}>
+                      <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wide">Ritardi</p>
+                      <p className={`text-3xl font-bold mt-1 ${ritardiMin > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                        {ritardiMin > 0 ? minToLabel(ritardiMin) : '0'}
+                      </p>
+                      <p className="text-xs text-ink-navy/35 mt-0.5">{ritardiCount > 0 ? `${ritardiCount} giorni · tocca per dettaglio` : 'nessun ritardo'}</p>
+                    </button>
+                    <button onClick={() => dettaglio.usaTimbri && straordMin > 0 && setModalKpi('straordinari')}
+                      className={`rounded-2xl p-4 text-left transition-colors ${straordMin > 0 ? 'bg-electric-blue/8 hover:bg-electric-blue/15 cursor-pointer' : 'bg-mist cursor-default'}`}>
+                      <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wide">Straordinari</p>
+                      <p className={`text-3xl font-bold mt-1 ${straordMin > 0 ? 'text-electric-blue' : 'text-ink-navy/25'}`}>
+                        {straordMin > 0 ? minToLabel(straordMin) : '0'}
+                      </p>
+                      <p className="text-xs text-ink-navy/35 mt-0.5">{straordCount > 0 ? `${straordCount} giorni · tocca per dettaglio` : 'nessuno straordinario'}</p>
+                    </button>
                   </div>
 
                   {/* ── Grafico ore lavorate ── */}
@@ -1002,66 +1061,49 @@ export default function AnalyticsPage() {
                   {/* ── Layout 2 colonne: ritardi | assenze ── */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-                    {/* Grafico ritardi & straordinari */}
+                    {/* Ritardi & Straordinari — mini preview, dettaglio nei KPI cliccabili */}
                     <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5">
                       <p className="text-sm font-semibold text-ink-navy">Ritardi & Straordinari</p>
-                      <p className="text-xs text-ink-navy/40 mt-0.5">Minuti rispetto all&apos;orario del turno</p>
-
+                      <p className="text-xs text-ink-navy/40 mt-0.5">Orario turno vs timbro effettivo</p>
                       {!dettaglio.usaTimbri ? (
                         <div className="mt-4 flex items-center gap-2 bg-mist rounded-xl p-3">
                           <svg className="w-4 h-4 text-ink-navy/30 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                           <p className="text-xs text-ink-navy/50">Attiva il QR timbratura per calcolare ritardi e straordinari.</p>
                         </div>
                       ) : ritardiConTimbro.length === 0 ? (
-                        <div className="mt-4 text-center py-6">
-                          <p className="text-ink-navy/25 text-sm">Nessun timbro nel periodo</p>
-                        </div>
+                        <p className="mt-4 text-center py-6 text-ink-navy/25 text-sm">Nessun timbro nel periodo</p>
                       ) : (
-                        <>
-                          {/* Barre ritardi: asse centrale, sx=ritardo, dx=straordinario */}
-                          <div className="mt-5 space-y-2">
-                            {ritardiConTimbro.slice(0, 10).map((r, i) => {
-                              const ritH = Math.round((Math.min(Math.abs(r.ritardoMin), 60) / 60) * 80)
-                              const strH = Math.round((Math.min(Math.abs(r.straordinarioMin), 60) / 60) * 80)
-                              const isRit = r.ritardoMin > 2
-                              const isStr = r.straordinarioMin > 5
-                              return (
-                                <div key={i} className="flex items-center gap-2 text-xs">
-                                  <span className="w-10 text-right text-ink-navy/40 flex-shrink-0">{fmtData(r.data)}</span>
-                                  {/* barra ritardo (cresce a sinistra) */}
-                                  <div className="flex-1 flex justify-end">
-                                    <div className={`h-5 rounded-l-md flex items-center justify-end pr-1 transition-all ${isRit ? 'bg-red-100' : 'bg-ink-navy/5'}`}
-                                      style={{ width: `${Math.max(ritH, isRit ? 8 : 4)}%` }}>
-                                      {isRit && r.ritardoMin > 10 && <span className="text-[10px] font-bold text-red-500">{r.ritardoMin}m</span>}
-                                    </div>
-                                  </div>
-                                  {/* punto centrale */}
-                                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isRit ? 'bg-red-400' : isStr ? 'bg-electric-blue' : 'bg-green-400'}`} />
-                                  {/* barra straordinario (cresce a destra) */}
-                                  <div className="flex-1 flex justify-start">
-                                    <div className={`h-5 rounded-r-md flex items-center pl-1 transition-all ${isStr ? 'bg-electric-blue/20' : 'bg-ink-navy/5'}`}
-                                      style={{ width: `${Math.max(strH, isStr ? 8 : 4)}%` }}>
-                                      {isStr && r.straordinarioMin > 10 && <span className="text-[10px] font-bold text-electric-blue">{r.straordinarioMin}m</span>}
-                                    </div>
+                        <div className="mt-4 space-y-2">
+                          {ritardiConTimbro.slice(0, 7).map((r, i) => {
+                            const isRit = r.ritardoMin > 2
+                            const isStr = r.straordinarioMin > 5
+                            const maxMin = Math.max(...ritardiConTimbro.map(x => Math.max(x.ritardoMin, x.straordinarioMin)), 1)
+                            const ritPct = Math.round((r.ritardoMin / maxMin) * 100)
+                            const strPct = Math.round((r.straordinarioMin / maxMin) * 100)
+                            return (
+                              <div key={i} className="flex items-center gap-2 text-xs">
+                                <span className="w-12 text-right text-ink-navy/40 flex-shrink-0 text-[10px]">{fmtData(r.data)}</span>
+                                <div className="flex-1 flex justify-end">
+                                  <div className={`h-4 rounded-l flex items-center justify-end px-1 ${isRit ? 'bg-red-100' : 'bg-ink-navy/5'}`} style={{ width: `${Math.max(ritPct, 4)}%` }}>
+                                    {isRit && r.ritardoMin >= 15 && <span className="text-[9px] font-bold text-red-500">{minToLabel(r.ritardoMin)}</span>}
                                   </div>
                                 </div>
-                              )
-                            })}
-                            {ritardiConTimbro.length > 10 && (
-                              <p className="text-xs text-center text-ink-navy/30 pt-1">+{ritardiConTimbro.length - 10} turni non mostrati</p>
-                            )}
-                          </div>
-                          <div className="flex justify-between mt-3 text-[10px] text-ink-navy/35 font-medium">
+                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isRit ? 'bg-red-400' : isStr ? 'bg-electric-blue' : 'bg-green-400'}`} />
+                                <div className="flex-1 flex justify-start">
+                                  <div className={`h-4 rounded-r flex items-center px-1 ${isStr ? 'bg-electric-blue/20' : 'bg-ink-navy/5'}`} style={{ width: `${Math.max(strPct, 4)}%` }}>
+                                    {isStr && r.straordinarioMin >= 15 && <span className="text-[9px] font-bold text-electric-blue">{minToLabel(r.straordinarioMin)}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                          {ritardiConTimbro.length > 7 && <p className="text-[10px] text-center text-ink-navy/30">+{ritardiConTimbro.length - 7} altri giorni</p>}
+                          <div className="flex justify-between pt-1 text-[10px] text-ink-navy/35 font-medium">
                             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-200 inline-block"/>Ritardo</span>
                             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-electric-blue/30 inline-block"/>Straordinario</span>
                           </div>
-                          {ritardiMin > 0 && (
-                            <p className="mt-2 text-xs text-red-500 font-medium">Ritardo totale: {minToLabel(ritardiMin)}</p>
-                          )}
-                          {straordMin > 0 && (
-                            <p className="text-xs text-electric-blue font-medium">Straordinario totale: {minToLabel(straordMin)}</p>
-                          )}
-                        </>
+                          <p className="text-[10px] text-ink-navy/30 text-center pt-1">Tocca i box ritardi/straordinari in alto per il dettaglio</p>
+                        </div>
                       )}
                     </div>
 
@@ -1195,6 +1237,138 @@ export default function AnalyticsPage() {
                     </div>
                   )}
 
+                  {/* ── Modal KPI ritardi / straordinari ── */}
+                  {modalKpi && (
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-navy/40 p-0 sm:p-4"
+                      onClick={() => setModalKpi(null)}>
+                      <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col"
+                        onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-ink-navy/8 flex-shrink-0">
+                          <div>
+                            <p className="text-base font-bold text-ink-navy">
+                              {modalKpi === 'ritardi' ? 'Dettaglio Ritardi' : 'Dettaglio Straordinari'}
+                            </p>
+                            <p className="text-xs text-ink-navy/40 mt-0.5">
+                              {modalKpi === 'ritardi'
+                                ? 'Tempo di turno non coperto da timbro'
+                                : 'Tempo timbrato fuori dall\'orario del turno'}
+                              {' · '}{dettaglio.rangeLabel}
+                            </p>
+                          </div>
+                          <button onClick={() => setModalKpi(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-mist text-ink-navy/50 hover:text-ink-navy text-lg leading-none">✕</button>
+                        </div>
+                        <div className="overflow-y-auto">
+                          {/* Settimana: lista per giorno */}
+                          {dettaglio.periodo === 'settimana' && (
+                            <div className="divide-y divide-ink-navy/6">
+                              {ritardiConTimbro.map((r, i) => {
+                                const val = modalKpi === 'ritardi' ? r.ritardoMin : r.straordinarioMin
+                                const hasVal = val > (modalKpi === 'ritardi' ? 2 : 5)
+                                return (
+                                  <div key={i} className="px-5 py-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-semibold text-ink-navy">{fmtData(r.data)}</span>
+                                      <span className={`text-sm font-bold ${hasVal ? (modalKpi === 'ritardi' ? 'text-red-500' : 'text-electric-blue') : 'text-green-500'}`}>
+                                        {hasVal ? minToLabel(val) : '—'}
+                                      </span>
+                                    </div>
+                                    <div className="flex gap-4 text-xs text-ink-navy/50">
+                                      <span>Turni: {r.turni.map(t => `${t.inizio}–${t.fine}`).join(', ') || '—'}</span>
+                                      <span>Timbri: {r.timbri.map(t => `${t.inizio}–${t.fine}`).join(', ') || '—'}</span>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              {ritardiConTimbro.length === 0 && <p className="px-5 py-8 text-sm text-ink-navy/30 text-center">Nessun dato</p>}
+                            </div>
+                          )}
+                          {/* Mese: barre giornaliere */}
+                          {dettaglio.periodo === 'mese' && (() => {
+                            const anno = dettaglioRif.getFullYear()
+                            const meseIdx = dettaglioRif.getMonth()
+                            const giorni = new Date(anno, meseIdx + 1, 0).getDate()
+                            const byDay: Record<string, number> = {}
+                            ritardiConTimbro.forEach(r => { byDay[r.data] = modalKpi === 'ritardi' ? r.ritardoMin : r.straordinarioMin })
+                            const maxVal = Math.max(...Object.values(byDay), 1)
+                            return (
+                              <div className="px-5 py-4">
+                                <div className="flex items-end gap-1" style={{ height: 140 }}>
+                                  {Array.from({ length: giorni }, (_, i) => {
+                                    const key = `${anno}-${String(meseIdx + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`
+                                    const val = byDay[key] ?? 0
+                                    const h = Math.round((val / maxVal) * 110)
+                                    const hasVal = val > (modalKpi === 'ritardi' ? 2 : 5)
+                                    return (
+                                      <div key={i} className="flex-1 flex flex-col items-center gap-0.5" style={{ height: 130 }}>
+                                        <div className="w-full flex flex-col items-center justify-end" style={{ height: 120 }}>
+                                          {hasVal && <span className="text-[8px] font-bold leading-none mb-0.5" style={{ color: modalKpi === 'ritardi' ? '#ef4444' : '#2563eb' }}>{val}m</span>}
+                                          <div className="w-full rounded-t" style={{ height: `${Math.max(h, hasVal ? 4 : 2)}px`, background: hasVal ? (modalKpi === 'ritardi' ? '#fecaca' : '#bfdbfe') : '#f1f5f9' }} />
+                                        </div>
+                                        <span className="text-[9px] text-ink-navy/40">{i + 1}</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                                <div className="mt-3 divide-y divide-ink-navy/6">
+                                  {ritardiConTimbro.filter(r => (modalKpi === 'ritardi' ? r.ritardoMin > 2 : r.straordinarioMin > 5)).map((r, i) => (
+                                    <div key={i} className="py-3 flex items-start justify-between text-sm">
+                                      <div>
+                                        <p className="font-medium text-ink-navy">{fmtData(r.data)}</p>
+                                        <p className="text-xs text-ink-navy/40 mt-0.5">Turni: {r.turni.map(t => `${t.inizio}–${t.fine}`).join(', ')} · Timbri: {r.timbri.map(t => `${t.inizio}–${t.fine}`).join(', ') || '—'}</p>
+                                      </div>
+                                      <span className={`font-bold flex-shrink-0 ml-4 ${modalKpi === 'ritardi' ? 'text-red-500' : 'text-electric-blue'}`}>
+                                        {minToLabel(modalKpi === 'ritardi' ? r.ritardoMin : r.straordinarioMin)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
+                          {/* Anno: barre mensili */}
+                          {dettaglio.periodo === 'anno' && (() => {
+                            const anno = dettaglioRif.getFullYear()
+                            const mesiLabels = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
+                            const barreAnno = Array.from({ length: 12 }, (_, i) => {
+                              const mm = String(i + 1).padStart(2, '0')
+                              const key = `${anno}-${mm}`
+                              const v = ritardiPerMese[key]
+                              return { label: mesiLabels[i], val: v ? (modalKpi === 'ritardi' ? v.ritardoMin : v.straordinarioMin) : 0 }
+                            })
+                            const maxVal = Math.max(...barreAnno.map(b => b.val), 1)
+                            return (
+                              <div className="px-5 py-4">
+                                <div className="flex items-end gap-2" style={{ height: 140 }}>
+                                  {barreAnno.map((b, i) => {
+                                    const h = Math.round((b.val / maxVal) * 110)
+                                    const hasVal = b.val > (modalKpi === 'ritardi' ? 2 : 5)
+                                    return (
+                                      <div key={i} className="flex-1 flex flex-col items-center gap-1" style={{ height: 130 }}>
+                                        <div className="w-full flex flex-col items-center justify-end" style={{ height: 115 }}>
+                                          {hasVal && <span className="text-[9px] font-bold leading-none mb-0.5" style={{ color: modalKpi === 'ritardi' ? '#ef4444' : '#2563eb' }}>{Math.round(b.val / 6) / 10}h</span>}
+                                          <div className="w-full rounded-t" style={{ height: `${Math.max(h, hasVal ? 4 : 2)}px`, background: hasVal ? (modalKpi === 'ritardi' ? '#fecaca' : '#bfdbfe') : '#f1f5f9' }} />
+                                        </div>
+                                        <span className="text-[9px] text-ink-navy/40">{b.label}</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                                <div className="mt-3 divide-y divide-ink-navy/6">
+                                  {barreAnno.filter(b => b.val > 0).map((b, i) => (
+                                    <div key={i} className="py-2.5 flex items-center justify-between text-sm">
+                                      <span className="text-ink-navy/70">{b.label} {anno}</span>
+                                      <span className={`font-bold ${modalKpi === 'ritardi' ? 'text-red-500' : 'text-electric-blue'}`}>{minToLabel(b.val)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ── Modal PDF ── */}
                   {pdfModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-navy/30 p-4"
@@ -1252,6 +1426,25 @@ export default function AnalyticsPage() {
                               <button key={f} onClick={() => setPdfFonte(f)}
                                 className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${pdfFonte === f ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/40 hover:text-ink-navy'}`}>
                                 {f === 'turni' ? 'Turni' : 'Cartellino'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Sezioni da includere */}
+                        <div>
+                          <p className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide mb-2">Includi nel PDF</p>
+                          <div className="space-y-2">
+                            {[
+                              { label: 'Ritardi & Straordinari', val: pdfIncludiRitardi, set: setPdfIncludiRitardi },
+                              { label: 'Assenze & Richieste (ferie, permessi, malattia)', val: pdfIncludiRichieste, set: setPdfIncludiRichieste },
+                            ].map(opt => (
+                              <button key={opt.label} onClick={() => opt.set(!opt.val)}
+                                className="flex items-center gap-3 w-full text-left">
+                                <span className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${opt.val ? 'bg-electric-blue border-electric-blue' : 'border-ink-navy/20 bg-white'}`}>
+                                  {opt.val && <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 13 4 4L19 7"/></svg>}
+                                </span>
+                                <span className="text-sm text-ink-navy/70">{opt.label}</span>
                               </button>
                             ))}
                           </div>
