@@ -69,7 +69,7 @@ function toISO(d: Date) {
 }
 
 export default function StaffPage() {
-  const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste' | 'presenze'>('dipendenti')
+  const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste' | 'presenze'>('presenze')
   const [qrDip, setQrDip] = useState<{ nome: string; url: string } | null>(null)
   const [publicId, setPublicId] = useState<string | null>(null)
   const [nomeLocale, setNomeLocale] = useState<string | null>(null)
@@ -80,11 +80,11 @@ export default function StaffPage() {
   const [presenzeList, setPresenzeList] = useState<{ id: string; tipo: string; timestamp: string; dipendente: { nome: string; ruolo: string | null } }[]>([])
   const [presenzeLoading, setPresenzeLoading] = useState(false)
 
-  async function fetchPresenze(d: string) {
-    setPresenzeLoading(true)
+  async function fetchPresenze(d: string, silent = false) {
+    if (!silent) setPresenzeLoading(true)
     const res = await fetch(`/api/qr-timbratura/storico?data=${d}`, { credentials: 'include' })
     if (res.ok) { const j = await res.json(); setPresenzeList(j.timbrature) }
-    setPresenzeLoading(false)
+    if (!silent) setPresenzeLoading(false)
   }
   const [dipendenti, setDipendenti] = useState<Dipendente[]>([])
   const [turni, setTurni] = useState<Turno[]>([])
@@ -193,7 +193,7 @@ export default function StaffPage() {
   useEffect(() => { if (tab === 'presenze') fetchPresenze(presenzeData) }, [tab, presenzeData])
   useEffect(() => {
     if (tab !== 'presenze' || presenzeData !== oggiStr) return
-    const t = setInterval(() => fetchPresenze(oggiStr), 15000)
+    const t = setInterval(() => fetchPresenze(oggiStr, true), 15000)
     return () => clearInterval(t)
   }, [tab, presenzeData])
 
@@ -423,8 +423,8 @@ export default function StaffPage() {
       {/* Tab */}
       <div className="flex gap-2 flex-wrap">
         {([
-          ['dipendenti', 'Dipendenti'],
           ['presenze', 'Presenze'],
+          ['dipendenti', 'Dipendenti'],
           ['turni', 'Turni'],
           ['richieste', `Richieste${richiesteInAttesa.length > 0 ? ` (${richiesteInAttesa.length})` : ''}`],
         ] as const).map(([id, label]) => (
@@ -906,7 +906,7 @@ export default function StaffPage() {
                     const ultimaUscita = uscite[uscite.length - 1]
                     const presente = primaEntrata && (!ultimaUscita || ultimaUscita < entrate[entrate.length - 1])
                     let ore: string | null = null
-                    if (primaEntrata && ultimaUscita) {
+                    if (primaEntrata && ultimaUscita && new Date(ultimaUscita) > new Date(primaEntrata)) {
                       const ms = new Date(ultimaUscita).getTime() - new Date(primaEntrata).getTime()
                       ore = `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`
                     }

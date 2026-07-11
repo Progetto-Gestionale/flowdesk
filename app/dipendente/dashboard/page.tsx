@@ -379,10 +379,10 @@ export default function DipendenteDashboard() {
                     <div key={t.id} className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-lg bg-mist border border-ink-navy/8 flex flex-col items-center justify-center shrink-0">
                         <p className="text-xs font-bold text-ink-navy leading-none">
-                          {new Date(t.data + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric' })}
+                          {new Date(t.data.split('T')[0] + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric' })}
                         </p>
                         <p className="text-[9px] text-ink-navy/40 uppercase mt-0.5">
-                          {new Date(t.data + 'T12:00:00').toLocaleDateString('it-IT', { month: 'short' })}
+                          {new Date(t.data.split('T')[0] + 'T12:00:00').toLocaleDateString('it-IT', { month: 'short' })}
                         </p>
                       </div>
                       <div>
