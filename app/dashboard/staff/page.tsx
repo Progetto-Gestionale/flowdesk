@@ -1438,6 +1438,7 @@ export default function StaffPage() {
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl p-6 w-full sm:max-w-sm mx-0 sm:mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
+                <p className="text-xs font-bold text-electric-blue uppercase tracking-wider mb-1">Modifica turno</p>
                 <p className="font-semibold text-ink-navy">{editTurno.dipendente.nome}</p>
                 <p className="text-xs text-ink-navy/50 mt-0.5">
                   {new Date(editTurno.data).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 
 interface Piatto {
@@ -31,7 +31,9 @@ interface DatiCheckout {
   telefono: string
   data: string
   ora: string
-  indirizzo: string
+  via: string
+  cap: string
+  citta: string
   noteCliente: string
 }
 
@@ -52,12 +54,39 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
   const [step, setStep] = useState<'menu' | 'checkout' | 'inviato'>('menu')
   const [inviando, setInviando] = useState(false)
   const [numeroOrdine, setNumeroOrdine] = useState<number | null>(null)
+  const [errIndirizzo, setErrIndirizzo] = useState('')
+  const [suggerimenti, setSuggerimenti] = useState<any[]>([])
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function cercaIndirizzo(via: string) {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (via.length < 4) { setSuggerimenti([]); return }
+    debounceRef.current = setTimeout(async () => {
+      const q = encodeURIComponent(`${via}${dati.citta ? ', ' + dati.citta : ''}, Italia`)
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=it&addressdetails=1`, {
+        headers: { 'Accept-Language': 'it', 'User-Agent': 'Flowest/1.0' },
+      }).catch(() => null)
+      if (!res) return
+      const data = await res.json().catch(() => [])
+      setSuggerimenti(data ?? [])
+    }, 400)
+  }
+
+  function selezionaSuggerimento(s: any) {
+    const a = s.address ?? {}
+    const via = [a.road ?? a.pedestrian ?? a.footway ?? '', a.house_number ?? ''].filter(Boolean).join(' ')
+    const cap = (a.postcode ?? '').replace(/\s/g, '').slice(0, 5)
+    const citta = a.city ?? a.town ?? a.village ?? a.county ?? ''
+    setDati(d => ({ ...d, via, cap, citta }))
+    setSuggerimenti([])
+    setErrIndirizzo('')
+  }
 
   const oggi = (() => { const _d = new Date(); return `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}` })()
   const [dati, setDati] = useState<DatiCheckout>({
     tipo: 'asporto',
     nome: '', cognome: '', email: '', telefono: '',
-    data: oggi, ora: '', indirizzo: '', noteCliente: '',
+    data: oggi, ora: '', via: '', cap: '', citta: '', noteCliente: '',
   })
 
   useEffect(() => {
@@ -98,17 +127,36 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
   const totale = carrello.reduce((s, r) => s + r.prezzo * r.quantita, 0)
   const totArticoli = carrello.reduce((s, r) => s + r.quantita, 0)
 
+  const capValido = dati.cap === '' || /^\d{5}$/.test(dati.cap)
   const checkoutValido = dati.nome && dati.email && dati.data && dati.ora &&
-    (dati.tipo === 'asporto' || dati.indirizzo)
+    (dati.tipo === 'asporto' || (dati.via && dati.cap && /^\d{5}$/.test(dati.cap) && dati.citta))
 
   async function inviaOrdine() {
     if (!checkoutValido) return
+    setErrIndirizzo('')
     setInviando(true)
     try {
+      if (dati.tipo === 'delivery') {
+        const q = encodeURIComponent(`${dati.via}, ${dati.cap} ${dati.citta}, Italia`)
+        const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it&addressdetails=1`, {
+          headers: { 'Accept-Language': 'it', 'User-Agent': 'Flowest/1.0' },
+        }).then(r => r.json()).catch(() => [])
+        if (!geo || geo.length === 0) {
+          setErrIndirizzo('Indirizzo non trovato. Controlla via, CAP e città.')
+          setInviando(false)
+          return
+        }
+        const capRitornato = geo[0]?.address?.postcode?.replace(/\s/g, '')
+        if (capRitornato && capRitornato !== dati.cap) {
+          setErrIndirizzo(`CAP non corretto per questo indirizzo (CAP atteso: ${capRitornato}).`)
+          setInviando(false)
+          return
+        }
+      }
       const res = await fetch('/api/public/ordina', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicId, ...dati, righe: carrello }),
+        body: JSON.stringify({ publicId, ...dati, indirizzo: dati.via ? `${dati.via}, ${dati.cap} ${dati.citta}`.trim() : '', righe: carrello }),
       })
       const json = await res.json()
       if (res.ok) {
@@ -380,10 +428,46 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
             <p className="text-sm font-semibold text-gray-700">Indirizzo di consegna</p>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Indirizzo completo *</label>
-              <input value={dati.indirizzo} onChange={e => setDati(d => ({ ...d, indirizzo: e.target.value }))}
-                placeholder="Via Roma 1, Milano" className={inpFocus} />
+              <label className="block text-xs font-medium text-gray-500 mb-1">Città *</label>
+              <input value={dati.citta} onChange={e => { setDati(d => ({ ...d, citta: e.target.value })); setErrIndirizzo('') }}
+                placeholder="Milano" className={inpFocus} />
             </div>
+            <div className="relative">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Via / Piazza *</label>
+              <input value={dati.via}
+                onChange={e => { setDati(d => ({ ...d, via: e.target.value })); cercaIndirizzo(e.target.value); setErrIndirizzo('') }}
+                onBlur={() => setTimeout(() => setSuggerimenti([]), 200)}
+                placeholder="Inizia a digitare l'indirizzo…" className={inpFocus} autoComplete="off" />
+              {suggerimenti.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                  {suggerimenti.map((s, i) => {
+                    const a = s.address ?? {}
+                    const riga1 = [a.road ?? a.pedestrian ?? '', a.house_number ?? ''].filter(Boolean).join(' ')
+                    const riga2 = [a.postcode, a.city ?? a.town ?? a.village].filter(Boolean).join(' ')
+                    return (
+                      <button key={i} type="button"
+                        onPointerDown={e => { e.preventDefault(); selezionaSuggerimento(s) }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                        <p className="text-sm font-medium text-gray-800">{riga1 || s.display_name.split(',')[0]}</p>
+                        <p className="text-xs text-gray-400">{riga2}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">CAP *</label>
+              <input value={dati.cap} onChange={e => setDati(d => ({ ...d, cap: e.target.value.replace(/\D/g, '').slice(0, 5) }))}
+                placeholder="20100" inputMode="numeric" maxLength={5}
+                className={`${inpFocus} ${dati.cap && !capValido ? 'border-red-300 focus:ring-red-200' : ''}`} />
+              {dati.cap && !capValido && <p className="text-xs text-red-500 mt-1">CAP non valido (5 cifre)</p>}
+            </div>
+            {errIndirizzo && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 font-medium">
+                {errIndirizzo}
+              </div>
+            )}
           </div>
         )}
 
@@ -402,11 +486,11 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
           <button onClick={inviaOrdine} disabled={inviando || !checkoutValido}
             className="w-full py-3.5 rounded-2xl text-white font-bold text-base disabled:opacity-50 transition-opacity"
             style={{ backgroundColor: coloreP }}>
-            {inviando ? 'Invio in corso...' : dati.tipo === 'delivery' ? '🛵 Invia richiesta delivery' : '🛍 Invia richiesta asporto'}
+            {inviando ? (dati.tipo === 'delivery' ? 'Verifica indirizzo…' : 'Invio in corso…') : dati.tipo === 'delivery' ? 'Invia richiesta delivery' : 'Invia richiesta asporto'}
           </button>
           {!checkoutValido && (
             <p className="text-xs text-gray-400 text-center mt-2">
-              Compila nome, email, data, orario{dati.tipo === 'delivery' ? ' e indirizzo' : ''} per continuare
+              Compila nome, email, data, orario{dati.tipo === 'delivery' ? ', via, CAP e città' : ''} per continuare
             </p>
           )}
         </div>

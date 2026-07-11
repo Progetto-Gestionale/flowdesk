@@ -91,7 +91,9 @@ function MenuStrumenti({ publicId }: { publicId: string }) {
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const menuUrl = publicId ? `${origin}/menu/${publicId}` : null
+  const prenotaUrl = publicId ? `${origin}/prenota/${publicId}` : null
   const qrUrl = menuUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(menuUrl)}&size=300x300` : null
+  const qrPrenotaUrl = prenotaUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(prenotaUrl)}&size=300x300` : null
   const embedCode = menuUrl ? `<iframe src="${menuUrl}" width="100%" height="700" frameborder="0" style="border-radius:12px"></iframe>` : null
 
   if (!publicId) return (
@@ -107,7 +109,7 @@ function MenuStrumenti({ publicId }: { publicId: string }) {
 
       {/* Link */}
       <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
-        <p className="font-medium text-ink-navy text-sm">Link diretto</p>
+        <p className="font-medium text-ink-navy text-sm">Link diretto menù</p>
         <p className="text-xs text-ink-navy/50">Condividilo su WhatsApp, Instagram bio, Google My Business, ecc.</p>
         <div className="flex gap-2">
           <input readOnly value={menuUrl!}
@@ -119,6 +121,33 @@ function MenuStrumenti({ publicId }: { publicId: string }) {
         </div>
         <a href={menuUrl!} target="_blank" rel="noopener noreferrer"
           className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
+      </div>
+
+      {/* Link prenotazioni */}
+      <div className="bg-white rounded-2xl border border-electric-blue/25 shadow-sm p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🔗</span>
+          <p className="font-medium text-ink-navy text-sm">Link prenotazioni & ordini</p>
+          <span className="text-[10px] font-bold uppercase tracking-wide bg-electric-blue/10 text-electric-blue px-2 py-0.5 rounded-full">Nuovo</span>
+        </div>
+        <p className="text-xs text-ink-navy/50">Pagina unica con prenotazione tavolo + menu asporto/delivery. Mandala su WhatsApp, mettila in bio o nel sito.</p>
+        <div className="flex gap-2">
+          <input readOnly value={prenotaUrl!}
+            className="flex-1 bg-mist border border-ink-navy/10 rounded-xl px-3 py-2 text-xs text-ink-navy/70 font-mono" />
+          <button onClick={() => copia('prenota', prenotaUrl!)}
+            className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 shrink-0">
+            {copiato === 'prenota' ? '✓' : 'Copia'}
+          </button>
+        </div>
+        <div className="flex items-center gap-4">
+          <a href={prenotaUrl!} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-electric-blue hover:underline">Apri anteprima →</a>
+          <div className="flex items-center gap-2">
+            <img src={qrPrenotaUrl!} alt="QR prenotazioni" className="w-12 h-12 rounded-lg border border-ink-navy/10" />
+            <a href={qrPrenotaUrl!} download="prenota-qr.png" target="_blank" rel="noopener noreferrer"
+              className="text-xs text-ink-navy/50 hover:text-electric-blue underline">Scarica QR</a>
+          </div>
+        </div>
       </div>
 
       {/* QR */}
@@ -473,6 +502,26 @@ export default function Impostazioni() {
           )}
 
           {sezioneAttiva === 'prenotazioni' && (
+            <>
+            {publicId && (
+              <div className="bg-white border border-electric-blue/25 rounded-2xl p-5 space-y-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <span>🔗</span>
+                  <p className="font-semibold text-ink-navy text-sm">Link prenotazioni & ordini</p>
+                </div>
+                <p className="text-xs text-ink-navy/50">Pagina pubblica con form prenotazione tavolo + menu asporto/delivery. Mandalo su WhatsApp o mettilo in bio.</p>
+                <div className="flex gap-2">
+                  <input readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/prenota/${publicId}`}
+                    className="flex-1 bg-mist border border-ink-navy/10 rounded-xl px-3 py-2 text-xs text-ink-navy/70 font-mono" />
+                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/prenota/${publicId}`)}
+                    className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 shrink-0">
+                    Copia
+                  </button>
+                </div>
+                <a href={`/prenota/${publicId}`} target="_blank" rel="noopener noreferrer"
+                  className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
+              </div>
+            )}
             <Section title="Regole prenotazioni" subtitle="Il bot userà queste regole per gestire le richieste in modo corretto."
               onSave={() => saveSezione('prenotazioni', { regolePrenotazione: JSON.stringify(regole) })}
               status={st('prenotazioni')}>
@@ -501,6 +550,7 @@ export default function Impostazioni() {
                   rows={3} placeholder="es. Per gruppi superiori a 8 persone è richiesto un menu fisso." className={`${cls} resize-none`} />
               </Field>
             </Section>
+            </>
           )}
 
           {sezioneAttiva === 'menu' && (

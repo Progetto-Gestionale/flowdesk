@@ -1301,7 +1301,7 @@ export default function AnalyticsPage() {
                                     return (
                                       <div key={i} className="flex-1 flex flex-col items-center gap-0.5" style={{ height: 130 }}>
                                         <div className="w-full flex flex-col items-center justify-end" style={{ height: 120 }}>
-                                          {hasVal && <span className="text-[8px] font-bold leading-none mb-0.5" style={{ color: modalKpi === 'ritardi' ? '#ef4444' : '#2563eb' }}>{val}m</span>}
+                                          {hasVal && <span className="text-[8px] font-bold leading-none mb-0.5" style={{ color: modalKpi === 'ritardi' ? '#ef4444' : '#2563eb' }}>{minToLabel(val)}</span>}
                                           <div className="w-full rounded-t" style={{ height: `${Math.max(h, hasVal ? 4 : 2)}px`, background: hasVal ? (modalKpi === 'ritardi' ? '#fecaca' : '#bfdbfe') : '#f1f5f9' }} />
                                         </div>
                                         <span className="text-[9px] text-ink-navy/40">{i + 1}</span>
@@ -1345,7 +1345,7 @@ export default function AnalyticsPage() {
                                     return (
                                       <div key={i} className="flex-1 flex flex-col items-center gap-1" style={{ height: 130 }}>
                                         <div className="w-full flex flex-col items-center justify-end" style={{ height: 115 }}>
-                                          {hasVal && <span className="text-[9px] font-bold leading-none mb-0.5" style={{ color: modalKpi === 'ritardi' ? '#ef4444' : '#2563eb' }}>{Math.round(b.val / 6) / 10}h</span>}
+                                          {hasVal && <span className="text-[9px] font-bold leading-none mb-0.5" style={{ color: modalKpi === 'ritardi' ? '#ef4444' : '#2563eb' }}>{minToLabel(b.val).replace('+','')}</span>}
                                           <div className="w-full rounded-t" style={{ height: `${Math.max(h, hasVal ? 4 : 2)}px`, background: hasVal ? (modalKpi === 'ritardi' ? '#fecaca' : '#bfdbfe') : '#f1f5f9' }} />
                                         </div>
                                         <span className="text-[9px] text-ink-navy/40">{b.label}</span>

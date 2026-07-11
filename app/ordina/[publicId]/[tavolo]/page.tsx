@@ -111,7 +111,7 @@ export default function OrdinaPage() {
       <div className="bg-white rounded-2xl p-10 text-center shadow-lg max-w-sm w-full">
         <div className="text-6xl mb-4">✅</div>
         <h2 className="text-xl font-bold text-gray-900">Ordine inviato!</h2>
-        <p className="text-gray-500 text-sm mt-2">Il tuo ordine è stato ricevuto. Portalo al tavolo <strong>{tavolo}</strong> a breve.</p>
+        <p className="text-gray-500 text-sm mt-2">Il tuo ordine è stato ricevuto.</p>
         <button onClick={() => { setOrdinato(false); setVistaCarrello(false); setNoteOrdine('') }}
           className="mt-6 w-full py-2.5 rounded-xl text-white font-semibold text-sm"
           style={{ backgroundColor: coloreP }}>
@@ -211,8 +211,8 @@ export default function OrdinaPage() {
 
       {/* Sheet carrello */}
       {vistaCarrello && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40">
-          <div className="bg-white rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex flex-col justify-end items-center bg-black/40">
+          <div className="bg-white rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col w-full max-w-lg">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-900">Il tuo ordine</h2>
               <button onClick={() => setVistaCarrello(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>

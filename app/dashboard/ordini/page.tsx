@@ -41,7 +41,7 @@ interface AppuntamentoOrdine {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; next: string; nextLabel: string }> = {
-  nuovo: { label: 'Nuovo', color: 'bg-amber-100 text-amber-700 border-amber-200', next: 'in_preparazione', nextLabel: 'Prendi in carico' },
+  nuovo: { label: 'Nuovo', color: 'bg-amber-100 text-amber-700 border-amber-200', next: 'pronto', nextLabel: 'Pronto' },
   in_preparazione: { label: 'In preparazione', color: 'bg-blue-100 text-blue-700 border-blue-200', next: 'pronto', nextLabel: 'Pronto' },
   pronto: { label: 'Pronto', color: 'bg-green-100 text-green-700 border-green-200', next: 'consegnato', nextLabel: 'Consegnato' },
   consegnato: { label: 'Consegnato', color: 'bg-mist text-ink-navy/50 border-ink-navy/10', next: '', nextLabel: '' },
@@ -49,7 +49,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; next: string
 
 const GRUPPI = [
   { key: 'nuovo', label: 'Nuovi' },
-  { key: 'in_preparazione', label: 'In preparazione' },
   { key: 'pronto', label: 'Pronti' },
 ]
 
@@ -214,14 +213,14 @@ export default function OrdiniPage() {
         <p className="text-sm font-semibold text-ink-navy flex-1 min-w-max">Disponibilità ordini online</p>
         <div className="flex gap-4">
           {([
-            { campo: 'blockAsporto' as const, label: 'Asporto', emoji: '🛍' },
-            { campo: 'blockDelivery' as const, label: 'Delivery', emoji: '🛵' },
-          ]).map(({ campo, label, emoji }) => {
+            { campo: 'blockAsporto' as const, label: 'Asporto' },
+            { campo: 'blockDelivery' as const, label: 'Delivery' },
+          ]).map(({ campo, label }) => {
             const bloccato = campo === 'blockAsporto' ? blockAsporto : blockDelivery
             return (
               <div key={campo} className="flex items-center gap-2 select-none">
                 <span className={`text-sm font-medium ${bloccato ? 'text-red-500' : 'text-ink-navy/60'}`}>
-                  {emoji} {label}
+                  {label}
                 </span>
                 <button
                   type="button"
@@ -250,16 +249,17 @@ export default function OrdiniPage() {
           <p className="text-ink-navy/35 text-xs mt-1">Gli ordini arrivano dal menu digitale o dal calendario</p>
         </div>
       ) : (
-        <div className="space-y-10">
+        <div className="space-y-6">
 
           {/* ── ORDINI AL TAVOLO (menù digitale) ── */}
           {hasTavoloOrdini && (
-            <div>
-              <h2 className="text-sm font-bold text-ink-navy/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-                Ordini al tavolo
-                <span className="text-xs font-semibold bg-mist text-ink-navy/50 px-2 py-0.5 rounded-full normal-case tracking-normal">menù digitale</span>
-              </h2>
-              <div className="space-y-8">
+            <div className="rounded-2xl border border-ink-navy/10 overflow-hidden shadow-sm">
+              <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-amber-400" />
+                <h2 className="text-sm font-bold text-amber-800 uppercase tracking-wider">Ordini al tavolo</h2>
+                <span className="text-xs font-medium bg-amber-100 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full">menù digitale</span>
+              </div>
+              <div className="p-5 space-y-8">
                 {GRUPPI.map(g => {
                   const lista = ordiniTavolo.filter(o => o.status === g.key)
                   if (lista.length === 0) return null
@@ -357,7 +357,7 @@ export default function OrdiniPage() {
 
           {/* ── ASPORTO & DELIVERY ── */}
           {hasCalendarioOrdini && (() => {
-            // Unifica ordini online (Ordine) e dal calendario (Appuntamento) in bucket comuni
+            // Unifica ordini web (Ordine) e dal calendario (Appuntamento)
             type ItemApp = { kind: 'app'; id: string; isDelivery: boolean; label: string; ora: string; note: string }
             type ItemOrdine = { kind: 'ordine'; id: string; isDelivery: boolean; righe: RigaOrdine[]; totale: number; note: string | null; ora: string; clienteNome: string | null; clienteTelefono: string | null; clienteIndirizzo: string | null; clienteOra: string | null }
             type Item = ItemApp | ItemOrdine
@@ -421,58 +421,56 @@ export default function OrdiniPage() {
               </div>
             )
 
-            const renderCard = (item: Item, ringClass: string, badgeEl: React.ReactNode, stepLabel?: string, stepColor?: string, onStep?: () => void, dimmed = false) => (
-              <div key={item.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${ringClass} ${dimmed ? 'opacity-60' : ''}`}>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-ink-navy/8">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      {item.kind === 'app'
-                        ? <><p className="font-bold text-ink-navy">{item.label}</p>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.isDelivery ? 'bg-teal-100 text-teal-700' : 'bg-violet-100 text-violet-700'}`}>
-                              {item.isDelivery ? 'Delivery' : 'Asporto'}
-                            </span></>
-                        : <>
-                            <p className="font-bold text-ink-navy">{item.clienteNome || 'Ordine online'}</p>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.isDelivery ? 'bg-teal-100 text-teal-700' : 'bg-violet-100 text-violet-700'}`}>
-                              {item.isDelivery ? 'Delivery' : 'Asporto'}
-                            </span>
-                          </>
-                      }
+            const renderCard = (item: Item, ringClass: string, badgeEl: React.ReactNode, stepLabel?: string, stepColor?: string, onStep?: () => void, dimmed = false) => {
+              const nome = item.kind === 'app' ? item.label : (item.clienteNome || 'Ordine online')
+              const tipoBadge = (
+                <span className={`self-start text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${item.isDelivery ? 'bg-teal-100 text-teal-700' : 'bg-violet-100 text-violet-700'}`}>
+                  {item.isDelivery ? 'Delivery' : 'Asporto'}
+                </span>
+              )
+              return (
+                <div key={item.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${ringClass} ${dimmed ? 'opacity-60' : ''}`}>
+                  {/* Header: tipo badge a sinistra, status badge a destra */}
+                  <div className="px-4 py-3 border-b border-ink-navy/8">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {tipoBadge}
+                        <p className="font-bold text-ink-navy truncate">{nome}</p>
+                      </div>
+                      <div className="shrink-0">{badgeEl}</div>
                     </div>
-                    <p className="text-xs text-ink-navy/35">{item.ora}</p>
+                    <p className="text-xs text-ink-navy/35 mt-1">{item.ora}</p>
                   </div>
-                  {badgeEl}
+                  <div className="px-4 py-3 space-y-1.5">
+                    {item.kind === 'app'
+                      ? <>{item.note && <p className="text-sm text-ink-navy/70">{item.note}</p>}</>
+                      : <>
+                          {item.clienteOra && <p className="text-xs text-ink-navy/50 font-medium">Ritiro/consegna: {item.clienteOra}</p>}
+                          {item.clienteTelefono && <p className="text-xs text-ink-navy/50">{item.clienteTelefono}</p>}
+                          {item.clienteIndirizzo && <p className="text-xs text-ink-navy/50">{item.clienteIndirizzo}</p>}
+                          {item.righe.map(r => (
+                            <div key={r.id} className="flex justify-between text-sm">
+                              <span className="text-ink-navy/70">{r.quantita}× {r.nome}</span>
+                              <span className="text-ink-navy/50 font-medium">€{(r.prezzo * r.quantita).toFixed(2)}</span>
+                            </div>
+                          ))}
+                          {item.note && <p className="text-xs text-ink-navy/35 pt-1 italic">{item.note}</p>}
+                          <p className="text-sm font-bold text-ink-navy pt-1">€{item.totale.toFixed(2)}</p>
+                        </>
+                    }
+                  </div>
+                  <CardFooter item={item} stepLabel={stepLabel} stepColor={stepColor} onStep={onStep} />
                 </div>
-                <div className="px-4 py-3 space-y-1.5">
-                  {item.kind === 'app'
-                    ? <>{item.note && <p className="text-sm text-ink-navy/70">{item.note}</p>}</>
-                    : <>
-                        {item.clienteOra && <p className="text-xs text-ink-navy/50 font-medium">⏰ Ritiro/consegna: {item.clienteOra}</p>}
-                        {item.clienteTelefono && <p className="text-xs text-ink-navy/50">📞 {item.clienteTelefono}</p>}
-                        {item.clienteIndirizzo && <p className="text-xs text-ink-navy/50">📍 {item.clienteIndirizzo}</p>}
-                        {item.righe.map(r => (
-                          <div key={r.id} className="flex justify-between text-sm">
-                            <span className="text-ink-navy/70">{r.quantita}× {r.nome}</span>
-                            <span className="text-ink-navy/50 font-medium">€{(r.prezzo * r.quantita).toFixed(2)}</span>
-                          </div>
-                        ))}
-                        {item.note && <p className="text-xs text-ink-navy/35 pt-1 italic">{item.note}</p>}
-                        <p className="text-sm font-bold text-ink-navy pt-1">€{item.totale.toFixed(2)}</p>
-                      </>
-                  }
-                </div>
-                <CardFooter item={item} stepLabel={stepLabel} stepColor={stepColor} onStep={onStep} />
-              </div>
-            )
+              )
+            }
 
             return (
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-px flex-1 bg-ink-navy/10" />
-                  <h2 className="text-sm font-bold text-ink-navy/50 uppercase tracking-wider">Asporto & Delivery</h2>
-                  <div className="h-px flex-1 bg-ink-navy/10" />
+              <div className="rounded-2xl border border-ink-navy/10 overflow-hidden shadow-sm">
+                <div className="bg-violet-50 border-b border-violet-200 px-5 py-3 flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-violet-400" />
+                  <h2 className="text-sm font-bold text-violet-800 uppercase tracking-wider">Asporto & Delivery</h2>
                 </div>
-                <div className="space-y-6">
+                <div className="p-5 space-y-6">
                   {daPrepItems.length > 0 && (
                     <div>
                       <h3 className="text-base font-bold text-ink-navy mb-3 flex items-center gap-2">
@@ -562,24 +560,29 @@ export default function OrdiniPage() {
                 </button>
 
                 {storicoAperto && (
-                  <div className="mt-4 space-y-6">
-                    {/* Ordini tavolo consegnati */}
+                  <div className="mt-4 space-y-4">
+
+                    {/* Storico tavolo */}
                     {ordiniConsegnati.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mb-3">Tavolo · Consegnati</p>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="rounded-2xl border border-ink-navy/10 overflow-hidden shadow-sm opacity-70">
+                        <div className="bg-amber-50 border-b border-amber-200 px-5 py-2.5 flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-amber-400" />
+                          <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Tavolo · Consegnati</p>
+                          <span className="text-xs font-medium bg-amber-100 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full">{ordiniConsegnati.length}</span>
+                        </div>
+                        <div className="p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                           {ordiniConsegnati.map(o => {
                             const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
                             const tavoloAssegnato = tavoli.find(t => t.id === o.tavoloId)
                             const labelTavolo = tavoloAssegnato ? (tavoloAssegnato.etichetta ?? `Tavolo ${tavoloAssegnato.numero}`) : `Tavolo ${o.tavolo}`
                             return (
-                              <div key={o.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden opacity-60">
-                                <div className="flex items-center justify-between px-4 py-3 border-b border-ink-navy/8">
+                              <div key={o.id} className="bg-white rounded-xl border border-ink-navy/10 shadow-sm overflow-hidden">
+                                <div className="flex items-start justify-between px-4 py-3 border-b border-ink-navy/8">
                                   <div>
                                     <p className="font-bold text-ink-navy">{labelTavolo}</p>
-                                    <p className="text-xs text-ink-navy/35">{ora}</p>
+                                    <p className="text-xs text-ink-navy/35 mt-0.5">{ora}</p>
                                   </div>
-                                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-mist text-ink-navy/50 border-ink-navy/10">Consegnato</span>
+                                  <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border bg-mist text-ink-navy/50 border-ink-navy/10">Consegnato</span>
                                 </div>
                                 <div className="px-4 py-3 space-y-1.5">
                                   {o.righe.map(r => (
@@ -600,51 +603,52 @@ export default function OrdiniPage() {
                       </div>
                     )}
 
-                    {/* Asporto/delivery evasi */}
+                    {/* Storico asporto/delivery */}
                     {asportoSection.evasiItems.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mb-3">Asporto & Delivery · Completati</p>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                          {asportoSection.evasiItems.map(item => (
-                            <div key={item.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden opacity-60">
-                              <div className="flex items-center justify-between px-4 py-3 border-b border-ink-navy/8">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    {item.kind === 'app'
-                                      ? <><p className="font-bold text-ink-navy">{item.label}</p>
-                                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.isDelivery ? 'bg-teal-100 text-teal-700' : 'bg-violet-100 text-violet-700'}`}>
-                                            {item.isDelivery ? 'Delivery' : 'Asporto'}
-                                          </span></>
-                                      : <><p className="font-bold text-ink-navy">{item.clienteNome || 'Ordine online'}</p>
-                                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.isDelivery ? 'bg-teal-100 text-teal-700' : 'bg-violet-100 text-violet-700'}`}>
-                                            {item.isDelivery ? 'Delivery' : 'Asporto'}
-                                          </span></>
-                                    }
+                      <div className="rounded-2xl border border-ink-navy/10 overflow-hidden shadow-sm opacity-70">
+                        <div className="bg-violet-50 border-b border-violet-200 px-5 py-2.5 flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-violet-400" />
+                          <p className="text-xs font-bold text-violet-800 uppercase tracking-wider">Asporto & Delivery · Completati</p>
+                          <span className="text-xs font-medium bg-violet-100 text-violet-600 border border-violet-200 px-2 py-0.5 rounded-full">{asportoSection.evasiItems.length}</span>
+                        </div>
+                        <div className="p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {asportoSection.evasiItems.map(item => {
+                            const nome = item.kind === 'app' ? item.label : (item.clienteNome || 'Ordine online')
+                            return (
+                              <div key={item.id} className="bg-white rounded-xl border border-ink-navy/10 shadow-sm overflow-hidden">
+                                <div className="px-4 py-3 border-b border-ink-navy/8">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${item.isDelivery ? 'bg-teal-100 text-teal-700' : 'bg-violet-100 text-violet-700'}`}>
+                                        {item.isDelivery ? 'Delivery' : 'Asporto'}
+                                      </span>
+                                      <p className="font-bold text-ink-navy truncate">{nome}</p>
+                                    </div>
+                                    <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border bg-mist text-ink-navy/50 border-ink-navy/10">Completato</span>
                                   </div>
-                                  <p className="text-xs text-ink-navy/35">{item.ora}</p>
+                                  <p className="text-xs text-ink-navy/35 mt-1">{item.ora}</p>
                                 </div>
-                                <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-mist text-ink-navy/50 border-ink-navy/10">Completato</span>
+                                <div className="px-4 py-3 space-y-1.5">
+                                  {item.kind === 'app'
+                                    ? <>{item.note && <p className="text-sm text-ink-navy/50">{item.note}</p>}</>
+                                    : <>{item.righe.map(r => (
+                                        <div key={r.id} className="flex justify-between text-sm">
+                                          <span className="text-ink-navy/50">{r.quantita}× {r.nome}</span>
+                                          <span className="text-ink-navy/35 font-medium">€{(r.prezzo * r.quantita).toFixed(2)}</span>
+                                        </div>
+                                      ))}
+                                      <p className="text-sm font-bold text-ink-navy/50 pt-1">€{item.totale.toFixed(2)}</p>
+                                    </>
+                                  }
+                                </div>
+                                <div className="px-4 py-3 border-t border-ink-navy/8 flex justify-end">
+                                  <button onClick={() => {
+                                    item.kind === 'app' ? eliminaAppuntamento(item.id) : cancellaOrdine(item.id)
+                                  }} className="text-xs px-2.5 py-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors">Elimina</button>
+                                </div>
                               </div>
-                              <div className="px-4 py-3 space-y-1.5">
-                                {item.kind === 'app'
-                                  ? <>{item.note && <p className="text-sm text-ink-navy/50">{item.note}</p>}</>
-                                  : <>{item.righe.map(r => (
-                                      <div key={r.id} className="flex justify-between text-sm">
-                                        <span className="text-ink-navy/50">{r.quantita}× {r.nome}</span>
-                                        <span className="text-ink-navy/35 font-medium">€{(r.prezzo * r.quantita).toFixed(2)}</span>
-                                      </div>
-                                    ))}
-                                    <p className="text-sm font-bold text-ink-navy/50 pt-1">€{item.totale.toFixed(2)}</p>
-                                  </>
-                                }
-                              </div>
-                              <div className="px-4 py-3 border-t border-ink-navy/8 flex justify-end">
-                                <button onClick={() => {
-                                  item.kind === 'app' ? eliminaAppuntamento(item.id) : cancellaOrdine(item.id)
-                                }} className="text-xs px-2.5 py-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors">Elimina</button>
-                              </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     )}

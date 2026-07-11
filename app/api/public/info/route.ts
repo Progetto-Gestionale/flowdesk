@@ -9,5 +9,11 @@ export async function GET(req: Request) {
   const owner = await prisma.user.findUnique({ where: { publicId } })
   if (!owner) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
 
-  return NextResponse.json({ nomeLocale: owner.nomeLocale })
+  return NextResponse.json({
+    nomeLocale: owner.nomeLocale,
+    maxCoperti: owner.maxCoperti,
+    orariApertura: owner.orariApertura,
+    menuLogoUrl: owner.menuLogoUrl,
+    menuColoreP: owner.menuColoreP,
+  })
 }
