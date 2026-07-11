@@ -594,12 +594,12 @@ export default function DipendenteDashboard() {
                 <p className="text-sm text-ink-navy/40 px-1">Tocca i giorni in cui sei disponibile — diventano verdi.</p>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-ink-navy/8">
-                    <button onClick={() => { setMeseDisp(m => new Date(m.getFullYear(), m.getMonth() - 1, 1)); setGiornoDettaglio(null) }}
+                    <button onClick={() => { setMeseDisp(m => new Date(m.getFullYear(), m.getMonth() - 1, 1)); setGiornoOrario(null) }}
                       className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/40 hover:text-ink-navy transition-colors">←</button>
                     <span className="font-semibold text-ink-navy text-sm capitalize">
                       {meseDisp.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
                     </span>
-                    <button onClick={() => { setMeseDisp(m => new Date(m.getFullYear(), m.getMonth() + 1, 1)); setGiornoDettaglio(null) }}
+                    <button onClick={() => { setMeseDisp(m => new Date(m.getFullYear(), m.getMonth() + 1, 1)); setGiornoOrario(null) }}
                       className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/40 hover:text-ink-navy transition-colors">→</button>
                   </div>
                   <div className="grid grid-cols-7 border-b border-ink-navy/8">
