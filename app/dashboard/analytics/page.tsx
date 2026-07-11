@@ -130,10 +130,10 @@ const MESI_LABEL: Record<string, string> = {
 interface StatDip {
   id: string; nome: string; ruolo: string | null
   oreLavorate: number; giorniLavorati: number; giornoTop: string | null
+  ritardi: { count: number; minTotali: number }
   ferie: { totale: number; approvate: number }
   malattie: { totale: number; approvate: number }
   permessi: { totale: number; approvati: number }
-  preferenze: number
 }
 
 interface MeseData {
@@ -303,6 +303,9 @@ export default function AnalyticsPage() {
   const [fonteDettaglio, setFonteDettaglio] = useState<'turni' | 'cartellino'>('turni')
   const [expandedCard, setExpandedCard] = useState<ExpandedCard>(null)
   const [dettaglioCalAperto, setDettaglioCalAperto] = useState(false)
+
+  // Modal sezione dettaglio
+  const [modalSezione, setModalSezione] = useState<'turni' | 'ferie' | 'malattia' | 'permesso' | null>(null)
 
   // Modal PDF
   const [pdfModal, setPdfModal] = useState(false)
@@ -796,11 +799,11 @@ export default function AnalyticsPage() {
                     {[
                       { val: dip.oreLavorate, label: 'ore' },
                       { val: dip.giorniLavorati, label: 'giorni' },
-                      { val: dip.giornoTop ?? '—', label: 'giorno top' },
+                      { val: dip.ritardi.count, label: 'ritardi', red: dip.ritardi.count > 0 },
                     ].map(k => (
-                      <div key={k.label} className="text-center bg-electric-blue/10 rounded-xl py-2">
-                        <p className="text-lg font-bold text-electric-blue">{k.val}</p>
-                        <p className="text-[10px] text-electric-blue font-medium">{k.label}</p>
+                      <div key={k.label} className={`text-center rounded-xl py-2 ${'red' in k && k.red ? 'bg-red-50' : 'bg-electric-blue/10'}`}>
+                        <p className={`text-lg font-bold ${'red' in k && k.red ? 'text-red-500' : 'text-electric-blue'}`}>{k.val}</p>
+                        <p className={`text-[10px] font-medium ${'red' in k && k.red ? 'text-red-400' : 'text-electric-blue'}`}>{k.label}</p>
                       </div>
                     ))}
                   </div>
@@ -1072,87 +1075,123 @@ export default function AnalyticsPage() {
                           <p className="text-ink-navy/25 text-sm">Nessuna richiesta</p>
                         </div>
                       ) : (
-                        <div className="mt-4 space-y-3">
+                        <div className="mt-4 space-y-2">
                           {[
-                            { tipo: 'ferie', label: 'Ferie', items: ferieR, color: 'bg-blue-500', light: 'bg-blue-50 text-blue-700' },
-                            { tipo: 'malattia', label: 'Malattia', items: malattieR, color: 'bg-red-400', light: 'bg-red-50 text-red-600' },
-                            { tipo: 'permesso', label: 'Permessi', items: permessiR, color: 'bg-amber-400', light: 'bg-amber-50 text-amber-700' },
-                            { tipo: 'preferenza_orario', label: 'Pref. orario', items: preferenzeR, color: 'bg-violet-400', light: 'bg-violet-50 text-violet-700' },
-                          ].filter(t => t.items.length > 0).map(t => {
-                            const approvate = t.items.filter(r => r.status === 'approvata').length
-                            const pct = Math.round((approvate / t.items.length) * 100)
-                            return (
-                              <ExpandableCard key={t.tipo} id={t.tipo as ExpandedCard} label={t.label} value={t.items.length} color="text-ink-navy" bg="bg-mist">
-                                <div className="divide-y divide-ink-navy/6">
-                                  {t.items.map((r, i) => (
-                                    <div key={i} className="flex items-center justify-between px-5 py-2.5">
-                                      <span className="text-sm text-ink-navy/60">{fmtData(r.data)}{r.dataFine && r.dataFine !== r.data ? ` → ${fmtData(r.dataFine)}` : ''}{r.oraInizio ? ` · ${r.oraInizio}–${r.oraFine}` : ''}</span>
-                                      <StatusBadge status={r.status} />
-                                    </div>
-                                  ))}
-                                </div>
-                              </ExpandableCard>
-                            )
-                          })}
+                            { tipo: 'ferie' as const, label: 'Ferie', items: ferieR, dot: 'bg-blue-500' },
+                            { tipo: 'malattia' as const, label: 'Malattia', items: malattieR, dot: 'bg-red-400' },
+                            { tipo: 'permesso' as const, label: 'Permessi', items: permessiR, dot: 'bg-amber-400' },
+                          ].filter(t => t.items.length > 0).map(t => (
+                            <button key={t.tipo} onClick={() => setModalSezione(t.tipo)}
+                              className="w-full flex items-center justify-between px-4 py-3 bg-mist rounded-xl hover:bg-electric-blue/8 transition-colors text-left">
+                              <div className="flex items-center gap-2.5">
+                                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${t.dot}`} />
+                                <span className="text-sm font-semibold text-ink-navy">{t.label}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-ink-navy">{t.items.length}</span>
+                                <svg className="w-4 h-4 text-ink-navy/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+                              </div>
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* ── Dettaglio turni espandibile ── */}
+                  {/* ── Dettaglio turni ── */}
                   <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
-                    <button onClick={() => setExpandedCard(expandedCard === 'giorni' ? null : 'giorni')}
+                    <button onClick={() => setModalSezione('turni')}
                       className="w-full flex items-center justify-between px-5 py-4 hover:bg-mist transition-colors">
                       <div className="text-left">
                         <p className="text-sm font-semibold text-ink-navy">Dettaglio turni</p>
                         <p className="text-xs text-ink-navy/40 mt-0.5">{giorniLavoratiDettaglio} giorni · {oreLavorateDettaglio}h totali</p>
                       </div>
-                      <svg className={`w-4 h-4 text-ink-navy/30 transition-transform flex-shrink-0 ${expandedCard === 'giorni' ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+                      <svg className="w-4 h-4 text-ink-navy/30 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
                     </button>
-                    {expandedCard === 'giorni' && (
-                      <div className="border-t border-ink-navy/8 divide-y divide-ink-navy/6">
-                        {dettaglio.periodo === 'settimana' ? (
-                          gs.map(({ key, dt }) => {
-                            const ts = pg[key]
-                            return (
-                              <div key={key} className={`flex items-center justify-between px-5 py-3 text-sm ${ts ? '' : 'opacity-35'}`}>
-                                <span className="text-ink-navy/60 w-28">{GG_BREVI[dt.getDay()]} {dt.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}</span>
-                                {ts ? (
-                                  <>
-                                    <span className="flex-1 text-ink-navy font-medium">{ts.map(t => `${t.oraInizio}–${t.oraFine}`).join(', ')}</span>
-                                    <span className="text-electric-blue font-bold w-12 text-right">{ts.reduce((s, t) => s + t.ore, 0)}h</span>
-                                  </>
-                                ) : <span className="text-ink-navy/25">Riposo</span>}
-                              </div>
-                            )
-                          })
-                        ) : dettaglio.periodo === 'anno' ? (
-                          Object.entries(mbk).sort(([a], [b]) => a.localeCompare(b)).map(([m, v]) => (
-                            <div key={m} className="flex items-center justify-between px-5 py-3 text-sm">
-                              <span className="text-ink-navy/60">{MESI_LABEL[m.split('-')[1]]} {m.split('-')[0]}</span>
-                              <span className="text-ink-navy/50">{v.giorni} giorni</span>
-                              <span className="text-electric-blue font-bold">{Math.round(v.ore * 10) / 10}h</span>
-                            </div>
-                          ))
-                        ) : (
-                          Object.entries(pg).sort(([a], [b]) => a.localeCompare(b)).map(([data, ts]) => (
-                            <div key={data} className="flex items-center justify-between px-5 py-3 text-sm">
-                              <span className="text-ink-navy/60 w-28">{fmtData(data)}</span>
-                              <span className="flex-1 text-ink-navy font-medium">{ts.map(t => `${t.oraInizio}–${t.oraFine}`).join(', ')}</span>
-                              <span className="text-electric-blue font-bold w-12 text-right">{ts.reduce((s, t) => s + t.ore, 0)}h</span>
-                            </div>
-                          ))
-                        )}
-                        {Object.keys(pg).length === 0 && (
-                          <p className="px-5 py-4 text-sm text-ink-navy/30 italic">Nessun turno registrato in questo periodo.</p>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {giorniLavoratiDettaglio === 0 && richiesteDettaglio.length === 0 && (
                     <div className="text-center py-8 bg-white rounded-2xl border border-ink-navy/10">
                       <p className="text-ink-navy/30 text-sm">Nessun dato per questo periodo</p>
+                    </div>
+                  )}
+
+                  {/* ── Modal sezione (turni / assenze) ── */}
+                  {modalSezione && (
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-navy/40 p-0 sm:p-4"
+                      onClick={() => setModalSezione(null)}>
+                      <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col"
+                        onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-ink-navy/8 flex-shrink-0">
+                          <div>
+                            <p className="text-base font-bold text-ink-navy">
+                              {modalSezione === 'turni' ? 'Dettaglio turni' :
+                               modalSezione === 'ferie' ? 'Ferie' :
+                               modalSezione === 'malattia' ? 'Malattia' :
+                               modalSezione === 'permesso' ? 'Permessi' : 'Preferenze orario'}
+                            </p>
+                            {modalSezione === 'turni' && (
+                              <p className="text-xs text-ink-navy/40 mt-0.5">{dettaglio.rangeLabel}</p>
+                            )}
+                          </div>
+                          <button onClick={() => setModalSezione(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-mist text-ink-navy/50 hover:text-ink-navy transition-colors text-lg leading-none">✕</button>
+                        </div>
+                        <div className="overflow-y-auto divide-y divide-ink-navy/6">
+                          {modalSezione === 'turni' ? (
+                            <>
+                              {dettaglio.periodo === 'settimana' ? (
+                                gs.map(({ key, dt }) => {
+                                  const ts = pg[key]
+                                  return (
+                                    <div key={key} className={`flex items-center justify-between px-5 py-3.5 text-sm ${ts ? '' : 'opacity-35'}`}>
+                                      <span className="text-ink-navy/60 w-28">{GG_BREVI[dt.getDay()]} {dt.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}</span>
+                                      {ts ? (
+                                        <>
+                                          <span className="flex-1 text-ink-navy font-medium">{ts.map(t => `${t.oraInizio}–${t.oraFine}`).join(', ')}</span>
+                                          <span className="text-electric-blue font-bold w-12 text-right">{ts.reduce((s, t) => s + t.ore, 0)}h</span>
+                                        </>
+                                      ) : <span className="text-ink-navy/25">Riposo</span>}
+                                    </div>
+                                  )
+                                })
+                              ) : dettaglio.periodo === 'anno' ? (
+                                Object.entries(mbk).sort(([a], [b]) => a.localeCompare(b)).map(([m, v]) => (
+                                  <div key={m} className="flex items-center justify-between px-5 py-3.5 text-sm">
+                                    <span className="text-ink-navy/60">{MESI_LABEL[m.split('-')[1]]} {m.split('-')[0]}</span>
+                                    <span className="text-ink-navy/50">{v.giorni} giorni</span>
+                                    <span className="text-electric-blue font-bold">{Math.round(v.ore * 10) / 10}h</span>
+                                  </div>
+                                ))
+                              ) : (
+                                Object.entries(pg).sort(([a], [b]) => a.localeCompare(b)).map(([data, ts]) => (
+                                  <div key={data} className="flex items-center justify-between px-5 py-3.5 text-sm">
+                                    <span className="text-ink-navy/60 w-28">{fmtData(data)}</span>
+                                    <span className="flex-1 text-ink-navy font-medium">{ts.map(t => `${t.oraInizio}–${t.oraFine}`).join(', ')}</span>
+                                    <span className="text-electric-blue font-bold w-12 text-right">{ts.reduce((s, t) => s + t.ore, 0)}h</span>
+                                  </div>
+                                ))
+                              )}
+                              {Object.keys(pg).length === 0 && (
+                                <p className="px-5 py-6 text-sm text-ink-navy/30 italic text-center">Nessun turno registrato in questo periodo.</p>
+                              )}
+                            </>
+                          ) : (
+                            (() => {
+                              const tipoItems = modalSezione === 'ferie' ? ferieR :
+                                               modalSezione === 'malattia' ? malattieR :
+                                               modalSezione === 'permesso' ? permessiR : []
+                              return tipoItems.length === 0 ? (
+                                <p className="px-5 py-6 text-sm text-ink-navy/30 italic text-center">Nessuna richiesta.</p>
+                              ) : tipoItems.map((r, i) => (
+                                <div key={i} className="flex items-center justify-between px-5 py-3.5">
+                                  <span className="text-sm text-ink-navy/70">{fmtData(r.data)}{r.dataFine && r.dataFine !== r.data ? ` → ${fmtData(r.dataFine)}` : ''}{r.oraInizio ? ` · ${r.oraInizio}–${r.oraFine}` : ''}</span>
+                                  <StatusBadge status={r.status} />
+                                </div>
+                              ))
+                            })()
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
 

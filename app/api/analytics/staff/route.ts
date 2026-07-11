@@ -92,12 +92,12 @@ export async function GET(req: Request) {
         select: { tipo: true, status: true, data: true, dataFine: true, oraInizio: true, oraFine: true },
         orderBy: { data: 'asc' },
       }),
-      prisma.timbratura.findFirst({ where: { dipendente: { userId: user.id } }, select: { id: true } }),
+      prisma.timbratura.findFirst({ where: { dipendenteId: dipId }, select: { id: true } }),
     ])
 
     if (!dip) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
 
-    const usaTimbri = Boolean(anyTimbriLocale)
+    const usaTimbri = Boolean(anyTimbriLocale) || timbrature.length > 0
 
     // turniPerGiorno
     const turniPerGiorno: Record<string, { oraInizio: string; oraFine: string; ore: number }[]> = {}
@@ -257,18 +257,51 @@ export async function GET(req: Request) {
       giornoTop = giorniLavorati > 0 ? GIORNI[idx] : null
     }
 
+    // Ritardi nel mese
+    const timbriPerGiornoList: Record<string, { oraInizio: string; oraFine: string }[]> = {}
+    const sortedT = [...mieTimbrature].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    let ti2 = 0
+    while (ti2 < sortedT.length) {
+      if (sortedT[ti2].tipo === 'entrata') {
+        const e = sortedT[ti2].timestamp
+        const u = sortedT[ti2 + 1]?.tipo === 'uscita' ? sortedT[ti2 + 1].timestamp : null
+        const k = romeDate(e)
+        if (!timbriPerGiornoList[k]) timbriPerGiornoList[k] = []
+        timbriPerGiornoList[k].push({ oraInizio: romeTime(e), oraFine: u ? romeTime(u) : '—' })
+        ti2 += u ? 2 : 1
+      } else { ti2++ }
+    }
+    const turniPerGiornoList: Record<string, { oraInizio: string; oraFine: string }[]> = {}
+    mieiTurni.forEach(t => {
+      const k = romeDate(t.data)
+      if (!turniPerGiornoList[k]) turniPerGiornoList[k] = []
+      turniPerGiornoList[k].push({ oraInizio: t.oraInizio, oraFine: t.oraFine })
+    })
+    let ritardiCount = 0
+    let ritardiMinTot = 0
+    for (const [data, ts] of Object.entries(turniPerGiornoList)) {
+      const timbriG = timbriPerGiornoList[data] ?? []
+      ts.forEach((t, i) => {
+        const tb = timbriG[i]
+        if (!tb) return
+        const entrataMin = oraToMin(tb.oraInizio)
+        if (isNaN(entrataMin)) return
+        const rit = entrataMin - oraToMin(t.oraInizio)
+        if (rit > 2) { ritardiCount++; ritardiMinTot += rit }
+      })
+    }
+
     const ferie = mieRichieste.filter(r => r.tipo === 'ferie')
     const malattie = mieRichieste.filter(r => r.tipo === 'malattia')
     const permessi = mieRichieste.filter(r => r.tipo === 'permesso')
-    const preferenze = mieRichieste.filter(r => r.tipo === 'preferenza_orario')
 
     return {
       id: dip.id, nome: dip.nome, ruolo: dip.ruolo,
       oreLavorate, giorniLavorati, giornoTop,
+      ritardi: { count: ritardiCount, minTotali: ritardiMinTot },
       ferie: { totale: ferie.length, approvate: ferie.filter(r => r.status === 'approvata').length },
       malattie: { totale: malattie.length, approvate: malattie.filter(r => r.status === 'approvata').length },
       permessi: { totale: permessi.length, approvati: permessi.filter(r => r.status === 'approvata').length },
-      preferenze: preferenze.length,
     }
   })
 
