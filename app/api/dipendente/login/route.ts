@@ -4,12 +4,20 @@ import bcrypt from 'bcryptjs'
 import { signDipToken, dipCookieOptions } from '@/lib/dipendenteAuth'
 
 export async function POST(req: Request) {
-  const { username, password } = await req.json()
-  if (!username || !password) {
+  const { username, password, slug } = await req.json()
+  if (!username || !password || !slug) {
     return NextResponse.json({ error: 'Credenziali mancanti' }, { status: 400 })
   }
 
-  const dip = await prisma.dipendente.findUnique({ where: { username } })
+  // Risolvi il locale dal slug (publicId)
+  const locale = await prisma.user.findUnique({ where: { publicId: slug }, select: { id: true } })
+  if (!locale) {
+    return NextResponse.json({ error: 'Locale non trovato' }, { status: 404 })
+  }
+
+  const dip = await prisma.dipendente.findFirst({
+    where: { username, userId: locale.id },
+  })
   if (!dip || !dip.passwordHash) {
     return NextResponse.json({ error: 'Credenziali non valide' }, { status: 401 })
   }
@@ -19,7 +27,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Credenziali non valide' }, { status: 401 })
   }
 
-  const token = await signDipToken({ dipendenteId: dip.id, userId: dip.userId })
+  const token = await signDipToken({ dipendenteId: dip.id, userId: dip.userId, slug })
   const res = NextResponse.json({
     ok: true,
     mustChangePassword: dip.mustChangePassword,

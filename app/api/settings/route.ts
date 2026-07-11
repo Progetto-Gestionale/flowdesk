@@ -54,8 +54,25 @@ export async function PATCH(req: Request) {
       update.publicId = null
     }
 
+    // Auto-genera publicId dal nomeLocale se non esiste ancora
+    if (!user.publicId && !update.publicId && update.nomeLocale) {
+      const base = (update.nomeLocale as string)
+        .toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+      let slug = base
+      let n = 1
+      while (await prisma.user.findFirst({ where: { publicId: slug, NOT: { id: user.id } } })) {
+        slug = `${base}-${n++}`
+      }
+      update.publicId = slug
+    }
+
     await prisma.user.update({ where: { id: user.id }, data: update })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, publicId: update.publicId ?? user.publicId ?? null })
   } catch (e) {
     console.error('[SETTINGS PATCH]', e)
     return NextResponse.json({ error: 'Errore server' }, { status: 500 })

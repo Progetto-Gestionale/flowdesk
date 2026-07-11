@@ -10,7 +10,8 @@ const TTL = 60 * 60 * 24 * 30 // 30 giorni
 
 export interface DipToken {
   dipendenteId: string
-  userId: string // userId del titolare (per scope)
+  userId: string   // userId del titolare (per scope)
+  slug: string     // publicId del locale (per redirect post-logout)
 }
 
 export async function signDipToken(payload: DipToken): Promise<string> {

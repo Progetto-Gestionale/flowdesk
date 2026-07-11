@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   })
 
   // Rinnova il token (mustChangePassword ora false)
-  const token = await signDipToken({ dipendenteId: session.dipendenteId, userId: session.userId })
+  const token = await signDipToken({ dipendenteId: session.dipendenteId, userId: session.userId, slug: session.slug })
   const res = NextResponse.json({ ok: true })
   res.cookies.set(dipCookieOptions(token))
   return res

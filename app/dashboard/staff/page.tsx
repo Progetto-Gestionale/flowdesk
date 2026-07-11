@@ -71,6 +71,8 @@ function toISO(d: Date) {
 export default function StaffPage() {
   const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste' | 'presenze'>('dipendenti')
   const [qrDip, setQrDip] = useState<{ nome: string; url: string } | null>(null)
+  const [publicId, setPublicId] = useState<string | null>(null)
+  const [nomeLocale, setNomeLocale] = useState<string | null>(null)
 
   // Presenze
   const oggiStr = new Date().toISOString().split('T')[0]
@@ -146,6 +148,8 @@ export default function StaffPage() {
   async function fetchFabbisogno() {
     const safeJson = async (res: Response) => { try { return await res.json() } catch { return {} } }
     const s = await fetch('/api/settings', { credentials: 'include' }).then(safeJson)
+    setPublicId(s.publicId ?? null)
+    setNomeLocale(s.nomeLocale ?? null)
     try {
       const parsed: Requisito[] = s.fabbisognoStaff ? JSON.parse(s.fabbisognoStaff) : []
       setFabbisogno(parsed)
@@ -489,7 +493,7 @@ export default function StaffPage() {
                 </>
               )}
               <button onClick={inviaReminder} disabled={inviandoReminder}
-                className="text-xs px-3 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium disabled:opacity-50 transition-colors">
+                className="text-xs px-3 py-1.5 bg-violet-50 text-violet-600 border border-violet-200 rounded-lg hover:bg-violet-100 font-medium disabled:opacity-50 transition-colors">
                 {inviandoReminder ? 'Invio...' : 'Invia reminder'}
               </button>
             </div>
@@ -685,21 +689,33 @@ export default function StaffPage() {
       {/* ── TAB DIPENDENTI ── */}
       {tab === 'dipendenti' && (
         <div className="space-y-3">
+          {/* Reminder configurazione mancante */}
+          {!nomeLocale && (
+            <Link href="/dashboard/impostazioni#generale" className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 hover:bg-amber-100 transition-colors">
+              <span className="text-amber-500 text-lg shrink-0">⚠️</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-800">Inserisci il nome del locale</p>
+                <p className="text-xs text-amber-600 mt-0.5">Il link di accesso dipendenti viene generato automaticamente dal nome del locale. Impostalo nelle impostazioni generali.</p>
+              </div>
+              <span className="text-amber-400 shrink-0">›</span>
+            </Link>
+          )}
+
           {/* Banner link + QR area dipendenti */}
           <div className="bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-4">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-purple-800">Link area dipendenti</p>
               <p className="text-xs text-purple-600 font-mono mt-0.5 truncate">
-                {typeof window !== 'undefined' ? window.location.origin : ''}/dipendente/login
+                {typeof window !== 'undefined' ? window.location.origin : ''}/dipendente/login/{publicId ?? '…'}
               </p>
               <div className="flex gap-2 mt-2">
                 <button
-                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/dipendente/login`)}
+                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}/dipendente/login/${publicId ?? ''}`)}
                   className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors">
                   Copia link
                 </button>
                 <button
-                  onClick={() => setQrDip({ nome: 'Area dipendenti', url: `${window.location.origin}/dipendente/login` })}
+                  onClick={() => setQrDip({ nome: 'Area dipendenti', url: `${window.location.origin}/dipendente/login/${publicId ?? ''}` })}
                   className="text-xs px-3 py-1.5 bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-100 font-medium transition-colors">
                   Mostra QR
                 </button>
@@ -850,81 +866,119 @@ export default function StaffPage() {
         })
 
         return (
-          <div className="space-y-4 max-w-2xl">
-            {/* Nav data */}
-            <div className="flex items-center justify-between bg-white rounded-2xl border border-ink-navy/10 shadow-sm px-4 py-3 gap-3">
-              <button onClick={goBack} className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50 hover:text-ink-navy transition-colors shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <div className="flex-1 flex flex-col items-center gap-1">
-                <p className="font-semibold text-ink-navy capitalize text-sm">{fmtGiorno(presenzeData)}</p>
-                <input
-                  type="date" value={presenzeData} max={oggiStr}
-                  onChange={e => e.target.value && setPresenzeData(e.target.value)}
-                  className="text-xs border border-ink-navy/15 rounded-lg px-2 py-1 text-ink-navy/50 focus:outline-none focus:ring-2 focus:ring-electric-blue/40 bg-white"
-                />
+          <div className="flex gap-5 items-start">
+
+            {/* Colonna sinistra: lista */}
+            <div className="flex-1 min-w-0 space-y-4">
+              {/* Nav data */}
+              <div className="flex items-center justify-between bg-white rounded-2xl border border-ink-navy/10 shadow-sm px-4 py-3 gap-3">
+                <button onClick={goBack} className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50 hover:text-ink-navy transition-colors shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <div className="flex-1 flex flex-col items-center gap-1">
+                  <p className="font-semibold text-ink-navy capitalize text-sm">{fmtGiorno(presenzeData)}</p>
+                  <input
+                    type="date" value={presenzeData} max={oggiStr}
+                    onChange={e => e.target.value && setPresenzeData(e.target.value)}
+                    className="text-xs border border-ink-navy/15 rounded-lg px-2 py-1 text-ink-navy/50 focus:outline-none focus:ring-2 focus:ring-electric-blue/40 bg-white"
+                  />
+                </div>
+                <button onClick={goForward} disabled={presenzeData >= oggiStr}
+                  className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50 hover:text-ink-navy transition-colors disabled:opacity-20 disabled:cursor-not-allowed shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </button>
               </div>
-              <button onClick={goForward} disabled={presenzeData >= oggiStr}
-                className="p-1.5 rounded-lg hover:bg-mist text-ink-navy/50 hover:text-ink-navy transition-colors disabled:opacity-20 disabled:cursor-not-allowed shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-              </button>
+
+              {presenzeLoading ? (
+                <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-10 text-center">
+                  <p className="text-sm text-ink-navy/30 font-mono">Caricamento...</p>
+                </div>
+              ) : presenzeList.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-12 text-center">
+                  <p className="text-ink-navy/25 text-sm">Nessuna timbratura per questo giorno</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {dipList.map(d => {
+                    const entrate = [...d.entrate].sort()
+                    const uscite = [...d.uscite].sort()
+                    const primaEntrata = entrate[0]
+                    const ultimaUscita = uscite[uscite.length - 1]
+                    const presente = primaEntrata && (!ultimaUscita || ultimaUscita < entrate[entrate.length - 1])
+                    let ore: string | null = null
+                    if (primaEntrata && ultimaUscita) {
+                      const ms = new Date(ultimaUscita).getTime() - new Date(primaEntrata).getTime()
+                      ore = `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`
+                    }
+                    return (
+                      <div key={d.nome} className="bg-white rounded-xl border border-ink-navy/10 shadow-sm px-4 py-3.5 flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${presente ? 'bg-green-400' : 'bg-ink-navy/15'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-ink-navy text-sm">{d.nome}</p>
+                          {d.ruolo && <p className="text-xs text-ink-navy/35">{d.ruolo}</p>}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-lg">
+                            {primaEntrata ? fmtOra(primaEntrata) : '—'}
+                          </span>
+                          <span className="text-ink-navy/20 text-xs">→</span>
+                          {presente ? (
+                            <span className="text-xs font-semibold text-green-600 bg-green-50 border border-green-200 px-2 py-1 rounded-lg">In corso</span>
+                          ) : (
+                            <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${ultimaUscita ? 'text-red-600 bg-red-50' : 'text-ink-navy/25 bg-ink-navy/5'}`}>
+                              {ultimaUscita ? fmtOra(ultimaUscita) : '—'}
+                            </span>
+                          )}
+                          {ore && <span className="text-xs font-semibold text-electric-blue bg-electric-blue/10 px-2 py-1 rounded-lg ml-1">{ore}</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Badge presenti ora */}
-            {presenzeData === oggiStr && !presenzeLoading && presenti.length > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl">
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <p className="text-sm font-semibold text-green-700">
-                  {presenti.length === 1 ? '1 dipendente presente' : `${presenti.length} dipendenti presenti`}:&nbsp;
-                  <span className="font-normal">{presenti.map(d => d.nome.split(' ')[0]).join(', ')}</span>
-                </p>
+            {/* Colonna destra: chi c'è ora (solo oggi) */}
+            <div className="w-80 shrink-0 sticky top-6">
+              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-ink-navy/8 flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${presenzeData === oggiStr && presenti.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-ink-navy/15'}`} />
+                  <p className="text-xs font-semibold text-ink-navy/60 uppercase tracking-wide">In servizio ora</p>
+                </div>
+                {presenzeData !== oggiStr ? (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-xs text-ink-navy/30">Dato disponibile solo per oggi</p>
+                  </div>
+                ) : presenzeLoading ? (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-xs text-ink-navy/25 font-mono">...</p>
+                  </div>
+                ) : presenti.length === 0 ? (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-xs text-ink-navy/30">Nessuno in servizio</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-ink-navy/6">
+                    {presenti.map(d => {
+                      const entrata = [...d.entrate].sort().pop()!
+                      const now = Date.now()
+                      const ms = now - new Date(entrata).getTime()
+                      const h = Math.floor(ms / 3600000)
+                      const m = Math.floor((ms % 3600000) / 60000)
+                      return (
+                        <div key={d.nome} className="px-4 py-3">
+                          <p className="text-sm font-semibold text-ink-navy truncate">{d.nome.split(' ')[0]}</p>
+                          <p className="text-xs text-ink-navy/40 mt-0.5">
+                            dalle {fmtOra(entrata)} · {h > 0 ? `${h}h ` : ''}{m}m
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
-            {presenzeLoading ? (
-              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-10 text-center">
-                <p className="text-sm text-ink-navy/30 font-mono">Caricamento...</p>
-              </div>
-            ) : presenzeList.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-12 text-center">
-                <p className="text-ink-navy/25 text-sm">Nessuna timbratura per questo giorno</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {dipList.map(d => {
-                  const entrate = [...d.entrate].sort()
-                  const uscite = [...d.uscite].sort()
-                  const primaEntrata = entrate[0]
-                  const ultimaUscita = uscite[uscite.length - 1]
-                  const presente = primaEntrata && (!ultimaUscita || ultimaUscita < entrate[entrate.length - 1])
-                  let ore: string | null = null
-                  if (primaEntrata && ultimaUscita) {
-                    const ms = new Date(ultimaUscita).getTime() - new Date(primaEntrata).getTime()
-                    ore = `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`
-                  }
-                  return (
-                    <div key={d.nome} className="bg-white rounded-xl border border-ink-navy/10 shadow-sm px-5 py-4 flex items-center gap-4">
-                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${presente ? 'bg-green-400' : 'bg-ink-navy/15'}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-ink-navy text-sm">{d.nome}</p>
-                        {d.ruolo && <p className="text-xs text-ink-navy/40">{d.ruolo}</p>}
-                      </div>
-                      <div className="text-right shrink-0 space-y-0.5">
-                        <div className="flex items-center gap-2 justify-end">
-                          <span className="text-xs text-ink-navy/35">Entrata</span>
-                          <span className="text-sm font-semibold text-ink-navy">{primaEntrata ? fmtOra(primaEntrata) : '—'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 justify-end">
-                          <span className="text-xs text-ink-navy/35">Uscita</span>
-                          <span className="text-sm font-semibold text-ink-navy">{ultimaUscita ? fmtOra(ultimaUscita) : presente ? <span className="text-green-500 text-xs font-semibold">Presente</span> : '—'}</span>
-                        </div>
-                        {ore && <p className="text-xs text-electric-blue font-semibold">{ore}</p>}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
           </div>
         )
       })()}
@@ -1021,9 +1075,9 @@ export default function StaffPage() {
                     <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-green-200">
                       <span className="text-xs text-green-600">Link accesso</span>
                       <button
-                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/dipendente/login`)}
+                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/dipendente/login/${publicId ?? ''}`)}
                         className="font-mono text-xs text-green-800 hover:text-electric-blue underline underline-offset-2">
-                        {typeof window !== 'undefined' ? window.location.origin : ''}/dipendente/login
+                        {typeof window !== 'undefined' ? window.location.origin : ''}/dipendente/login/{publicId ?? '…'}
                       </button>
                     </div>
                   </div>

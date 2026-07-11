@@ -218,7 +218,7 @@ model Dipendente {
   email       String
   ruolo       String?
   fotoUrl     String?
-  username    String?               @unique
+  username    String?
   passwordHash String?
   mustChangePassword Boolean       @default(true)
   token       String?               @unique
@@ -229,6 +229,8 @@ model Dipendente {
   turni            Turno[]
   disponibilita    DisponibilitaDipendente[]
   timbrature       Timbratura[]
+
+  @@unique([userId, username])
 }
 
 model Timbratura {

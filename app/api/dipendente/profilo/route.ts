@@ -15,5 +15,5 @@ export async function GET() {
   })
   if (!dipendente) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
 
-  return NextResponse.json({ dipendente })
+  return NextResponse.json({ dipendente, slug: session.slug ?? null })
 }

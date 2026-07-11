@@ -11,13 +11,14 @@ export async function GET(req: Request) {
 
   const giorno = data ? new Date(data) : new Date()
   giorno.setHours(0, 0, 0, 0)
-  const domani = new Date(giorno)
-  domani.setDate(domani.getDate() + 1)
+  const fineFinestra = new Date(giorno)
+  fineFinestra.setDate(fineFinestra.getDate() + 1)
+  fineFinestra.setHours(8, 0, 0, 0) // includi uscite fino alle 08:00 del giorno dopo
 
   const timbrature = await prisma.timbratura.findMany({
     where: {
       userId: user.id,
-      timestamp: { gte: giorno, lt: domani },
+      timestamp: { gte: giorno, lt: fineFinestra },
     },
     include: { dipendente: { select: { nome: true, ruolo: true, fotoUrl: true } } },
     orderBy: { timestamp: 'desc' },
