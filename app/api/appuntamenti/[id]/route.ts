@@ -49,12 +49,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       const tavoli = await prisma.tavolo.findMany({ where: { id: { in: ids } }, orderBy: { numero: 'asc' } })
       const label = tavoli.map(t => t.numero).join('+')
+      // Calcola l'ora di fine della prenotazione (inizio + durata) in ora locale italiana
+      const fineApp = new Date(appCorrente.data.getTime() + appCorrente.durata * 60000)
+      const fineLocal = new Date(fineApp.toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
+      const oraFine = `${String(fineLocal.getHours()).padStart(2, '0')}:${String(fineLocal.getMinutes()).padStart(2, '0')}`
       await prisma.gruppoTavoli.create({
         data: {
           userId: user.id,
           label,
           data: dataStr,
           turnoId,
+          oraFine,
           auto: true,
           tavoli: { connect: ids.map((tid: string) => ({ id: tid })) },
         },

@@ -66,23 +66,26 @@ export async function POST(req: Request) {
     })
 
     if (gruppo) {
-      // Se il gruppo ha un turnoId, verifica che l'ordine arrivi dentro le ore del turno
-      let withinTurno = true
-      if (gruppo.turnoId) {
+      // Usa oraFine della prenotazione se disponibile, altrimenti fallback alla fine del turno
+      let withinWindow = true
+      if (gruppo.oraFine) {
+        // Il gruppo è attivo solo fino alla fine della prenotazione specifica
+        withinWindow = minutiOra < toMinutes(gruppo.oraFine)
+      } else if (gruppo.turnoId) {
         try {
           const turni: { id: string; oraInizio: string; oraFine: string }[] = JSON.parse(user.turniServizio ?? '[]')
           const turno = turni.find(t => t.id === gruppo.turnoId)
           if (turno) {
             const inizioT = toMinutes(turno.oraInizio)
             const fineT = toMinutes(turno.oraFine)
-            withinTurno = inizioT > fineT
+            withinWindow = inizioT > fineT
               ? (minutiOra >= inizioT || minutiOra < fineT)
               : (minutiOra >= inizioT && minutiOra < fineT)
           }
         } catch {}
       }
 
-      if (withinTurno) {
+      if (withinWindow) {
         gruppoId = gruppo.id
         tavoloLabel = `T${gruppo.label}`
       }

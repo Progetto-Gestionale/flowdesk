@@ -13,7 +13,6 @@ const navFood = [
   {
     section: 'Clienti',
     items: [
-      { label: 'Clienti', href: '/dashboard/clienti/rubrica', Icon: IconUsers },
       { label: 'Messaggi', href: '/dashboard/clienti/inbox', Icon: IconChat },
       { label: 'Richieste', href: '/dashboard/clienti/preventivi', Icon: IconClipboard },
       { label: 'Calendario', href: '/dashboard/clienti/calendario', Icon: IconCalendar },

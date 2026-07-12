@@ -57,12 +57,14 @@ function QRCanvas({ url, id }: { url: string; id: string }) {
 }
 
 // ── Vista LISTA ───────────────────────────────────────────────────────────────
-function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap }: {
+function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap }: {
   tavoli: Tavolo[]; gruppi: Gruppo[]; publicId: string | null
   onModifica: (t: Tavolo) => void; onElimina: (id: string) => void
   selectMode: boolean; selectedIds: string[]; onToggleSelect: (id: string) => void
   onSciogliGruppo: (gruppoId: string) => void
   tavoloAppMap?: Map<string, AppuntamentoLight>
+  tavoloCarryMap?: Map<string, { carryIn: boolean; carryOut: boolean }>
+  tavoloAppsMap?: Map<string, (AppuntamentoLight & { carryIn: boolean; carryOut: boolean })[]>
 }) {
   const [qrAperto, setQrAperto] = useState<string | null>(null)
   const base = typeof window !== 'undefined' ? window.location.origin : ''
@@ -105,13 +107,14 @@ function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMod
           const url = publicId ? `${base}/ordina/${publicId}/${t.numero}` : ''
           const gruppo = gruppoByTavoloId.get(t.id)
           const isSelected = selectedIds.includes(t.id)
-          const appAssegnato = tavoloAppMap?.get(t.id)
+          const appsDelTavolo = tavoloAppsMap?.get(t.id) ?? []
+          const appAssegnato = appsDelTavolo[0] ?? tavoloAppMap?.get(t.id)
           const isFusoPerTurno = appAssegnato ? appConPiuTavoli.has(appAssegnato.id) : false
           const labelFusoTurno = isFusoPerTurno && tavoloAppMap
             ? `T${Array.from(tavoloAppMap.entries()).filter(([,a]) => a.id === appAssegnato!.id).map(([tid]) => tavoli.find(tv=>tv.id===tid)?.numero).filter(Boolean).sort((a,b)=>(a as number)-(b as number)).join('+')}`
             : null
           return (
-            <div key={t.id} className={isSelected ? 'bg-electric-blue/10' : appAssegnato ? 'bg-red-50/40' : ''}>
+            <div key={t.id} className={isSelected ? 'bg-electric-blue/10' : appsDelTavolo.length > 0 ? 'bg-red-50/40' : ''}>
               <div className="flex items-center gap-4 px-5 py-4">
                 {selectMode && (
                   <button onClick={() => onToggleSelect(t.id)}
@@ -132,11 +135,16 @@ function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMod
                          T{gruppo.label}
                       </span>
                     )}
-                    {appAssegnato && (
-                      <span className="text-xs bg-red-100 text-red-700 font-semibold px-2 py-0.5 rounded-full">
-                         {appAssegnato.clienteNome?.split(' ')[0] ?? 'Occupato'}{appAssegnato.coperti ? ` · ${appAssegnato.coperti}` : ''}
+                    {appsDelTavolo.map((a, i) => (
+                      <span key={a.id} className="flex items-center gap-1">
+                        <span className="text-xs bg-red-100 text-red-700 font-semibold px-2 py-0.5 rounded-full">
+                          {a.clienteNome?.split(' ')[0] ?? 'Occupato'}{a.coperti ? ` · ${a.coperti}` : ''}
+                        </span>
+                        {a.carryIn && <span className="text-xs bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full">← prec.</span>}
+                        {a.carryOut && <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-1.5 py-0.5 rounded-full">→ cont.</span>}
+                        {i < appsDelTavolo.length - 1 && <span className="text-xs text-ink-navy/30 font-bold">→</span>}
                       </span>
-                    )}
+                    ))}
                   </div>
                   <p className="text-xs text-ink-navy/35">{t.posti} posti{t.note ? ` · ${t.note}` : ''}</p>
                 </div>
@@ -186,7 +194,9 @@ const VistaMappa = forwardRef<VistaMappHandle, {
   selectMode: boolean; selectedIds: string[]; onToggleSelect: (id: string) => void
   onSciogliGruppo: (gruppoId: string) => void
   tavoloAppMap?: Map<string, AppuntamentoLight>
-}>(function VistaMappa({ tavoli, gruppi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap }, ref) {
+  tavoloCarryMap?: Map<string, { carryIn: boolean; carryOut: boolean }>
+  tavoloAppsMap?: Map<string, (AppuntamentoLight & { carryIn: boolean; carryOut: boolean })[]>
+}>(function VistaMappa({ tavoli, gruppi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap }, ref) {
   const [editMode, setEditMode] = useState(false)
   const [hoveredTavoloId, setHoveredTavoloId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -382,7 +392,9 @@ const VistaMappa = forwardRef<VistaMappHandle, {
             const d = mapData[t.id]; if (!d) return null
             const { w, h, colore, forma, x, y } = d; const isC = forma === 'cerchio'
             const gruppo = gruppoByTavoloId.get(t.id)
-            const appAssegnato = tavoloAppMap?.get(t.id)
+            const appsDelTavolo = tavoloAppsMap?.get(t.id) ?? []
+            const appAssegnato = appsDelTavolo[0] ?? tavoloAppMap?.get(t.id)
+            const carry = tavoloCarryMap?.get(t.id)
             const isFusoPerTurno = appAssegnato ? appConPiuTavoli.has(appAssegnato.id) : false
             // Label: se fuso per turno mostra "T2+3", altrimenti gruppo permanente o etichetta
             const labelFuso = isFusoPerTurno && tavoloAppMap
@@ -394,12 +406,18 @@ const VistaMappa = forwardRef<VistaMappHandle, {
             return (
               <div key={t.id} style={{ position: 'absolute', left: x, top: y, width: w, height: h, userSelect: 'none', overflow: 'visible' }}
                 onMouseEnter={() => setHoveredTavoloId(t.id)} onMouseLeave={() => setHoveredTavoloId(null)}>
-                {/* Badge prenotazione */}
-                {appAssegnato && (
-                  <div style={{ position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)', zIndex: 30, whiteSpace: 'nowrap' }}>
-                    <div style={{ backgroundColor: '#ef4444', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 8, padding: '2px 7px', boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}>
-                      {appAssegnato.clienteNome?.split(' ')[0] ?? 'Prenotato'}{appAssegnato.coperti ? ` · ${appAssegnato.coperti}` : ''}
-                    </div>
+                {/* Badge prenotazione/i */}
+                {appsDelTavolo.length > 0 && (
+                  <div style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', zIndex: 30, whiteSpace: 'nowrap', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    {appsDelTavolo.map((a, i) => (
+                      <div key={a.id} style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                        {a.carryIn && <div style={{ backgroundColor: '#3b82f6', color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 6, padding: '1px 4px' }}>←</div>}
+                        <div style={{ backgroundColor: i === 0 ? '#ef4444' : '#f97316', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 8, padding: '2px 7px', boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}>
+                          {a.clienteNome?.split(' ')[0] ?? 'Prenotato'}{a.coperti ? ` · ${a.coperti}` : ''}
+                        </div>
+                        {a.carryOut && <div style={{ backgroundColor: '#f59e0b', color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 6, padding: '1px 4px' }}>→</div>}
+                      </div>
+                    ))}
                   </div>
                 )}
                 {/* Bordo selezione */}
@@ -539,30 +557,48 @@ export default function TavoliPage() {
     fetchGruppi(giornoSel, turnoSel)
   }, [giornoSel, turnoSel])
 
-  // Appuntamenti filtrati per giorno+turno
+  // Appuntamenti filtrati per giorno+turno (con overlap, non solo ora di inizio)
+  const turnoAttivo = turniServizio.find(t => t.id === turnoSel)
   const appTurno: AppuntamentoLight[] = (() => {
     if (!giornoSel) return []
-    const turno = turniServizio.find(t => t.id === turnoSel)
     return appuntamenti.filter(a => {
       if (a.status === 'cancellato') return false
-      // Converti in ora locale italiana per evitare bug timezone
       const dLocal = new Date(new Date(a.data).toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
       const dStr = `${dLocal.getFullYear()}-${String(dLocal.getMonth() + 1).padStart(2, '0')}-${String(dLocal.getDate()).padStart(2, '0')}`
       if (dStr !== giornoSel) return false
-      if (!turno) return true
-      const oraApp = dLocal.getHours() * 60 + dLocal.getMinutes()
-      const inizioT = toMinutes(turno.oraInizio)
-      const fineT = toMinutes(turno.oraFine)
-      if (inizioT > fineT) return oraApp >= inizioT || oraApp < fineT
-      return oraApp < fineT && oraApp >= inizioT
+      if (!turnoAttivo) return true
+      const appInizio = dLocal.getHours() * 60 + dLocal.getMinutes()
+      const appFine = appInizio + (a.durata ?? 90)
+      const inizioT = toMinutes(turnoAttivo.oraInizio)
+      const fineT = toMinutes(turnoAttivo.oraFine)
+      if (inizioT > fineT) return appInizio >= inizioT || appInizio < fineT // turno attraversa mezzanotte
+      return appInizio < fineT && appFine > inizioT // overlap
     })
   })()
 
-  // Mappa tavoloId → appuntamento per quel turno
-  const tavoloAppMap = new Map<string, AppuntamentoLight>()
+  // Mappa tavoloId → lista appuntamenti sovrapposti + flag carryIn/carryOut per ognuno
+  const tavoloAppsMap = new Map<string, (AppuntamentoLight & { carryIn: boolean; carryOut: boolean })[]>()
   appTurno.forEach(a => {
     const ids: string[] = (() => { try { return a.tavoliIds ? JSON.parse(a.tavoliIds) : (a.tavoloId ? [a.tavoloId] : []) } catch { return a.tavoloId ? [a.tavoloId] : [] } })()
-    ids.forEach(id => tavoloAppMap.set(id, a))
+    const dLocal = new Date(new Date(a.data).toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
+    const appInizio = dLocal.getHours() * 60 + dLocal.getMinutes()
+    const appFine = appInizio + (a.durata ?? 90)
+    const inizioT = turnoAttivo ? toMinutes(turnoAttivo.oraInizio) : 0
+    const fineT = turnoAttivo ? toMinutes(turnoAttivo.oraFine) : 1440
+    const carryIn = !!turnoAttivo && appInizio < inizioT
+    const carryOut = !!turnoAttivo && appFine > fineT
+    ids.forEach(id => {
+      const existing = tavoloAppsMap.get(id) ?? []
+      existing.push({ ...a, carryIn, carryOut })
+      tavoloAppsMap.set(id, existing)
+    })
+  })
+  // Compatibilità con componenti che usano tavoloAppMap (primo appuntamento per tavolo)
+  const tavoloAppMap = new Map<string, AppuntamentoLight>()
+  const tavoloCarryMap = new Map<string, { carryIn: boolean; carryOut: boolean }>()
+  tavoloAppsMap.forEach((apps, id) => {
+    tavoloAppMap.set(id, apps[0])
+    tavoloCarryMap.set(id, { carryIn: apps[0].carryIn, carryOut: apps[apps.length - 1].carryOut })
   })
 
   function toggleSelect(id: string) {
@@ -707,13 +743,13 @@ export default function TavoliPage() {
             <VistaMappa ref={mappaRef} tavoli={tavoli} gruppi={gruppi}
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
-              onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} />
+              onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />
           )}
           {vista === 'lista' && (
             <VistaLista tavoli={tavoli} gruppi={gruppi} publicId={publicId}
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
-              onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} />
+              onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />
           )}
         </>
       )}

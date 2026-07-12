@@ -44,48 +44,33 @@ function SintesiRichiesta({ items, note }: { items: ItemExt[]; note?: string }) 
   )
   const dataMatch = note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
   const oraMatch = note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? note?.match(/ORA_ISO:(\d{2}:\d{2})/)
-  // Estrai anche da note testuale (es: "Coperti: 4")
   const copertiNote = note?.match(/Coperti:\s*(\d+)/)
   const allergieNote = note?.match(/Allergie:\s*([^.]+)/)
   const occasioneNote = note?.match(/Occasione:\s*([^.]+)/)
-
   const coperti = items[0]?.coperti ?? (copertiNote ? parseInt(copertiNote[1]) : null)
   const allergie = items[0]?.allergie ?? allergieNote?.[1]?.trim()
   const occasione = items[0]?.occasione ?? occasioneNote?.[1]?.trim()
-  const noteClean = note?.replace(/DATA_ISO:\S+|ORA_ISO:\S+|Coperti:\s*\d+\.|Allergie:[^.]+\.|Occasione:[^.]+\.|Generato automaticamente via chat\./g, '').trim()
+  const noteClean = note?.replace(/DATA_ISO:\S+|ORA_ISO:\S+|Coperti:\s*\d+\.|Allergie:[^.]+\.|Occasione:[^.]+\.|Generato automaticamente via chat\.|Prenotazione[^.]+via[^.]+\.|Telefono:[^.]+\./g, '').trim()
+
+  const rows: { label: string; value: string; accent?: string }[] = []
+  // Mostra descrizione senza il moltiplicatore coperti (già mostrato nella riga Coperti)
+  const descBase = righe.map(r => r.replace(/\s*×\s*\d+$/, '')).join(', ')
+  if (descBase) rows.push({ label: 'Richiesta', value: descBase })
+  if (dataMatch) rows.push({ label: 'Data', value: new Date(dataMatch[1]).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }) })
+  if (oraMatch) rows.push({ label: 'Orario', value: oraMatch[1] })
+  if (coperti != null && coperti > 0) rows.push({ label: 'Coperti', value: `${coperti} ${coperti === 1 ? 'persona' : 'persone'}` })
+  if (allergie && allergie.toLowerCase() !== 'nessuna') rows.push({ label: 'Allergie', value: allergie, accent: 'text-red-600' })
+  if (occasione) rows.push({ label: 'Occasione', value: occasione })
+  if (noteClean && noteClean.length > 3) rows.push({ label: 'Note', value: noteClean })
 
   return (
-    <div className="bg-electric-blue/10 border border-electric-blue/15 rounded-xl px-4 py-3 space-y-2">
-      <p className="text-xs font-semibold text-electric-blue uppercase tracking-wider">Cosa ha chiesto</p>
-      <p className="text-sm font-medium text-ink-navy">{righe.join(' · ') || 'Nessuna descrizione'}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {dataMatch && (
-          <span className="inline-flex items-center gap-1 bg-electric-blue/15 text-electric-blue text-xs font-semibold px-2 py-0.5 rounded-full">
-            {new Date(dataMatch[1]).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </span>
-        )}
-        {oraMatch && (
-          <span className="inline-flex items-center gap-1 bg-electric-blue/15 text-electric-blue text-xs font-semibold px-2 py-0.5 rounded-full">
-            {oraMatch[1]}
-          </span>
-        )}
-        {coperti != null && coperti > 0 && (
-          <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-            {coperti} {coperti === 1 ? 'persona' : 'persone'}
-          </span>
-        )}
-        {allergie && allergie.toLowerCase() !== 'nessuna' && (
-          <span className="inline-flex items-center gap-1 bg-red-100 text-red-600 text-xs font-semibold px-2 py-0.5 rounded-full">
-            {allergie}
-          </span>
-        )}
-        {occasione && (
-          <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-600 text-xs font-semibold px-2 py-0.5 rounded-full">
-            {occasione}
-          </span>
-        )}
-      </div>
-      {noteClean && noteClean.length > 3 && <p className="text-xs text-electric-blue">{noteClean}</p>}
+    <div className="divide-y divide-ink-navy/6">
+      {rows.map(r => (
+        <div key={r.label} className="flex gap-3 py-2.5">
+          <span className="text-xs text-ink-navy/40 w-20 shrink-0 pt-0.5">{r.label}</span>
+          <span className={`text-sm font-medium ${r.accent ?? 'text-ink-navy'}`}>{r.value}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -1085,149 +1070,98 @@ function Richieste() {
       {selected && (() => {
         const t = tipoInfo(selected.tipo)
         const items = JSON.parse(selected.items) as Item[]
-        const sintesi = items.map(i => i.descrizione).filter(Boolean).join(', ')
         return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden" style={{ maxHeight: '88vh' }} onClick={e => e.stopPropagation()}>
 
               {/* Header */}
-              <div className="px-5 py-4 border-b border-ink-navy/8 flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${t.color}`}>{t.label}</span>
-                    <span className="text-xs text-ink-navy/35">#{String(selected.numero).padStart(3, '0')}</span>
+              <div className="px-6 pt-5 pb-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-md ${t.color}`}>{t.label}</span>
+                    <span className="text-xs text-ink-navy/30 font-mono">#{String(selected.numero).padStart(3, '0')}</span>
                   </div>
-                  <h2 className="text-base font-bold text-ink-navy">{selected.clienteName}</h2>
-                  {selected.clienteEmail && <p className="text-xs text-ink-navy/35">{selected.clienteEmail}</p>}
+                  <button onClick={() => setSelected(null)} className="text-ink-navy/25 hover:text-ink-navy/60 transition-colors p-1 -mr-1 -mt-1">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  </button>
                 </div>
-                <button onClick={() => setSelected(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl mt-1">✕</button>
+                <h2 className="text-xl font-bold text-ink-navy mt-3">{selected.clienteName}</h2>
+                {selected.clienteEmail && <p className="text-sm text-ink-navy/40 mt-0.5">{selected.clienteEmail}</p>}
               </div>
 
-              <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+              <div className="overflow-y-auto flex-1">
 
-                {/* Profilo cliente — mostrato solo se cliente già conosciuto */}
-                {clienteStorico && clienteStorico.totaleRichieste > 1 && (
-                  <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-violet-700 uppercase tracking-wider">Cliente abituale</span>
-                      <span className="bg-violet-100 text-violet-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                        {clienteStorico.totaleRichieste - 1} {clienteStorico.totaleRichieste - 1 === 1 ? 'visita precedente' : 'visite precedenti'}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {clienteStorico.spesaTotale > 0 && (
-                        <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-2 py-0.5 rounded-full">
-                          €{clienteStorico.spesaTotale.toFixed(0)} spesi in totale
-                        </span>
-                      )}
-                      {clienteStorico.ultimaVisita && (
-                        <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-2 py-0.5 rounded-full">
-                          Ultima visita: {new Date(clienteStorico.ultimaVisita).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
-                        </span>
-                      )}
-                      {clienteStorico.noShow > 0 && (
-                        <span className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">
-                          {clienteStorico.noShow} no-show
-                        </span>
-                      )}
-                    </div>
-                    {(allergieMemoriate.length > 0 || preferenzeMemoriate.length > 0) && (
-                      <div className="border-t border-violet-200 pt-2 space-y-1">
-                        {allergieMemoriate.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs font-semibold text-violet-500 shrink-0 mt-0.5">Allergie note:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {allergieMemoriate.map(a => (
-                                <span key={a} className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">{a}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {preferenzeMemoriate.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs font-semibold text-violet-500 shrink-0 mt-0.5">Preferenze:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {preferenzeMemoriate.map(p => (
-                                <span key={p} className="text-xs bg-purple-100 text-purple-600 font-semibold px-2 py-0.5 rounded-full">{p}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
 
-                {/* Sintesi richiesta — in evidenza */}
-                <SintesiRichiesta items={items} note={selected.note} />
+                {/* Dettagli richiesta */}
+                <div className="px-6 pb-2">
+                  <SintesiRichiesta items={items} note={selected.note} />
+                </div>
 
-                {/* Voci e importo */}
-                {items.length > 1 || items[0]?.prezzo > 0 ? (
-                  <div>
-                    <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Dettagli</p>
-                    <div className="space-y-1">
+                {/* Voci con prezzo */}
+                {(items.length > 1 || items[0]?.prezzo > 0) && (
+                  <div className="px-6 pb-4 mt-2">
+                    <div className="border border-ink-navy/8 rounded-xl overflow-hidden">
                       {items.map((item, i) => (
-                        <div key={i} className="flex justify-between text-sm bg-mist rounded-lg px-3 py-1.5">
-                          <span className="text-ink-navy/70">{item.descrizione}{item.quantita > 1 ? ` × ${item.quantita}` : ''}</span>
-                          <span className="font-medium">
-                            {item.prezzo > 0 ? `€ ${(item.quantita * item.prezzo).toFixed(2)}` : <span className="text-ink-navy/35 italic text-xs">da definire</span>}
+                        <div key={i} className="flex justify-between items-center px-4 py-2.5 border-b border-ink-navy/6 last:border-b-0">
+                          <span className="text-sm text-ink-navy/70">{item.descrizione}{item.quantita > 1 ? ` × ${item.quantita}` : ''}</span>
+                          <span className="text-sm font-medium text-ink-navy">
+                            {item.prezzo > 0 ? `€ ${(item.quantita * item.prezzo).toFixed(2)}` : <span className="text-ink-navy/30 text-xs">—</span>}
                           </span>
                         </div>
                       ))}
+                      {selected.totale > 0 && (
+                        <div className="flex justify-between items-center px-4 py-2.5 bg-mist">
+                          <span className="text-sm font-semibold text-ink-navy">Totale</span>
+                          <span className="text-sm font-bold text-ink-navy">€ {selected.totale.toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
-                    {selected.totale > 0 && (
-                      <div className="flex justify-end mt-2">
-                        <span className="text-sm font-bold text-ink-navy">Totale: € {selected.totale.toFixed(2)}</span>
-                      </div>
-                    )}
                   </div>
-                ) : null}
+                )}
 
                 {/* Stato */}
-                <div>
-                  <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">
-                    {isConcluso(selected.status) ? 'Esito' : selected.status === 'da_verificare' ? 'Azioni rapide' : 'Aggiorna stato'}
+                <div className="px-6 pb-5">
+                  <p className="text-xs font-semibold text-ink-navy/30 uppercase tracking-wider mb-3">
+                    {isConcluso(selected.status) ? 'Esito' : 'Stato'}
                   </p>
                   {isConcluso(selected.status) ? (
-                    <div className={`rounded-xl px-4 py-3 text-sm font-semibold text-center ${STATUS_COLORS[selected.status] ?? 'bg-mist text-ink-navy/60'}`}>
+                    <div className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-center ${STATUS_COLORS[selected.status] ?? 'bg-mist text-ink-navy/60'}`}>
                       {STATUS_LABELS[selected.status] ?? selected.status}
                     </div>
                   ) : selected.status === 'da_verificare' ? (
                     <div className="space-y-2">
-                      <button onClick={() => { handleStatusChange(selected.id, 'accettato') }}
-                        className="w-full bg-green-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2">
+                      <button onClick={() => handleStatusChange(selected.id, 'accettato')}
+                        className="w-full bg-green-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-green-700 transition-colors">
                         Accetta
                       </button>
                       <button onClick={() => { setProposta(selected); setSelected(null) }}
-                        className="w-full bg-amber-500 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                        className="w-full bg-ink-navy/5 text-ink-navy text-sm font-medium py-2.5 rounded-lg hover:bg-ink-navy/10 transition-colors">
                         Proponi modifica
                       </button>
-                      <button onClick={() => { handleStatusChange(selected.id, 'rifiutato') }}
-                        className="w-full border border-red-200 text-red-500 text-sm font-semibold py-2.5 rounded-lg hover:bg-red-50 flex items-center justify-center gap-2">
-                        ✕ Rifiuta
+                      <button onClick={() => handleStatusChange(selected.id, 'rifiutato')}
+                        className="w-full text-red-500 text-sm font-medium py-2 rounded-lg hover:bg-red-50 transition-colors">
+                        Rifiuta
                       </button>
                     </div>
                   ) : selected.status === 'inviato' ? (
                     <div className="space-y-2">
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 text-center">
-                        In attesa di risposta dal cliente
-                      </div>
+                      <p className="text-xs text-ink-navy/40 text-center pb-1">In attesa di risposta dal cliente</p>
                       <div className="flex gap-2">
                         <button onClick={() => handleStatusChange(selected.id, 'accettato')}
-                          className="flex-1 bg-green-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-green-700">
-                          Forza accetta
+                          className="flex-1 bg-green-600 text-white text-sm font-semibold py-2 rounded-lg hover:bg-green-700 transition-colors">
+                          Accetta
                         </button>
                         <button onClick={() => handleStatusChange(selected.id, 'rifiutato')}
-                          className="flex-1 border border-red-200 text-red-500 text-sm font-semibold py-2 rounded-lg hover:bg-red-50">
-                          ✕ Forza rifiuta
+                          className="flex-1 border border-ink-navy/10 text-ink-navy/50 text-sm font-medium py-2 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors">
+                          Rifiuta
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex gap-1.5 flex-wrap">
                       {(['bozza', 'inviato', 'accettato', 'rifiutato'] as const).map(key => (
                         <button key={key} onClick={() => handleStatusChange(selected.id, key)}
-                          className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${selected.status === key ? STATUS_COLORS[key] : 'bg-mist text-ink-navy/60 hover:bg-ink-navy/10'}`}>
+                          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${selected.status === key ? STATUS_COLORS[key] : 'bg-mist text-ink-navy/50 hover:bg-ink-navy/8'}`}>
                           {STATUS_LABELS[key]}
                         </button>
                       ))}
@@ -1237,30 +1171,35 @@ function Richieste() {
               </div>
 
               {/* Footer */}
-              <div className="px-5 py-3 border-t border-ink-navy/8 flex flex-col gap-2">
+              <div className="px-6 py-4 border-t border-ink-navy/8 space-y-2">
                 {selected.tipo === 'tavolo' && selected.status === 'accettato' && (
                   <button onClick={() => { setSelected(null); setConfermaApp(selected) }}
-                    className="w-full text-sm text-ink-navy font-medium py-2 border border-ink-navy/15 rounded-lg hover:bg-mist transition-colors">
-                    🍽️ Assegna / cambia tavolo
+                    className="w-full text-sm font-medium text-ink-navy py-2.5 rounded-lg border border-ink-navy/12 hover:bg-mist transition-colors flex items-center justify-center gap-2">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="7" width="18" height="4.5" rx="1.5" />
+                      <path d="M6 11.5v9M18 11.5v9" />
+                    </svg>
+                    Assegna tavolo
                   </button>
                 )}
                 <div className="flex gap-2">
-                <button onClick={() => { setEditingRichiesta(selected); setSelected(null); setShowModal(true) }}
-                  className="flex-1 text-sm text-electric-blue font-medium py-2 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
-                  Gestisci
-                </button>
-                {selected.leadId && selected.status !== 'cliente_eliminato' && (
-                  <button onClick={() => handleCancellaCliente(selected)}
-                    className="flex-1 text-sm text-red-500 font-medium py-2 border border-red-200 rounded-lg hover:bg-red-50">
-                    ✕ Cancella
+                  <button onClick={() => { setEditingRichiesta(selected); setSelected(null); setShowModal(true) }}
+                    className="flex-1 text-sm font-medium text-ink-navy py-2 rounded-lg border border-ink-navy/12 hover:bg-mist transition-colors">
+                    Modifica
                   </button>
-                )}
-                <button onClick={() => handleDelete(selected.id)}
-                  className="text-sm text-ink-navy/40 font-medium py-2 px-3 border border-ink-navy/10 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors" title="Elimina definitivamente">
-                  Elimina
-                </button>
+                  {selected.leadId && selected.status !== 'cliente_eliminato' && (
+                    <button onClick={() => handleCancellaCliente(selected)}
+                      className="flex-1 text-sm font-medium text-red-500 py-2 rounded-lg border border-red-100 hover:bg-red-50 transition-colors">
+                      Cancella cliente
+                    </button>
+                  )}
+                  <button onClick={() => handleDelete(selected.id)}
+                    className="text-sm font-medium text-ink-navy/30 py-2 px-3 rounded-lg hover:text-red-500 hover:bg-red-50 transition-colors" title="Elimina richiesta">
+                    Elimina
+                  </button>
                 </div>
               </div>
+
             </div>
           </div>
         )

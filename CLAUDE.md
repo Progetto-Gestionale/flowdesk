@@ -77,6 +77,28 @@ prisma/
 - `Conversazione` — messaggi chatbot
 - `Preventivo` — preventivi/richieste clienti
 
+## Timezone — Regola Critica
+Tutti gli appuntamenti sono salvati in UTC nel DB. Gli orari di apertura, turni e confronti devono usare **ora locale italiana (Europe/Rome)**. Non usare mai `d.getHours()` o `toISOString().split('T')[0]` per confrontare date/ore — usare sempre:
+```typescript
+const dLocal = new Date(new Date(a.data).toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
+const oraMin = dLocal.getHours() * 60 + dLocal.getMinutes()
+const dateStr = `${dLocal.getFullYear()}-${String(dLocal.getMonth()+1).padStart(2,'0')}-${String(dLocal.getDate()).padStart(2,'0')}`
+```
+
+## Prenotazioni Tavoli — Flusso
+- `Preventivo` = richiesta pubblica del cliente (da `/prenota/[publicId]`)
+- Quando accettata → crea `Appuntamento` con `note: "Da richiesta #001"`
+- `tavoliIds: String?` (JSON array `["id1","id2"]`) su entrambi `Preventivo` e `Appuntamento`
+- `tavoloId` = singolo tavolo (legacy), `tavoliIds` = multi-tavolo
+- `bloccoAutoTavoli` e `modalitaOrario: 'libero'|'turni'` sono in `User.regolePrenotazione` (JSON)
+- `turniServizio` è JSON in `User`: `[{ id, nome, oraInizio: "HH:MM", oraFine: "HH:MM" }]`
+- API disponibilità pubblica: `app/api/public/disponibilita/route.ts`
+
+## Calendario — Colonne Tavoli
+- Vista giornaliera: una colonna per tavolo + colonna "Non assegnati" (sx) per app senza tavolo
+- Header e body colonne usano entrambi `flex-1 minWidth:140` — non cambiare o si disallineano
+- Un appuntamento multi-tavolo appare come "primary" nella prima colonna e "ghost" nelle altre
+
 ## Note Importanti
 - **Connessioni DB su Vercel**: usare porta `6543` con `?pgbouncer=true` nel DATABASE_URL (transaction mode). In locale va bene porta `5432`.
 - **Polling**: le pagine principali si aggiornano ogni 15 secondi automaticamente.
@@ -118,7 +140,7 @@ Poi creare `.env.local` con le chiavi fornite dal proprietario del progetto.
 ```bash
 git pull                        # sempre prima di iniziare
 # ...lavora e modifica file...
-git add .
+git add -A                      # sempre -A, mai un sottoinsieme
 git commit -m "descrizione"
 git push                        # trigera deploy automatico su Vercel
 ```
