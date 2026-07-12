@@ -623,12 +623,10 @@ export default function TavoliPage() {
   }
 
   async function fetchOrdini() {
-    const [resAperti, resChiusi] = await Promise.all([
-      fetch('/api/ordini?stato=aperto', { credentials: 'include' }).then(r => r.json()).catch(() => ({})),
-      fetch('/api/ordini?stato=chiuso', { credentials: 'include' }).then(r => r.json()).catch(() => ({})),
-    ])
-    setOrdiniAperti(resAperti.ordini ?? [])
-    setOrdiniChiusi(resChiusi.ordini ?? [])
+    const res = await fetch('/api/ordini', { credentials: 'include' }).then(r => r.json()).catch(() => ({}))
+    const tutti: Ordine[] = res.ordini ?? []
+    setOrdiniAperti(tutti.filter(o => o.status !== 'chiuso'))
+    setOrdiniChiusi(tutti.filter(o => o.status === 'chiuso'))
   }
 
   async function chiudiConto(o: Ordine) {
@@ -891,19 +889,19 @@ export default function TavoliPage() {
 
       {loading ? <p className="text-ink-navy/35 text-sm">Caricamento...</p> : (
         <>
-          {vista === 'mappa' && (
+          <div className={vista !== 'mappa' ? 'hidden' : ''}>
             <VistaMappa ref={mappaRef} tavoli={tavoli} gruppi={gruppi}
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
               onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />
-          )}
-          {vista === 'lista' && (
+          </div>
+          <div className={vista !== 'lista' ? 'hidden' : ''}>
             <VistaLista tavoli={tavoli} gruppi={gruppi} publicId={publicId}
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
               onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />
-          )}
-          {vista === 'conto' && (
+          </div>
+          <div className={vista !== 'conto' ? 'hidden' : ''}>
             <VistaConto
               ordiniAperti={ordiniAperti}
               ordiniChiusi={ordiniChiusi}
@@ -911,7 +909,7 @@ export default function TavoliPage() {
               chiudendo={chiudendo}
               onRiapri={riapriConto}
               onElimina={eliminaOrdine} />
-          )}
+          </div>
         </>
       )}
 
