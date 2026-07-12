@@ -27,12 +27,10 @@ const SEZIONI = [
   { id: 'generale', label: 'Locale', Icon: IconHome },
   { id: 'orari', label: 'Orari', Icon: IconClock },
   { id: 'turni', label: 'Turni', Icon: IconRefresh },
-  { id: 'staff', label: 'Staff', Icon: IconUsers },
   { id: 'servizi', label: 'Servizi', Icon: IconSettings },
   { id: 'prenotazioni', label: 'Prenotazioni', Icon: IconCalendar },
   { id: 'menu', label: 'Menu & Offerta', Icon: IconFork },
   { id: 'pagamenti', label: 'Pagamenti', Icon: IconCard },
-  { id: 'info', label: 'Info pratiche', Icon: IconInfo },
   { id: 'faq', label: 'FAQ', Icon: IconHelp },
   { id: 'bot', label: 'Bot', Icon: IconBot },
   { id: 'account', label: 'Account', Icon: IconUser },
@@ -65,15 +63,16 @@ type Orari = Record<string, string>
 type Servizi = Record<string, boolean>
 type Pagamenti = string[]
 interface Regole {
-  preavvisoMinMinuti: string      // preavviso minimo prenotazione tavolo (minuti)
-  preavvisoOrdiniMinMinuti: string // preavviso minimo ordini asporto/delivery (minuti)
-  anticipoMaxGiorni: string       // quanti giorni in anticipo si può prenotare
+  preavvisoMinMinuti: string
+  preavvisoOrdiniMinMinuti: string
+  anticipoMaxGiorni: string
   copertiMin: string
   copertiMax: string
-  durataMedia: string             // durata media tavola (minuti)
-  walkIn: boolean
-  fasceOrdini: string             // fasce orarie per ordini: "12:00-15:00, 19:00-23:00"
+  durataMedia: string
+  fasceOrdini: string
   noteAggiuntive: string
+  bloccoAutoTavoli: boolean   // blocca slot quando i tavoli sono esauriti
+  modalitaOrario: 'libero' | 'turni' // libero = cliente sceglie orario, turni = cliente sceglie solo il turno
 }
 interface Menu { tipoCucina: string; specialita: string; nonDisponibile: string; allergeniGestiti: string }
 interface InfoPratiche { parcheggio: string; accessibile: boolean; animali: boolean; dresscode: string; altro: string }
@@ -210,7 +209,7 @@ export default function Impostazioni() {
   const [sitoWeb, setSitoWeb] = useState('')
   const [orari, setOrari] = useState<Orari>({})
   const [servizi, setServizi] = useState<Servizi>({})
-  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, fasceOrdini: '', noteAggiuntive: '' })
+  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero' })
   const [menu, setMenu] = useState<Menu>({ tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' })
   const [pagamenti, setPagamenti] = useState<Pagamenti>([])
   const [info, setInfo] = useState<InfoPratiche>({ parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' })
@@ -239,7 +238,7 @@ export default function Impostazioni() {
       setSitoWeb(s.sitoWeb ?? '')
       setOrari(jp(s.orariApertura, {}))
       setServizi(jp(s.serviziOfferti, {}))
-      setRegole(jp(s.regolePrenotazione, { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, fasceOrdini: '', noteAggiuntive: '' }))
+      setRegole(jp(s.regolePrenotazione, { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero' }))
       setMenu(jp(s.menuOfferta, { tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' }))
       setPagamenti(jp(s.pagamenti, []))
       setInfo(jp(s.infoPratiche, { parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' }))
@@ -434,64 +433,6 @@ export default function Impostazioni() {
             </Section>
           )}
 
-          {sezioneAttiva === 'staff' && (
-            <Section title="Fabbisogno staff settimanale" subtitle="Definisci quante persone ti servono, con quale ruolo e in quali orari per ogni giorno della settimana. Queste impostazioni vengono usate dall'AI per generare i turni."
-              onSave={() => saveSezione('staff', { fabbisognoStaff: JSON.stringify(fabbisogno) })}
-              status={st('staff')}>
-              <div className="space-y-3">
-                {fabbisogno.length === 0 && (
-                  <p className="text-sm text-ink-navy/35 text-center py-3">Nessuna fascia configurata. Aggiungi le tue esigenze di personale.</p>
-                )}
-                {fabbisogno.length > 0 && (
-                  <div className="grid grid-cols-[130px_80px_80px_60px_1fr_auto] gap-2 px-1 mb-1">
-                    {['Giorno', 'Dalle', 'Alle', 'N°', 'Ruolo', ''].map((h, i) => (
-                      <span key={i} className="text-xs font-semibold text-ink-navy/35 uppercase">{h}</span>
-                    ))}
-                  </div>
-                )}
-                {fabbisogno.map((r, i) => (
-                  <div key={i} className="grid grid-cols-[130px_80px_80px_60px_1fr_auto] gap-2 items-center bg-mist border border-ink-navy/8 rounded-xl px-3 py-2">
-                    <select value={r.giorno}
-                      onChange={e => { setFabbisogno(f => f.map((x, idx) => idx === i ? { ...x, giorno: Number(e.target.value) } : x)); dirty('staff') }}
-                      className={cls}>
-                      {GIORNI_LUNGHI.map((g, idx) => <option key={idx} value={idx}>{g}</option>)}
-                    </select>
-                    <input type="time" value={r.oraInizio}
-                      onChange={e => { setFabbisogno(f => f.map((x, idx) => idx === i ? { ...x, oraInizio: e.target.value } : x)); dirty('staff') }}
-                      className={cls} />
-                    <input type="time" value={r.oraFine}
-                      onChange={e => { setFabbisogno(f => f.map((x, idx) => idx === i ? { ...x, oraFine: e.target.value } : x)); dirty('staff') }}
-                      className={cls} />
-                    <input type="number" min={1} max={20} value={r.persone}
-                      onChange={e => { setFabbisogno(f => f.map((x, idx) => idx === i ? { ...x, persone: Number(e.target.value) } : x)); dirty('staff') }}
-                      className={cls} />
-                    <input placeholder="es. cameriere, chef..." value={r.ruolo}
-                      onChange={e => { setFabbisogno(f => f.map((x, idx) => idx === i ? { ...x, ruolo: e.target.value } : x)); dirty('staff') }}
-                      className={cls} />
-                    <button onClick={() => { setFabbisogno(f => f.filter((_, idx) => idx !== i)); dirty('staff') }}
-                      className="text-ink-navy/25 hover:text-red-500 font-bold text-sm transition-colors px-1">✕</button>
-                  </div>
-                ))}
-                <button onClick={() => { setFabbisogno(f => [...f, { giorno: 0, fascia: 'libera', oraInizio: '09:00', oraFine: '17:00', persone: 1, ruolo: '' }]); dirty('staff') }}
-                  className="w-full text-sm text-electric-blue font-semibold border-2 border-dashed border-electric-blue/25 rounded-xl py-3 hover:bg-electric-blue/10 transition-colors">
-                  + Aggiungi fascia
-                </button>
-                {fabbisogno.length > 0 && (
-                  <div className="bg-electric-blue/10 border border-electric-blue/15 rounded-lg px-4 py-3 text-xs text-electric-blue space-y-1">
-                    <p className="font-semibold mb-1">Riepilogo:</p>
-                    {[0,1,2,3,4,5,6].map(g => {
-                      const fasce = fabbisogno.filter(r => r.giorno === g)
-                      if (fasce.length === 0) return null
-                      return (
-                        <p key={g}><span className="font-medium">{GIORNI_BREVI[g]}:</span> {fasce.map(r => `${r.oraInizio}–${r.oraFine} · ${r.persone}p${r.ruolo ? ` (${r.ruolo})` : ''}`).join(' / ')}</p>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </Section>
-          )}
-
           {sezioneAttiva === 'servizi' && (
             <Section title="Servizi disponibili" subtitle="Attiva solo i servizi che offri. Il bot saprà cosa proporre e cosa escludere."
               onSave={() => saveSezione('servizi', { serviziOfferti: JSON.stringify(servizi) })}
@@ -532,15 +473,47 @@ export default function Impostazioni() {
                   className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
               </div>
             )}
-            <Section title="Regole prenotazioni" subtitle="Usate dal bot e dalla pagina pubblica di prenotazione per validare date, orari e numero di persone."
+            <Section title="Prenotazione tavoli" subtitle="Regole per la pagina pubblica di prenotazione e per il bot."
               onSave={() => saveSezione('prenotazioni', { regolePrenotazione: JSON.stringify(regole) })}
               status={st('prenotazioni')}>
-              <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider">Prenotazione tavolo</p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                 Per gli orari consentiti vengono usati i <strong>Turni di servizio</strong> (se impostati), altrimenti gli <strong>Orari di apertura</strong>. Configurali nella rispettiva sezione.
               </div>
+
+              {/* Modalità scelta orario */}
+              <div>
+                <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mb-2">Modalità scelta orario</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { val: 'libero', label: 'Orario libero', desc: 'Il cliente sceglie qualsiasi orario nella fascia di servizio' },
+                    { val: 'turni', label: 'Solo turni', desc: 'Il cliente sceglie il turno (es. 1° turno cena 19:30–21:30), non l\'orario esatto' },
+                  ] as const).map(o => (
+                    <button key={o.val} type="button"
+                      onClick={() => { setRegole(r => ({ ...r, modalitaOrario: o.val })); dirty('prenotazioni') }}
+                      className={`p-3 rounded-xl border-2 text-left transition-colors ${regole.modalitaOrario === o.val ? 'border-electric-blue bg-electric-blue/10' : 'border-ink-navy/10 bg-white hover:border-ink-navy/20'}`}>
+                      <p className={`text-sm font-semibold ${regole.modalitaOrario === o.val ? 'text-electric-blue' : 'text-ink-navy/70'}`}>{o.label}</p>
+                      <p className={`text-xs mt-0.5 leading-tight ${regole.modalitaOrario === o.val ? 'text-electric-blue/70' : 'text-ink-navy/35'}`}>{o.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                {regole.modalitaOrario === 'turni' && turniServizio.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-2">Nessun turno configurato — vai alla sezione <strong>Turni</strong> per aggiungerne.</p>
+                )}
+              </div>
+
+              {/* Blocco automatico */}
+              <Toggle
+                label="Blocca slot quando i tavoli sono esauriti"
+                checked={regole.bloccoAutoTavoli}
+                onChange={v => { setRegole(r => ({ ...r, bloccoAutoTavoli: v })); dirty('prenotazioni') }}
+              />
+              {regole.bloccoAutoTavoli && (
+                <p className="text-xs text-ink-navy/40 -mt-1">Quando tutti i tavoli risultano occupati per un certo orario, quel turno/orario non viene più offerto ai clienti.</p>
+              )}
+
+              {/* Limiti */}
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Preavviso minimo (minuti)" hint="Es. 120 = il cliente non può prenotare a meno di 2 ore dall'orario scelto">
+                <Field label="Preavviso minimo (min)" hint="Es. 120 = non si può prenotare a meno di 2 ore dall'orario scelto">
                   <input type="number" min={0} value={regole.preavvisoMinMinuti} onChange={e => { setRegole(r => ({ ...r, preavvisoMinMinuti: e.target.value })); dirty('prenotazioni') }}
                     placeholder="es. 60" className={cls} />
                 </Field>
@@ -561,10 +534,17 @@ export default function Impostazioni() {
                     placeholder="90" className={cls} />
                 </Field>
               </div>
-              <Toggle label="Accettate walk-in (senza prenotazione)" checked={regole.walkIn}
-                onChange={v => { setRegole(r => ({ ...r, walkIn: v })); dirty('prenotazioni') }} />
-              <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mt-2">Ordini asporto & delivery</p>
-              <Field label="Preavviso minimo ordini (minuti)" hint="Es. 30 = il cliente non può ordinare con meno di 30 minuti di anticipo">
+
+              <Field label="Note per il bot">
+                <textarea value={regole.noteAggiuntive} onChange={e => { setRegole(r => ({ ...r, noteAggiuntive: e.target.value })); dirty('prenotazioni') }}
+                  rows={3} placeholder="es. Per gruppi superiori a 8 persone è richiesto un menu fisso." className={`${cls} resize-none`} />
+              </Field>
+            </Section>
+
+            <Section title="Ordini asporto & delivery" subtitle="Regole per gli ordini da asporto e delivery."
+              onSave={() => saveSezione('prenotazioni', { regolePrenotazione: JSON.stringify(regole) })}
+              status={st('prenotazioni')}>
+              <Field label="Preavviso minimo ordini (min)" hint="Es. 30 = il cliente non può ordinare con meno di 30 minuti di anticipo">
                 <input type="number" min={0} value={regole.preavvisoOrdiniMinMinuti} onChange={e => { setRegole(r => ({ ...r, preavvisoOrdiniMinMinuti: e.target.value })); dirty('prenotazioni') }}
                   placeholder="es. 30" className={cls} />
               </Field>
@@ -572,37 +552,12 @@ export default function Impostazioni() {
                 <input type="text" value={regole.fasceOrdini} onChange={e => { setRegole(r => ({ ...r, fasceOrdini: e.target.value })); dirty('prenotazioni') }}
                   placeholder="es. 12:00-14:30, 19:00-23:00" className={cls} />
               </Field>
-              <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mt-2">Note aggiuntive</p>
-              <Field label="Note per il bot">
-                <textarea value={regole.noteAggiuntive} onChange={e => { setRegole(r => ({ ...r, noteAggiuntive: e.target.value })); dirty('prenotazioni') }}
-                  rows={3} placeholder="es. Per gruppi superiori a 8 persone è richiesto un menu fisso." className={`${cls} resize-none`} />
-              </Field>
             </Section>
             </>
           )}
 
           {sezioneAttiva === 'menu' && (
             <>
-              <Section title="Menu & Offerta" subtitle="Descrivi cosa offri. Il bot potrà rispondere a domande su cucina, piatti e limitazioni."
-                onSave={() => saveSezione('menu', { menuOfferta: JSON.stringify(menu) })}
-                status={st('menu')}>
-                <Field label="Tipo di cucina">
-                  <input type="text" value={menu.tipoCucina} onChange={e => { setMenu(m => ({ ...m, tipoCucina: e.target.value })); dirty('menu') }}
-                    placeholder="es. Cucina romana tradizionale, pizza napoletana" className={cls} />
-                </Field>
-                <Field label="Specialità e piatti forti">
-                  <textarea value={menu.specialita} onChange={e => { setMenu(m => ({ ...m, specialita: e.target.value })); dirty('menu') }}
-                    rows={3} placeholder="es. Cacio e pepe fatta in casa, carbonara, tiramisù artigianale" className={`${cls} resize-none`} />
-                </Field>
-                <Field label="Cosa NON è disponibile / limitazioni">
-                  <textarea value={menu.nonDisponibile} onChange={e => { setMenu(m => ({ ...m, nonDisponibile: e.target.value })); dirty('menu') }}
-                    rows={3} placeholder="es. Non facciamo pizza, non abbiamo menu vegetariano completo" className={`${cls} resize-none`} />
-                </Field>
-                <Field label="Allergeni e diete gestite">
-                  <textarea value={menu.allergeniGestiti} onChange={e => { setMenu(m => ({ ...m, allergeniGestiti: e.target.value })); dirty('menu') }}
-                    rows={2} placeholder="es. Opzioni vegane disponibili, non gestiamo allergie ai crostacei" className={`${cls} resize-none`} />
-                </Field>
-              </Section>
               <MenuStrumenti publicId={publicId} />
 
               {/* Aspetto menu */}
@@ -681,29 +636,6 @@ export default function Impostazioni() {
                   </button>
                 ))}
               </div>
-            </Section>
-          )}
-
-          {sezioneAttiva === 'info' && (
-            <Section title="Info pratiche" subtitle="Dettagli logistici che i clienti chiedono spesso."
-              onSave={() => saveSezione('info', { infoPratiche: JSON.stringify(info) })}
-              status={st('info')}>
-              <Field label="Parcheggio">
-                <input type="text" value={info.parcheggio} onChange={e => { setInfo(i => ({ ...i, parcheggio: e.target.value })); dirty('info') }}
-                  placeholder="es. Parcheggio gratuito sul retro, zona ZTL" className={cls} />
-              </Field>
-              <Toggle label="Accessibile a persone con disabilità" checked={info.accessibile}
-                onChange={v => { setInfo(i => ({ ...i, accessibile: v })); dirty('info') }} />
-              <Toggle label="Animali ammessi" checked={info.animali}
-                onChange={v => { setInfo(i => ({ ...i, animali: v })); dirty('info') }} />
-              <Field label="Dress code">
-                <input type="text" value={info.dresscode} onChange={e => { setInfo(i => ({ ...i, dresscode: e.target.value })); dirty('info') }}
-                  placeholder="es. Smart casual, nessun dress code" className={cls} />
-              </Field>
-              <Field label="Altre informazioni utili">
-                <textarea value={info.altro} onChange={e => { setInfo(i => ({ ...i, altro: e.target.value })); dirty('info') }}
-                  rows={3} placeholder="es. Aria condizionata, terrazza esterna, musica dal vivo il venerdì" className={`${cls} resize-none`} />
-              </Field>
             </Section>
           )}
 
@@ -899,9 +831,9 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   return (
     <div className="flex items-center justify-between py-2">
       <span className="text-sm text-ink-navy/70">{label}</span>
-      <button onClick={() => onChange(!checked)}
-        className={`relative w-10 h-5 rounded-full transition-colors ${checked ? 'bg-electric-blue' : 'bg-gray-300'}`}>
-        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+      <button type="button" onClick={() => onChange(!checked)}
+        className={`relative inline-flex shrink-0 w-11 h-6 rounded-full transition-colors duration-200 ${checked ? 'bg-electric-blue' : 'bg-ink-navy/20'}`}>
+        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
     </div>
   )

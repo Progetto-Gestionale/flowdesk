@@ -141,7 +141,7 @@ export default function Calendario() {
   async function fetchAll() {
     const [resApp, resTavoli, resSettings] = await Promise.all([
       fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }),
-      fetch('/api/tavoli', { credentials: 'include' }),
+      fetch('/api/tavoli', { credentials: 'include', cache: 'no-store' }),
       fetch('/api/settings', { credentials: 'include' }),
     ])
     setAppuntamenti((await resApp.json()).appuntamenti ?? [])
@@ -302,10 +302,13 @@ export default function Calendario() {
   // ── Day view columns ──────────────────────────────────────
   const buildColumns = (day: Date) => {
     const dayApps = appForDayFiltered(day)
-    // Solo per tavoli mostriamo colonne per tavolo (senza colonna "senza tavolo")
+    // Solo per tavoli mostriamo colonne per tavolo
     if (sezione === 'tavoli' && tavoli.length > 0) {
       const tavoloOrdinato = [...tavoli].sort((a, b) => a.numero - b.numero)
-      return tavoloOrdinato.map(t => {
+      const tavoloIds = new Set(tavoloOrdinato.map(t => t.id))
+      const senzaTavolo: Appuntamento[] = []
+
+      const cols = tavoloOrdinato.map(t => {
         const primaryApps: Appuntamento[] = []
         const ghostApps: (Appuntamento & { ghost: true; primaryTavolo: string })[] = []
         dayApps.forEach(a => {
@@ -317,6 +320,19 @@ export default function Calendario() {
         })
         return { id: t.id, label: `T${t.numero}`, sublabel: `${t.posti} posti${t.note ? ` · ${t.note}` : ''}`, apps: primaryApps, ghostApps }
       })
+
+      // Raccogli appuntamenti senza tavolo o con tavoli eliminati
+      dayApps.forEach(a => {
+        const ids = getTavoliIds(a)
+        if (ids.length === 0 || !ids.some(id => tavoloIds.has(id))) {
+          senzaTavolo.push(a)
+        }
+      })
+      if (senzaTavolo.length > 0) {
+        cols.unshift({ id: '__nessun_tavolo__', label: 'Non assegnati', sublabel: 'da assegnare', apps: senzaTavolo, ghostApps: [] })
+      }
+
+      return cols
     }
     return [{ id: 'all', label: sezioneInfo[sezione].label, sublabel: '', apps: dayApps }]
   }
@@ -604,7 +620,7 @@ export default function Calendario() {
 
                           {/* Colonne appuntamenti */}
                           {cols.map(col => (
-                            <div key={col.id} className="relative border-r border-ink-navy/10 last:border-r-0"
+                            <div key={col.id} className="relative flex-1 border-r border-ink-navy/10 last:border-r-0"
                               style={{ minWidth: 140, height: (hourEnd - hourStart) * PX_PER_HOUR }}>
                             {/* Linee orarie */}
                             {hoursGrid.map(h => (

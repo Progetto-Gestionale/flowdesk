@@ -154,8 +154,8 @@ function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMod
                   <button onClick={() => onModifica(t)}
                     className="text-xs px-3 py-1.5 rounded-lg border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/10">Modifica</button>
                   <button onClick={() => onElimina(t.id)}
-                    className="w-8 flex items-center justify-center text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">
-                    <span className="w-3.5 h-3.5"><IconTrash /></span>
+                    className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">
+                    Elimina
                   </button>
                 </div>
               </div>
@@ -515,9 +515,14 @@ export default function TavoliPage() {
         const ts = JSON.parse(d.user?.turniServizio ?? '[]')
         ts.sort((a: TurnoServizio, b: TurnoServizio) => toMinutes(a.oraInizio) - toMinutes(b.oraInizio))
         setTurniServizio(ts)
-        const primo = ts.length > 0 ? ts[0].id : null
-        setTurnoSel(primo)
-        fetchGruppi(giornoSelRef.current, primo)
+        // Seleziona il turno corrente o il prossimo più vicino
+        const now = new Date()
+        const nowMin = now.getHours() * 60 + now.getMinutes()
+        const corrente = ts.find((t: TurnoServizio) => toMinutes(t.oraInizio) <= nowMin && toMinutes(t.oraFine) > nowMin)
+        const prossimo = ts.find((t: TurnoServizio) => toMinutes(t.oraInizio) > nowMin)
+        const selezionato = (corrente ?? prossimo ?? ts[0])?.id ?? null
+        setTurnoSel(selezionato)
+        fetchGruppi(giornoSelRef.current, selezionato)
       } catch {
         fetchGruppi(giornoSelRef.current, null)
       }
@@ -540,14 +545,14 @@ export default function TavoliPage() {
     const turno = turniServizio.find(t => t.id === turnoSel)
     return appuntamenti.filter(a => {
       if (a.status === 'cancellato') return false
-      const d = new Date(a.data)
-      const dStr = d.toISOString().split('T')[0]
+      // Converti in ora locale italiana per evitare bug timezone
+      const dLocal = new Date(new Date(a.data).toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
+      const dStr = `${dLocal.getFullYear()}-${String(dLocal.getMonth() + 1).padStart(2, '0')}-${String(dLocal.getDate()).padStart(2, '0')}`
       if (dStr !== giornoSel) return false
       if (!turno) return true
-      const oraApp = d.getHours() * 60 + d.getMinutes()
+      const oraApp = dLocal.getHours() * 60 + dLocal.getMinutes()
       const inizioT = toMinutes(turno.oraInizio)
       const fineT = toMinutes(turno.oraFine)
-      // Se fineT < inizioT il turno attraversa mezzanotte (es. 22:00-00:30)
       if (inizioT > fineT) return oraApp >= inizioT || oraApp < fineT
       return oraApp < fineT && oraApp >= inizioT
     })

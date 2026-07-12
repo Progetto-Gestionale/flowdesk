@@ -224,15 +224,6 @@ function NuovaRichiestaModal({ onClose, onSave, initial, onAssegnaTavolo }: {
           </div>
         )}
 
-        {isTavolo && onAssegnaTavolo && (
-          <div className="border-t border-ink-navy/10 pt-4">
-            <button type="button" onClick={onAssegnaTavolo}
-              className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg border border-ink-navy/15 hover:bg-mist text-sm font-semibold text-ink-navy transition-colors text-left">
-              🍽️ Assegna / cambia tavolo
-            </button>
-          </div>
-        )}
-
         <div>
           <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note</label>
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
@@ -1246,7 +1237,14 @@ function Richieste() {
               </div>
 
               {/* Footer */}
-              <div className="px-5 py-3 border-t border-ink-navy/8 flex gap-2">
+              <div className="px-5 py-3 border-t border-ink-navy/8 flex flex-col gap-2">
+                {selected.tipo === 'tavolo' && selected.status === 'accettato' && (
+                  <button onClick={() => { setSelected(null); setConfermaApp(selected) }}
+                    className="w-full text-sm text-ink-navy font-medium py-2 border border-ink-navy/15 rounded-lg hover:bg-mist transition-colors">
+                    🍽️ Assegna / cambia tavolo
+                  </button>
+                )}
+                <div className="flex gap-2">
                 <button onClick={() => { setEditingRichiesta(selected); setSelected(null); setShowModal(true) }}
                   className="flex-1 text-sm text-electric-blue font-medium py-2 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
                   Gestisci
@@ -1261,6 +1259,7 @@ function Richieste() {
                   className="text-sm text-ink-navy/40 font-medium py-2 px-3 border border-ink-navy/10 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors" title="Elimina definitivamente">
                   Elimina
                 </button>
+                </div>
               </div>
             </div>
           </div>

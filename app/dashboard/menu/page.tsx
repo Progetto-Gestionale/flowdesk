@@ -126,7 +126,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
 
   async function copiaDaAltroTipo() {
     const sorgente = tipo === 'locale' ? 'asporto' : 'locale'
-    const label = sorgente === 'locale' ? 'Menù normale' : 'Menù Asporto & Delivery'
+    const label = sorgente === 'locale' ? 'Menu tavoli' : 'Menù Menu asporto e delivery'
     setConferma({
       msg: `Copiare tutto il contenuto da "${label}" sovrascrivendo questo menù?`,
       onConfirm: async () => {
@@ -144,7 +144,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   }
 
   const isModalOpen = modalPiatto !== null || editPiatto !== null
-  const altroLabel = tipo === 'locale' ? 'Asporto & Delivery' : 'Menù normale'
+  const altroLabel = tipo === 'locale' ? 'Menu asporto e delivery' : 'Menu tavoli'
 
   return (
     <div className="space-y-6">
@@ -333,8 +333,8 @@ export default function MenuPage() {
   const [tab, setTab] = useState<'locale' | 'asporto'>('locale')
 
   const TABS = [
-    { key: 'locale', label: 'Menù normale' },
-    { key: 'asporto', label: 'Asporto & Delivery' },
+    { key: 'locale', label: 'Menu tavoli' },
+    { key: 'asporto', label: 'Menu asporto e delivery' },
   ] as const
 
   return (

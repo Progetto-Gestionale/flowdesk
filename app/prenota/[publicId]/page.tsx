@@ -57,7 +57,9 @@ export default function PrenotaPage() {
   const [errore, setErrore] = useState('')
   const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
   const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
-  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; fasceOrdini?: string }>({})
+  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; durataMedia?: number; fasceOrdini?: string; bloccoAutoTavoli?: boolean; modalitaOrario?: 'libero' | 'turni' }>({})
+  const [disponibilitaTurni, setDisponibilitaTurni] = useState<Record<string, boolean> | null>(null)
+  const [slotDisponibile, setSlotDisponibile] = useState<boolean | null>(null) // null = non ancora verificato
 
   // Tab principale
   const [tab, setTab] = useState<'tavolo' | 'asporto'>('tavolo')
@@ -103,7 +105,11 @@ export default function PrenotaPage() {
         setLogoUrl(d.menuLogoUrl ?? null)
         setColoreP(d.menuColoreP ?? '#4f46e5')
         try { setOrariApertura(JSON.parse(d.orariApertura ?? '{}')) } catch {}
-        try { setTurniServizio(JSON.parse(d.turniServizio ?? '[]')) } catch {}
+        try {
+          const ts = JSON.parse(d.turniServizio ?? '[]')
+          ts.sort((a: { oraInizio: string }, b: { oraInizio: string }) => a.oraInizio.localeCompare(b.oraInizio))
+          setTurniServizio(ts)
+        } catch {}
         try {
           const r = JSON.parse(d.regolePrenotazione ?? '{}')
           setRegole({
@@ -113,12 +119,43 @@ export default function PrenotaPage() {
             copertiMin: r.copertiMin ? Number(r.copertiMin) : undefined,
             copertiMax: r.copertiMax ? Number(r.copertiMax) : undefined,
             fasceOrdini: r.fasceOrdini || undefined,
+            durataMedia: r.durataMedia ? Number(r.durataMedia) : undefined,
+            bloccoAutoTavoli: r.bloccoAutoTavoli ?? false,
+            modalitaOrario: r.modalitaOrario ?? 'libero',
           })
         } catch {}
       })
       .catch(() => setErrore('Errore di connessione'))
       .finally(() => setLoadingInfo(false))
   }, [publicId])
+
+  // ── Disponibilità turni (blocco auto tavoli — modalità turni) ───────────────
+  useEffect(() => {
+    if (!regole.bloccoAutoTavoli || regole.modalitaOrario !== 'turni' || !formTavolo.data) {
+      setDisponibilitaTurni(null); return
+    }
+    fetch(`/api/public/disponibilita?publicId=${publicId}&data=${formTavolo.data}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.turni) { setDisponibilitaTurni(null); return }
+        const map: Record<string, boolean> = {}
+        for (const t of d.turni) map[t.id] = t.disponibile
+        setDisponibilitaTurni(map)
+      })
+      .catch(() => setDisponibilitaTurni(null))
+  }, [publicId, formTavolo.data, regole.bloccoAutoTavoli, regole.modalitaOrario])
+
+  // ── Check slot puntuale (blocco auto tavoli — modalità libera) ───────────────
+  useEffect(() => {
+    if (!regole.bloccoAutoTavoli || regole.modalitaOrario === 'turni' || !formTavolo.data || !formTavolo.ora) {
+      setSlotDisponibile(null); return
+    }
+    const durata = regole.durataMedia ?? 90
+    fetch(`/api/public/disponibilita?publicId=${publicId}&data=${formTavolo.data}&ora=${formTavolo.ora}&durata=${durata}`)
+      .then(r => r.json())
+      .then(d => setSlotDisponibile(d.disponibile ?? true))
+      .catch(() => setSlotDisponibile(null))
+  }, [publicId, formTavolo.data, formTavolo.ora, regole.bloccoAutoTavoli, regole.modalitaOrario])
 
   // ── Caricamento menu (quando tab asporto) ──────────────────────────────────
   useEffect(() => {
@@ -376,7 +413,7 @@ export default function PrenotaPage() {
   )
 
   const entrambiBloccati = blockAsporto && blockDelivery
-  const inp = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 transition-shadow'
+  const inp = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base focus:outline-none focus:ring-2 transition-shadow'
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'system-ui, sans-serif' }}>
@@ -454,30 +491,57 @@ export default function PrenotaPage() {
 
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
                 <p className="text-sm font-semibold text-gray-700">Quando e quanti siete?</p>
-                <div className="grid grid-cols-2 gap-3">
+
+                {/* Scelta data — sempre visibile */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Data *</label>
+                  <input type="date" required value={formTavolo.data} min={oggi}
+                    onChange={e => setFormTavolo(f => ({ ...f, data: e.target.value, ora: '' }))}
+                    className={inp} style={{ colorScheme: 'light' }} />
+                </div>
+
+                {/* Modalità turni: il cliente sceglie il turno */}
+                {regole.modalitaOrario === 'turni' && turniServizio.length > 0 ? (
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Data *</label>
-                    <input type="date" required value={formTavolo.data} min={oggi}
-                      onChange={e => setFormTavolo(f => ({ ...f, data: e.target.value }))}
-                      className={inp} style={{ colorScheme: 'light' }} />
+                    <label className="block text-xs font-medium text-gray-500 mb-2">Turno *</label>
+                    <div className="space-y-2">
+                      {turniServizio.map(t => {
+                        const esaurito = disponibilitaTurni !== null && disponibilitaTurni[t.id] === false
+                        const selezionato = formTavolo.ora === t.oraInizio
+                        return (
+                          <button key={t.id} type="button"
+                            disabled={esaurito}
+                            onClick={() => !esaurito && setFormTavolo(f => ({ ...f, ora: t.oraInizio }))}
+                            className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${esaurito ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60' : selezionato ? 'text-white' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}
+                            style={!esaurito && selezionato ? { borderColor: coloreP, backgroundColor: coloreP } : {}}>
+                            <span className="font-semibold text-sm">{t.nome}</span>
+                            <span className={`text-xs ml-2 ${selezionato ? 'text-white/80' : 'text-gray-400'}`}>{t.oraInizio}–{t.oraFine}</span>
+                            {esaurito && <span className="text-xs text-red-400 font-medium ml-2">Esaurito</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* campo hidden per validazione required */}
+                    <input type="text" required value={formTavolo.ora} readOnly className="sr-only" tabIndex={-1} />
                   </div>
+                ) : (
+                  /* Modalità libera: il cliente sceglie l'orario */
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Ora *</label>
                     <input type="time" required value={formTavolo.ora}
                       min={minOraPerData(formTavolo.data)}
-                      onChange={e => setFormTavolo(f => ({ ...f, ora: e.target.value }))}
-                      className={inp} />
+                      onChange={e => { setSlotDisponibile(null); setFormTavolo(f => ({ ...f, ora: e.target.value })) }}
+                      className={`${inp} ${slotDisponibile === false ? 'border-red-300 focus:ring-red-300' : ''}`} />
+                    {slotDisponibile === false && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">Questo orario non è disponibile — tutti i tavoli sono occupati.</p>
+                    )}
+                    {slotDisponibile !== false && (() => {
+                      const fasce = fascePer(formTavolo.data)
+                      if (fasce.length === 0) return null
+                      return <p className="text-xs text-gray-400 mt-1">Orari disponibili: {fasce.map(f => `${f.inizio}–${f.fine}`).join(' · ')}</p>
+                    })()}
                   </div>
-                </div>
-                {(() => {
-                  const fasce = fascePer(formTavolo.data)
-                  if (fasce.length === 0) return null
-                  return (
-                    <p className="text-xs text-gray-400">
-                      Orari disponibili: {fasce.map(f => `${f.inizio}–${f.fine}`).join(' · ')}
-                    </p>
-                  )
-                })()}
+                )}
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-2">Numero persone *</label>
                   <div className="flex items-center gap-3">
@@ -503,7 +567,7 @@ export default function PrenotaPage() {
                     onChange={e => setFormTavolo(f => ({ ...f, nome: e.target.value }))}
                     className={inp} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Telefono *</label>
                     <input type="tel" required placeholder="+39 333 …" value={formTavolo.telefono}
@@ -537,7 +601,7 @@ export default function PrenotaPage() {
 
               {errTavolo && <p className="text-sm text-red-500 text-center">{errTavolo}</p>}
 
-              <button type="submit" disabled={invioTavolo || !formTavolo.nome || !formTavolo.email || !formTavolo.telefono || !formTavolo.data || !formTavolo.ora}
+              <button type="submit" disabled={invioTavolo || !formTavolo.nome || !formTavolo.email || !formTavolo.telefono || !formTavolo.data || !formTavolo.ora || slotDisponibile === false}
                 className="w-full py-3.5 rounded-2xl text-white font-bold text-sm shadow disabled:opacity-50"
                 style={{ background: coloreP }}>
                 {invioTavolo ? 'Invio in corso…' : 'Invia richiesta'}
@@ -695,7 +759,7 @@ export default function PrenotaPage() {
             {/* Dati personali */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
               <p className="text-sm font-semibold text-gray-700">I tuoi dati</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Nome *</label>
                   <input value={dati.nome} onChange={e => setDati(d => ({ ...d, nome: e.target.value }))}
