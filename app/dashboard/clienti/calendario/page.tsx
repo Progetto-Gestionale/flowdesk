@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { IconTrash, IconHourglass } from '../../../components/icons'
+import { IconTrash } from '../../../components/icons'
 
 const GIORNI_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_FULL = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
@@ -122,9 +122,8 @@ export default function Calendario() {
   const [selected, setSelected] = useState<Appuntamento | null>(null)
   const [showNuovo, setShowNuovo] = useState(false)
   const [vistaMessile, setVistaMensile] = useState(false)
-  const [attesaBanner, setAttesaBanner] = useState<{ count: number; data: string } | null>(null)
   const [viewDay, setViewDay] = useState<Date | null>(null)
-  const [sezione, setSezione] = useState<'tavoli' | 'asporto' | 'servizi'>('tavoli')
+  const [sezione, setSezione] = useState<'tavoli' | 'servizi'>('tavoli')
 
   const [miniMonth, setMiniMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d })
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
@@ -195,10 +194,7 @@ export default function Calendario() {
       else { tavoloIdForPost = formApp.tavoloId }
     } catch { tavoloIdForPost = formApp.tavoloId }
 
-    // Per asporto: il contenuto dell'ordine è in formApp.note, l'indirizzo delivery in formApp.allergie
-    const payload = sezione === 'asporto'
-      ? { ...formApp, tavoloId: null, allergie: formApp.servizio === 'Delivery' ? formApp.allergie : '', note: formApp.note, data: new Date(`${formApp.data}T${formApp.ora}`).toISOString() }
-      : { ...formApp, tavoloId: tavoloIdForPost || null, data: new Date(`${formApp.data}T${formApp.ora}`).toISOString() }
+    const payload = { ...formApp, tavoloId: tavoloIdForPost || null, data: new Date(`${formApp.data}T${formApp.ora}`).toISOString() }
 
     const res = await fetch('/api/appuntamenti', {
       method: 'POST', credentials: 'include',
@@ -229,15 +225,6 @@ export default function Calendario() {
     })
     await fetchAll()
     setSelected(prev => prev ? { ...prev, status } : null)
-    if (status === 'cancellato' && app) {
-      const dataStr = new Date(app.data).toISOString().split('T')[0]
-      const res = await fetch('/api/lista-attesa?attivi=true', { credentials: 'include' })
-      const data = await res.json()
-      const inAttesaPerData = (data.lista ?? []).filter((i: { data: string }) =>
-        new Date(i.data).toISOString().split('T')[0] === dataStr
-      )
-      if (inAttesaPerData.length > 0) setAttesaBanner({ count: inAttesaPerData.length, data: dataStr })
-    }
   }
 
   async function handleAssegnaTavoli(id: string, ids: string[]) {
@@ -268,8 +255,6 @@ export default function Calendario() {
     const iso = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`
     const defaults = sezione === 'tavoli'
       ? { servizio: 'Prenotazione tavolo', durata: 90, ora: '20:00', coperti: 2 }
-      : sezione === 'asporto'
-      ? { servizio: 'Ordine asporto', durata: 15, ora: '20:00', coperti: 1 }
       : { servizio: '', durata: 15, ora: '10:00', coperti: 1 }
     setFormApp(f => ({ ...f, data: iso, tavoloId: '', allergie: '', occasione: '', note: '', clienteNome: '', clienteEmail: '', ...defaults }))
     setShowNuovo(true)
@@ -283,9 +268,8 @@ export default function Calendario() {
     return `${weekStart.getDate()} ${MESI[weekStart.getMonth()]} – ${fine.getDate()} ${MESI[fine.getMonth()]} ${fine.getFullYear()}`
   })()
   const sezioneInfo = {
-    tavoli:  { label: 'Tavoli',             tipi: ['tavolo'] as string[] },
-    asporto: { label: 'Asporto & Delivery', tipi: ['ordine', 'delivery'] as string[] },
-    servizi: { label: 'Servizi',            tipi: ['servizio'] as string[] },
+    tavoli:  { label: 'Tavoli',           tipi: ['tavolo'] as string[] },
+    servizi: { label: 'Servizi / Altro',  tipi: ['servizio', 'ordine', 'delivery'] as string[] },
   }
 
   function filterBySezione(apps: Appuntamento[]) {
@@ -342,38 +326,19 @@ export default function Calendario() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Banner lista d'attesa */}
-      {attesaBanner && (
-        <div className="mb-4 bg-amber-50 border border-amber-300 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center p-2 shrink-0"><IconHourglass /></span>
-            <div>
-              <p className="font-semibold text-amber-800">
-                {attesaBanner.count === 1 ? '1 persona in lista d\'attesa' : `${attesaBanner.count} persone in lista d'attesa`} per questa data
-              </p>
-              <p className="text-sm text-amber-700">Vuoi avvisarle che si è liberato un posto?</p>
-            </div>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <button onClick={() => setAttesaBanner(null)} className="text-sm text-amber-600 hover:text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100">Ignora</button>
-            <a href="/dashboard/clienti/lista-attesa" className="text-sm bg-amber-500 text-white font-semibold px-4 py-1.5 rounded-lg hover:bg-amber-600">Vai alla lista →</a>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-ink-navy">Calendario</h1>
           <p className="text-ink-navy/50 mt-0.5">
             {appProssimi > 0
-              ? <span className="text-electric-blue font-medium">{appProssimi} {sezione === 'tavoli' ? 'prenotazioni' : sezione === 'asporto' ? 'ordini' : 'appuntamenti'} in programma</span>
+              ? <span className="text-electric-blue font-medium">{appProssimi} {sezione === 'tavoli' ? 'prenotazioni' : 'appuntamenti'} in programma</span>
               : 'Nessuno in programma'}
           </p>
         </div>
         <button onClick={() => openNuovoConData(today)}
           className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90">
-          {sezione === 'tavoli' ? '+ Prenota tavolo' : sezione === 'asporto' ? '+ Nuovo ordine' : '+ Nuovo servizio'}
+          {sezione === 'tavoli' ? '+ Prenota tavolo' : '+ Nuovo servizio'}
         </button>
       </div>
 
@@ -482,7 +447,7 @@ export default function Calendario() {
                 const appsConfermati = appForDayFiltered(viewDay).filter(a => a.status === 'confermato')
                 const totalCoperti = appsConfermati.reduce((s, a) => s + (a.coperti ?? 1), 0)
                 const badgeCount = sezione === 'tavoli' ? totalCoperti : appsConfermati.length
-                const badgeLabel = sezione === 'tavoli' ? 'coperti' : sezione === 'asporto' ? 'ordini' : 'servizi'
+                const badgeLabel = sezione === 'tavoli' ? 'coperti' : 'servizi'
 
                 return (
                   <div>
@@ -502,53 +467,7 @@ export default function Calendario() {
                       )}
                     </div>
 
-                    {/* Due colonne Asporto | Delivery */}
-                    {sezione === 'asporto' && (() => {
-                      const allApps = appForDayFiltered(viewDay).sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
-                      const colonne = [
-                        { key: 'ordine',   label: 'Asporto',  apps: allApps.filter(a => inferTipo(a.servizio) === 'ordine') },
-                        { key: 'delivery', label: 'Delivery', apps: allApps.filter(a => inferTipo(a.servizio) === 'delivery') },
-                      ]
-                      const renderCard = (a: Appuntamento) => {
-                        const tipo = inferTipo(a.servizio)
-                        const ts = TIPO_STYLE[tipo]
-                        const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
-                        const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-                        const [noteOrdine, noteInterna] = (a.note ?? '').split('\n')
-                        return (
-                          <div key={a.id} onClick={() => setSelected(a)}
-                            style={{ borderLeftWidth: 3, borderLeftColor: ts.barColor }}
-                            className={`${sc.bg} rounded-r-xl px-3 py-2.5 cursor-pointer hover:brightness-95 transition-all`}>
-                            <span className="text-xs font-bold text-ink-navy/50">{ora}</span>
-                            <p className="text-sm font-bold text-ink-navy mt-0.5">{a.clienteNome || 'Cliente'}</p>
-                            {noteOrdine && <p className="text-xs font-medium text-ink-navy/70 mt-1 truncate">{noteOrdine}</p>}
-                            {a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
-                              <p className="text-xs text-red-500 mt-0.5">{a.allergie}</p>
-                            )}
-                            {noteInterna && <p className="text-xs text-ink-navy/35 mt-0.5 truncate">{noteInterna}</p>}
-                          </div>
-                        )
-                      }
-                      return (
-                        <div className="grid grid-cols-2 gap-3" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-                          {colonne.map(col => (
-                            <div key={col.key} className="bg-white border border-ink-navy/10 rounded-xl overflow-y-auto flex flex-col">
-                              <div className="sticky top-0 bg-mist border-b border-ink-navy/10 px-3 py-2 flex items-center justify-between">
-                                <span className="text-xs font-bold text-ink-navy/70">{col.label}</span>
-                                <span className="text-xs bg-ink-navy/10 text-ink-navy/50 font-semibold px-1.5 py-0.5 rounded-full">{col.apps.length}</span>
-                              </div>
-                              <div className="p-3 space-y-2 flex-1">
-                                {col.apps.length === 0
-                                  ? <p className="text-xs text-ink-navy/30 text-center py-4">Nessun ordine</p>
-                                  : col.apps.map(renderCard)}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )
-                    })()}
-
-                    {/* Lista semplice per servizi */}
+                    {/* Lista semplice per servizi / altro */}
                     {sezione === 'servizi' && (() => {
                       const apps = appForDayFiltered(viewDay).sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
                       if (apps.length === 0) return (
@@ -650,7 +569,7 @@ export default function Calendario() {
                                 <div key={a.id}
                                   style={{
                                     position: 'absolute', top,
-                                    height: Math.max((a.durata / 60) * PX_PER_HOUR, MIN_H),
+                                    height: Math.max((a.durata / 60) * PX_PER_HOUR, MIN_H) - 2,
                                     left: `calc(${subCol * pct}% + ${GAP}px)`,
                                     width: `calc(${pct}% - ${GAP * 2}px)`,
                                     borderLeftWidth: 3, borderLeftColor: ts.barColor,
@@ -737,17 +656,11 @@ export default function Calendario() {
 
                     // Contatori per sezione
                     const nTavoli   = dayApps.filter(a => inferTipo(a.servizio) === 'tavolo').length
-                    const nAsporto  = dayApps.filter(a => inferTipo(a.servizio) === 'ordine').length
-                    const nDelivery = dayApps.filter(a => inferTipo(a.servizio) === 'delivery').length
-                    const nServizi  = dayApps.filter(a => inferTipo(a.servizio) === 'servizio').length
+                    const nServizi  = dayApps.length - nTavoli
 
                     const chips: { label: string; color: string }[] = []
                     if (sezione === 'tavoli' && nTavoli > 0)
                       chips.push({ label: `${nTavoli} tav.`, color: TIPO_STYLE.tavolo.barColor })
-                    if (sezione === 'asporto') {
-                      if (nAsporto > 0)  chips.push({ label: `${nAsporto} asp.`,  color: TIPO_STYLE.ordine.barColor })
-                      if (nDelivery > 0) chips.push({ label: `${nDelivery} del.`, color: TIPO_STYLE.delivery.barColor })
-                    }
                     if (sezione === 'servizi' && nServizi > 0)
                       chips.push({ label: `${nServizi} serv.`, color: TIPO_STYLE.servizio.barColor })
 
@@ -1024,8 +937,8 @@ export default function Calendario() {
           </div>
         )
 
-        const titleMap = { tavoli: 'Nuova prenotazione tavolo', asporto: 'Nuovo ordine', servizi: 'Nuovo appuntamento' }
-        const saveLabel = { tavoli: 'Salva prenotazione', asporto: 'Salva ordine', servizi: 'Salva appuntamento' }
+        const titleMap = { tavoli: 'Nuova prenotazione tavolo', servizi: 'Nuovo appuntamento' }
+        const saveLabel = { tavoli: 'Salva prenotazione', servizi: 'Salva appuntamento' }
 
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -1111,36 +1024,7 @@ export default function Calendario() {
                   )}
                 </>)}
 
-                {/* ── ASPORTO & DELIVERY ── */}
-                {sezione === 'asporto' && (<>
-                  <div>
-                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo</label>
-                    <div className="flex gap-2">
-                      {['Ordine asporto', 'Delivery'].map(tipo => (
-                        <button key={tipo} type="button"
-                          onClick={() => setFormApp(f => ({ ...f, servizio: tipo }))}
-                          className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${formApp.servizio === tipo ? 'bg-violet-50 border-violet-300 text-violet-700' : 'border-ink-navy/15 text-ink-navy/50 hover:bg-mist'}`}>
-                          {tipo === 'Ordine asporto' ? '🛍 Asporto' : '🚴 Delivery'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Cosa ordina *</label>
-                    <textarea placeholder="es. 2 pizze margherita, 1 calzone, 1 tiramisù…" value={formApp.note}
-                      onChange={e => setFormApp(f => ({ ...f, note: e.target.value }))}
-                      rows={3} className={`${inp} resize-none`} />
-                  </div>
-                  {formApp.servizio === 'Delivery' && (
-                    <div>
-                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">Indirizzo di consegna</label>
-                      <input type="text" placeholder="Via Roma 12, Milano" value={formApp.allergie}
-                        onChange={e => setFormApp(f => ({ ...f, allergie: e.target.value }))} className={inp} />
-                    </div>
-                  )}
-                </>)}
-
-                {/* ── SERVIZI ── */}
+{/* ── SERVIZI ── */}
                 {sezione === 'servizi' && (<>
                   <div>
                     <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo di servizio *</label>

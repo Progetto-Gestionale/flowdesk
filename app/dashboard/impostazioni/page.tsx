@@ -71,8 +71,9 @@ interface Regole {
   durataMedia: string
   fasceOrdini: string
   noteAggiuntive: string
-  bloccoAutoTavoli: boolean   // blocca slot quando i tavoli sono esauriti
-  modalitaOrario: 'libero' | 'turni' // libero = cliente sceglie orario, turni = cliente sceglie solo il turno
+  bloccoAutoTavoli: boolean
+  modalitaOrario: 'libero' | 'turni'
+  tempoMinimoArrivoMinuti: string // minuti prima della fine turno entro cui il cliente deve presentarsi
 }
 interface Menu { tipoCucina: string; specialita: string; nonDisponibile: string; allergeniGestiti: string }
 interface InfoPratiche { parcheggio: string; accessibile: boolean; animali: boolean; dresscode: string; altro: string }
@@ -209,7 +210,7 @@ export default function Impostazioni() {
   const [sitoWeb, setSitoWeb] = useState('')
   const [orari, setOrari] = useState<Orari>({})
   const [servizi, setServizi] = useState<Servizi>({})
-  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero' })
+  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '' })
   const [menu, setMenu] = useState<Menu>({ tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' })
   const [pagamenti, setPagamenti] = useState<Pagamenti>([])
   const [info, setInfo] = useState<InfoPratiche>({ parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' })
@@ -238,7 +239,8 @@ export default function Impostazioni() {
       setSitoWeb(s.sitoWeb ?? '')
       setOrari(jp(s.orariApertura, {}))
       setServizi(jp(s.serviziOfferti, {}))
-      setRegole(jp(s.regolePrenotazione, { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero' }))
+      const defaults: Regole = { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '' }
+      setRegole({ ...defaults, ...jp(s.regolePrenotazione, {}) })
       setMenu(jp(s.menuOfferta, { tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' }))
       setPagamenti(jp(s.pagamenti, []))
       setInfo(jp(s.infoPratiche, { parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' }))
@@ -499,6 +501,12 @@ export default function Impostazioni() {
                 {regole.modalitaOrario === 'turni' && turniServizio.length === 0 && (
                   <p className="text-xs text-amber-600 mt-2">Nessun turno configurato — vai alla sezione <strong>Turni</strong> per aggiungerne.</p>
                 )}
+                {regole.modalitaOrario === 'turni' && (
+                  <Field label="Tempo minimo arrivo (min)" hint="Il cliente deve presentarsi almeno N minuti prima della fine del turno. Es. 60 = se il turno finisce alle 21:30, il cliente non può prenotare dopo le 20:30.">
+                    <input type="number" min={0} value={regole.tempoMinimoArrivoMinuti} onChange={e => { setRegole(r => ({ ...r, tempoMinimoArrivoMinuti: e.target.value })); dirty('prenotazioni') }}
+                      placeholder="es. 60" className={cls} />
+                  </Field>
+                )}
               </div>
 
               {/* Blocco automatico */}
@@ -665,7 +673,46 @@ export default function Impostazioni() {
             </Section>
           )}
 
-          {sezioneAttiva === 'bot' && (
+          {sezioneAttiva === 'bot' && (<>
+            {/* Stato chatbot */}
+            {!publicId ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                <p className="text-sm font-semibold text-amber-700 mb-1">ID pubblico non configurato</p>
+                <p className="text-sm text-amber-600">Imposta un ID pubblico qui sotto per attivare il chatbot.</p>
+              </div>
+            ) : (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-4 flex items-center gap-4">
+                <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center p-2 text-green-600 shrink-0"><IconBot /></div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-green-800">Chatbot attivo</p>
+                  <p className="text-xs text-green-600 mt-0.5 truncate">{widgetUrl}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => navigator.clipboard.writeText(widgetUrl ?? '')}
+                    className="text-xs bg-white border border-green-300 text-green-700 font-semibold px-3 py-1.5 rounded-lg hover:bg-green-50">Copia link</button>
+                  <a href={`/chat/${publicId}`} target="_blank" rel="noopener noreferrer"
+                    className="text-xs bg-green-600 text-white font-semibold px-3 py-1.5 rounded-lg hover:bg-green-700">Apri ↗</a>
+                </div>
+              </div>
+            )}
+
+            {/* Script embed */}
+            {publicId && (() => {
+              const origin = typeof window !== 'undefined' ? window.location.origin : ''
+              const scriptTag = `<!-- Incolla prima di </body> -->\n<script>\n  window.FlowestId = "${publicId}";\n</script>\n<script src="${origin}/widget.js" async></script>`
+              return (
+                <div className="bg-white border border-ink-navy/10 rounded-xl p-5 space-y-2">
+                  <p className="text-sm font-semibold text-ink-navy">Integra sul tuo sito</p>
+                  <div className="relative">
+                    <pre className="bg-gray-900 text-green-400 text-xs rounded-lg p-4 overflow-x-auto font-mono leading-relaxed">{scriptTag}</pre>
+                    <button onClick={() => navigator.clipboard.writeText(scriptTag)}
+                      className="absolute top-2 right-2 text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded hover:bg-gray-600">Copia</button>
+                  </div>
+                  <p className="text-xs text-ink-navy/35">Funziona su WordPress, Wix, Squarespace e qualsiasi sito web.</p>
+                </div>
+              )
+            })()}
+
             <Section title="Configurazione bot" subtitle="Istruzioni comportamentali e link pubblico del chatbot."
               onSave={() => saveSezione('bot', { descrizioneBot, publicId: publicId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null })}
               status={st('bot')}>
@@ -679,17 +726,10 @@ export default function Impostazioni() {
                   <input type="text" value={publicId} onChange={e => { setPublicId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); dirty('bot') }}
                     placeholder="ristorante-mario" className={cls} />
                 </div>
-                {widgetUrl && (
-                  <div className="mt-2 bg-electric-blue/10 border border-electric-blue/15 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                    <span className="text-xs text-electric-blue font-mono truncate">{widgetUrl}</span>
-                    <button onClick={() => navigator.clipboard.writeText(widgetUrl)}
-                      className="text-xs text-electric-blue font-semibold shrink-0 hover:text-ink-navy">Copia</button>
-                  </div>
-                )}
                 <p className="text-xs text-ink-navy/35 mt-1">Link pubblico del chatbot — condividilo sul sito o sui social.</p>
               </Field>
             </Section>
-          )}
+          </>)}
 
           {sezioneAttiva === 'account' && (
             <Section title="Profilo account" subtitle="Il tuo nome e settore di appartenenza."

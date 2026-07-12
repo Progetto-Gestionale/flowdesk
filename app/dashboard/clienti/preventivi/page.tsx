@@ -78,9 +78,7 @@ function SintesiRichiesta({ items, note }: { items: ItemExt[]; note?: string }) 
 const TIPI: { id: string; label: string; color: string }[] = [
   { id: 'tutti', label: 'Tutte', color: 'bg-mist text-ink-navy/70' },
   { id: 'tavolo', label: 'Tavolo', color: 'bg-orange-100 text-orange-700' },
-  { id: 'ordine', label: 'Ordine / Asporto', color: 'bg-amber-100 text-amber-700' },
-  { id: 'delivery', label: 'Delivery', color: 'bg-teal-100 text-teal-700' },
-  { id: 'servizio', label: 'Servizio', color: 'bg-teal-100 text-teal-700' },
+  { id: 'servizio', label: 'Servizio / Altro', color: 'bg-teal-100 text-teal-700' },
 ]
 
 const STATUS_COLORS: Record<string, string> = {
@@ -306,8 +304,6 @@ function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma, initialTavo
   const isTavolo = richiesta.tipo === 'tavolo'
   const items = JSON.parse(richiesta.items) as ItemExt[]
   const servizioDefault = isTavolo ? 'Prenotazione tavolo'
-    : richiesta.tipo === 'delivery' ? 'Delivery'
-    : richiesta.tipo === 'ordine' ? 'Ordine asporto'
     : (items[0]?.descrizione ?? '')
   const dataMatch = richiesta.note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
   const oraMatch = richiesta.note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? richiesta.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
@@ -635,7 +631,7 @@ function Richieste() {
             body: JSON.stringify({
               clienteNome: corrente.clienteName,
               clienteEmail: corrente.clienteEmail,
-              servizio: corrente.tipo === 'delivery' ? 'Delivery' : corrente.tipo === 'ordine' ? 'Ordine asporto' : (items[0]?.descrizione ?? corrente.tipo),
+              servizio: items[0]?.descrizione ?? corrente.tipo,
               data: new Date(`${dataMatch[1]}T${ora}`).toISOString(),
               durata: 15,
               coperti: items[0]?.coperti ?? (copertiMatch ? Number(copertiMatch[1]) : 1),
@@ -649,7 +645,30 @@ function Richieste() {
           return
         }
 
-        // Tavolo, o non-tavolo senza data → apri modal per raccogliere i dati mancanti
+        // Tavolo con data già nota → pre-crea l'appuntamento senza tavolo
+        // così appare subito in calendario (colonna "Non assegnati")
+        if (isTavolo && dataMatch?.[1]) {
+          const items = (() => { try { return JSON.parse(corrente.items) } catch { return [] } })()
+          const ora = oraMatch?.[1] ?? '20:00'
+          const copertiMatch = corrente.note?.match(/Coperti:\s*(\d+)/)
+          await fetch('/api/appuntamenti', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clienteNome: corrente.clienteName,
+              clienteEmail: corrente.clienteEmail,
+              servizio: 'Prenotazione tavolo',
+              data: new Date(`${dataMatch[1]}T${ora}`).toISOString(),
+              durata: items[0]?.durata ?? 90,
+              coperti: items[0]?.coperti ?? (copertiMatch ? Number(copertiMatch[1]) : 1),
+              note: `Da richiesta #${String(corrente.numero).padStart(3, '0')}`,
+            }),
+          })
+          const updated = await fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json())
+          setAppuntamenti(updated.appuntamenti ?? [])
+        }
+
+        // Apri modal per (eventuale) assegnazione tavolo
         setSelected(null)
         setConfermaApp(corrente)
         await fetchRichieste()
@@ -688,6 +707,20 @@ function Richieste() {
         }),
       })
       if (res.ok) appId = (await res.json()).appuntamento?.id ?? null
+    } else {
+      // Aggiorna i campi del pre-created appuntamento con i dati confermati nel modal
+      await fetch(`/api/appuntamenti/${appEsistente.id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          servizio,
+          data: new Date(`${data}T${ora}`).toISOString(),
+          durata,
+          coperti,
+          allergie,
+          occasione,
+        }),
+      })
     }
 
     if (appId && tavoliIds && tavoliIds.length > 0) {

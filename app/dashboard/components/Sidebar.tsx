@@ -4,28 +4,31 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
-  IconGrid, IconUsers, IconChat, IconClipboard, IconCalendar, IconHourglass,
-  IconBot, IconFork, IconReceipt, IconTable, IconChartBar, IconSettings,
+  IconGrid, IconUsers, IconChat, IconClipboard, IconCalendar,
+  IconFork, IconReceipt, IconTable, IconChartBar, IconSettings,
   IconStethoscope, IconFolder, IconClock,
 } from './../../components/icons'
 
 const navFood = [
   {
+    section: 'Servizio',
+    items: [
+      { label: 'Tavoli & QR', href: '/dashboard/tavoli', Icon: IconTable },
+      { label: 'Ordini', href: '/dashboard/ordini', Icon: IconReceipt },
+      { label: 'Richieste', href: '/dashboard/clienti/preventivi', Icon: IconClipboard },
+      { label: 'Calendario', href: '/dashboard/clienti/calendario', Icon: IconCalendar },
+    ],
+  },
+  {
     section: 'Clienti',
     items: [
       { label: 'Messaggi', href: '/dashboard/clienti/inbox', Icon: IconChat },
-      { label: 'Richieste', href: '/dashboard/clienti/preventivi', Icon: IconClipboard },
-      { label: 'Calendario', href: '/dashboard/clienti/calendario', Icon: IconCalendar },
-      { label: "Lista d'attesa", href: '/dashboard/clienti/lista-attesa', Icon: IconHourglass },
-      { label: 'Chatbot Demo', href: '/dashboard/clienti/chatbot', Icon: IconBot },
     ],
   },
   {
     section: 'Gestione',
     items: [
       { label: 'Menu', href: '/dashboard/menu', Icon: IconFork },
-      { label: 'Ordini', href: '/dashboard/ordini', Icon: IconReceipt },
-      { label: 'Tavoli & QR', href: '/dashboard/tavoli', Icon: IconTable },
       { label: 'Analytics', href: '/dashboard/analytics', Icon: IconChartBar },
       { label: 'Staff', href: '/dashboard/staff', Icon: IconUsers },
       { label: 'QR Timbratura', href: '/dashboard/timbrature', Icon: IconClock },
@@ -70,20 +73,14 @@ interface SidebarProps {
 export default function Sidebar({ verticale }: SidebarProps) {
   const pathname = usePathname()
   const [daVerificare, setDaVerificare] = useState(0)
-  const [inAttesa, setInAttesa] = useState(0)
 
   useEffect(() => {
     if (verticale !== 'food') return
     async function fetchCount() {
       try {
-        const [resP, resA] = await Promise.all([
-          fetch('/api/preventivi/count', { credentials: 'include' }),
-          fetch('/api/lista-attesa?attivi=true', { credentials: 'include' }),
-        ])
-        const dataP = await resP.json()
-        const dataA = await resA.json()
-        setDaVerificare(dataP.daVerificare ?? 0)
-        setInAttesa((dataA.lista ?? []).length)
+        const res = await fetch('/api/preventivi/count', { credentials: 'include' })
+        const data = await res.json()
+        setDaVerificare(data.daVerificare ?? 0)
       } catch { }
     }
     fetchCount()
@@ -140,11 +137,6 @@ export default function Sidebar({ verticale }: SidebarProps) {
                     {item.href === '/dashboard/clienti/preventivi' && daVerificare > 0 && (
                       <span className="bg-zest-lime text-ink-navy text-xs font-bold px-1.5 py-0.5 rounded-full">
                         {daVerificare > 9 ? '9+' : daVerificare}
-                      </span>
-                    )}
-                    {item.href === '/dashboard/clienti/lista-attesa' && inAttesa > 0 && (
-                      <span className="bg-amber-400 text-ink-navy text-xs font-bold px-1.5 py-0.5 rounded-full">
-                        {inAttesa > 9 ? '9+' : inAttesa}
                       </span>
                     )}
                   </Link>

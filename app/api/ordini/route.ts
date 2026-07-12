@@ -17,10 +17,16 @@ export async function GET(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
+  const { searchParams } = new URL(req.url)
+  const stato = searchParams.get('stato') // 'aperto' | 'chiuso' | null (= tutti oggi)
+
   const serviceStart = getServiceWindowStart()
 
+  const where: Record<string, unknown> = { userId: user.id, createdAt: { gte: serviceStart } }
+  if (stato) where.status = stato
+
   const ordini = await prisma.ordine.findMany({
-    where: { userId: user.id, createdAt: { gte: serviceStart } },
+    where,
     include: { righe: true },
     orderBy: { createdAt: 'desc' },
   })

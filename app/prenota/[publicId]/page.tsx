@@ -57,7 +57,7 @@ export default function PrenotaPage() {
   const [errore, setErrore] = useState('')
   const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
   const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
-  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; durataMedia?: number; fasceOrdini?: string; bloccoAutoTavoli?: boolean; modalitaOrario?: 'libero' | 'turni' }>({})
+  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; durataMedia?: number; fasceOrdini?: string; bloccoAutoTavoli?: boolean; modalitaOrario?: 'libero' | 'turni'; tempoMinimoArrivoMinuti?: number }>({})
   const [disponibilitaTurni, setDisponibilitaTurni] = useState<Record<string, boolean> | null>(null)
   const [slotDisponibile, setSlotDisponibile] = useState<boolean | null>(null) // null = non ancora verificato
 
@@ -122,6 +122,7 @@ export default function PrenotaPage() {
             durataMedia: r.durataMedia ? Number(r.durataMedia) : undefined,
             bloccoAutoTavoli: r.bloccoAutoTavoli ?? false,
             modalitaOrario: r.modalitaOrario ?? 'libero',
+            tempoMinimoArrivoMinuti: r.tempoMinimoArrivoMinuti ? Number(r.tempoMinimoArrivoMinuti) : undefined,
           })
         } catch {}
       })
@@ -281,6 +282,23 @@ export default function PrenotaPage() {
     if (fasceTavolo.length > 0 && !oraInFasce(formTavolo.ora, fasceTavolo)) {
       setErrTavolo(`Orario non disponibile. Siamo aperti: ${fasceTavolo.map(f => `${f.inizio}–${f.fine}`).join(', ')}.`)
       return
+    }
+    // Blocca se il turno selezionato ha un tempo minimo arrivo scaduto (modalità turni)
+    if (regole.modalitaOrario === 'turni' && regole.tempoMinimoArrivoMinuti && formTavolo.data === oggi) {
+      const turnoSel = turniServizio.find(t => t.oraInizio === formTavolo.ora)
+      if (turnoSel) {
+        const [fineH, fineM] = turnoSel.oraFine.split(':').map(Number)
+        const fineMin = fineH * 60 + fineM
+        const deadlineMin = fineMin - regole.tempoMinimoArrivoMinuti
+        const now = new Date()
+        const nowMin = now.getHours() * 60 + now.getMinutes()
+        if (nowMin >= deadlineMin) {
+          const dH = Math.floor(((deadlineMin % 1440) + 1440) % 1440 / 60)
+          const dM = ((deadlineMin % 1440) + 1440) % 1440 % 60
+          setErrTavolo(`Per questo turno l'orario di arrivo limite (${String(dH).padStart(2,'0')}:${String(dM).padStart(2,'0')}) è già passato.`)
+          return
+        }
+      }
     }
     // Blocca coperti fuori range
     if (regole.copertiMin && formTavolo.persone < regole.copertiMin) {
@@ -507,16 +525,43 @@ export default function PrenotaPage() {
                     <div className="space-y-2">
                       {turniServizio.map(t => {
                         const esaurito = disponibilitaTurni !== null && disponibilitaTurni[t.id] === false
+                        // Calcola l'orario entro cui il cliente deve presentarsi
+                        const tempoMinimo = regole.tempoMinimoArrivoMinuti
+                        let deadlineStr: string | null = null
+                        let scaduto = false
+                        if (tempoMinimo && tempoMinimo > 0 && formTavolo.data) {
+                          const [fineH, fineM] = t.oraFine.split(':').map(Number)
+                          const fineMin = fineH * 60 + fineM
+                          const deadlineMin = fineMin - tempoMinimo
+                          const dH = Math.floor(((deadlineMin % 1440) + 1440) % 1440 / 60)
+                          const dM = ((deadlineMin % 1440) + 1440) % 1440 % 60
+                          deadlineStr = `${String(dH).padStart(2, '0')}:${String(dM).padStart(2, '0')}`
+                          // Se è oggi, controlla se l'ora di arrivo limite è già passata
+                          if (formTavolo.data === oggi) {
+                            const now = new Date()
+                            const nowMin = now.getHours() * 60 + now.getMinutes()
+                            if (nowMin >= deadlineMin) scaduto = true
+                          }
+                        }
+                        const nonDisponibile = esaurito || scaduto
                         const selezionato = formTavolo.ora === t.oraInizio
                         return (
                           <button key={t.id} type="button"
-                            disabled={esaurito}
-                            onClick={() => !esaurito && setFormTavolo(f => ({ ...f, ora: t.oraInizio }))}
-                            className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${esaurito ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60' : selezionato ? 'text-white' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}
-                            style={!esaurito && selezionato ? { borderColor: coloreP, backgroundColor: coloreP } : {}}>
-                            <span className="font-semibold text-sm">{t.nome}</span>
-                            <span className={`text-xs ml-2 ${selezionato ? 'text-white/80' : 'text-gray-400'}`}>{t.oraInizio}–{t.oraFine}</span>
-                            {esaurito && <span className="text-xs text-red-400 font-medium ml-2">Esaurito</span>}
+                            disabled={nonDisponibile}
+                            onClick={() => !nonDisponibile && setFormTavolo(f => ({ ...f, ora: t.oraInizio }))}
+                            className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-colors ${nonDisponibile ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60' : selezionato ? 'text-white' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}
+                            style={!nonDisponibile && selezionato ? { borderColor: coloreP, backgroundColor: coloreP } : {}}>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="font-semibold text-sm">{t.nome}</span>
+                                <span className={`text-xs ml-2 ${selezionato ? 'text-white/80' : 'text-gray-400'}`}>{t.oraInizio}–{t.oraFine}</span>
+                              </div>
+                              {esaurito && <span className="text-xs text-red-400 font-medium">Esaurito</span>}
+                              {scaduto && !esaurito && <span className="text-xs text-red-400 font-medium">Non disponibile</span>}
+                            </div>
+                            {deadlineStr && !nonDisponibile && (
+                              <p className={`text-xs mt-1 ${selezionato ? 'text-white/70' : 'text-gray-400'}`}>Arrivo entro le {deadlineStr}</p>
+                            )}
                           </button>
                         )
                       })}

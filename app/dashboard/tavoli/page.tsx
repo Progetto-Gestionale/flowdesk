@@ -6,6 +6,8 @@ import { IconTable, IconCheck, IconTrash, IconPencil, IconUnlink } from '../../c
 // ── Tipi ─────────────────────────────────────────────────────────────────────
 interface Tavolo { id: string; numero: number; etichetta: string | null; posti: number; note: string | null; gruppoId: string | null }
 interface Gruppo { id: string; label: string; tavoli: { id: string; numero: number; etichetta: string | null }[] }
+interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null }
+interface Ordine { id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null; totale: number; note: string | null; status: string; createdAt: string; righe: RigaOrdine[] }
 interface MapData { forma: 'quadrato' | 'cerchio'; colore: string; w: number; h: number; x: number; y: number }
 interface Elemento { id: string; tipo: string; label: string; x: number; y: number; w: number; h: number; colore: string }
 
@@ -54,6 +56,93 @@ function QRCanvas({ url, id }: { url: string; id: string }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => { if (ref.current) QRCode.toCanvas(ref.current, url, { width: 180, margin: 2, color: { dark: '#1e1b4b', light: '#fff' } }) }, [url])
   return <canvas ref={ref} id={id} className="rounded-xl" />
+}
+
+// ── Vista CONTO ───────────────────────────────────────────────────────────────
+function VistaConto({ ordiniAperti, ordiniChiusi, onChiudi, chiudendo }: {
+  ordiniAperti: Ordine[]
+  ordiniChiusi: Ordine[]
+  onChiudi: (o: Ordine) => void
+  chiudendo: string | null
+}) {
+  const fmt = (n: number) => `€${n.toFixed(2)}`
+
+  function OrdineCard({ o, aperto }: { o: Ordine; aperto: boolean }) {
+    const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+    return (
+      <div className={`bg-white border rounded-xl overflow-hidden ${aperto ? 'border-electric-blue/30 shadow-sm' : 'border-ink-navy/10 opacity-60'}`}>
+        {/* Header */}
+        <div className={`px-4 py-3 flex items-center justify-between gap-3 ${aperto ? 'bg-electric-blue/5' : 'bg-mist'}`}>
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-bold ${aperto ? 'text-electric-blue' : 'text-ink-navy/50'}`}>
+              {o.tavolo}
+            </span>
+            <span className="text-xs text-ink-navy/35">aperto {ora}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`text-base font-bold ${aperto ? 'text-ink-navy' : 'text-ink-navy/40'}`}>{fmt(o.totale)}</span>
+            {aperto && (
+              <button
+                onClick={() => onChiudi(o)}
+                disabled={chiudendo === o.id}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
+                {chiudendo === o.id ? '…' : 'Chiudi tavolo'}
+              </button>
+            )}
+            {!aperto && (
+              <span className="text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded-full">Chiuso</span>
+            )}
+          </div>
+        </div>
+        {/* Righe */}
+        <div className="divide-y divide-ink-navy/6">
+          {o.righe.map(r => (
+            <div key={r.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-bold text-ink-navy/40 w-5 shrink-0 text-center">{r.quantita}×</span>
+                <span className="text-sm text-ink-navy truncate">{r.nome}</span>
+                {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+              </div>
+              <span className="text-sm text-ink-navy/60 shrink-0">{fmt(r.prezzo * r.quantita)}</span>
+            </div>
+          ))}
+          {o.righe.length === 0 && (
+            <p className="px-4 py-3 text-sm text-ink-navy/30">Nessuna voce</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Conti aperti */}
+      <div>
+        <h2 className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider mb-3">
+          Conti aperti {ordiniAperti.length > 0 && <span className="ml-1 bg-electric-blue text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{ordiniAperti.length}</span>}
+        </h2>
+        {ordiniAperti.length === 0 ? (
+          <div className="bg-white border border-ink-navy/10 rounded-xl p-8 text-center text-ink-navy/30 text-sm">
+            Nessun conto aperto — i QR dei tavoli apriranno automaticamente un conto quando il cliente ordina
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {ordiniAperti.map(o => <OrdineCard key={o.id} o={o} aperto />)}
+          </div>
+        )}
+      </div>
+
+      {/* Conti chiusi oggi */}
+      {ordiniChiusi.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider mb-3">Chiusi oggi</h2>
+          <div className="space-y-3">
+            {ordiniChiusi.map(o => <OrdineCard key={o.id} o={o} aperto={false} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Vista LISTA ───────────────────────────────────────────────────────────────
@@ -477,7 +566,10 @@ function toMinutes(hhmm: string) { const [h, m] = hhmm.split(':').map(Number); c
 
 // ── Pagina ────────────────────────────────────────────────────────────────────
 export default function TavoliPage() {
-  const [vista, setVista] = useState<'mappa' | 'lista'>('mappa')
+  const [vista, setVista] = useState<'mappa' | 'lista' | 'conto'>('mappa')
+  const [ordiniAperti, setOrdiniAperti] = useState<Ordine[]>([])
+  const [ordiniChiusi, setOrdiniChiusi] = useState<Ordine[]>([])
+  const [chiudendo, setChiudendo] = useState<string | null>(null)
   const [tavoli, setTavoli] = useState<Tavolo[]>([])
   const [gruppi, setGruppi] = useState<Gruppo[]>([])
   const [loading, setLoading] = useState(true)
@@ -513,6 +605,29 @@ export default function TavoliPage() {
     const d = await res.json().catch(() => ({}))
     setTavoli(d.tavoli ?? []); setLoading(false)
   }
+
+  async function fetchOrdini() {
+    const [resAperti, resChiusi] = await Promise.all([
+      fetch('/api/ordini?stato=aperto', { credentials: 'include' }).then(r => r.json()).catch(() => ({})),
+      fetch('/api/ordini?stato=chiuso', { credentials: 'include' }).then(r => r.json()).catch(() => ({})),
+    ])
+    setOrdiniAperti(resAperti.ordini ?? [])
+    setOrdiniChiusi(resChiusi.ordini ?? [])
+  }
+
+  async function chiudiConto(o: Ordine) {
+    setChiudendo(o.id)
+    try {
+      await fetch('/api/tavoli/chiudi-conto', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tavoloId: o.tavoloId, gruppoId: o.gruppoId }),
+      })
+      await Promise.all([fetchOrdini(), fetchTavoli(), fetchGruppi(giornoSelRef.current, turnoSelRef.current)])
+    } finally {
+      setChiudendo(null)
+    }
+  }
   const giornoSelRef = useRef(giornoSel)
   const turnoSelRef = useRef(turnoSel)
   useEffect(() => { giornoSelRef.current = giornoSel }, [giornoSel])
@@ -546,9 +661,11 @@ export default function TavoliPage() {
       }
     }).catch(() => {})
     fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? [])).catch(() => {})
+    fetchOrdini()
     const interval = setInterval(() => {
       fetchTavoli()
       fetchGruppi(giornoSelRef.current, turnoSelRef.current)
+      fetchOrdini()
     }, 15000)
     return () => clearInterval(interval)
   }, [])
@@ -694,10 +811,15 @@ export default function TavoliPage() {
 
       {/* Tab switch */}
       <div className="flex gap-2">
-        {[{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }].map(t => (
-          <button key={t.k} onClick={() => setVista(t.k as 'mappa' | 'lista')}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
+        {[{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }, { k: 'conto', l: 'Conto' }].map(t => (
+          <button key={t.k} onClick={() => { setVista(t.k as 'mappa' | 'lista' | 'conto'); if (t.k === 'conto') fetchOrdini() }}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'} relative`}>
             {t.l}
+            {t.k === 'conto' && ordiniAperti.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-zest-lime text-ink-navy text-[10px] font-bold rounded-full flex items-center justify-center">
+                {ordiniAperti.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -750,6 +872,13 @@ export default function TavoliPage() {
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
               onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />
+          )}
+          {vista === 'conto' && (
+            <VistaConto
+              ordiniAperti={ordiniAperti}
+              ordiniChiusi={ordiniChiusi}
+              onChiudi={chiudiConto}
+              chiudendo={chiudendo} />
           )}
         </>
       )}

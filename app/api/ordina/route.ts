@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-function toMinutes(t: string) {
-  const [h, m] = t.split(':').map(Number)
-  const v = h * 60 + m
-  return v === 0 ? 1440 : v
-}
-
 // GET — menu
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -42,7 +36,7 @@ export async function POST(req: Request) {
   const tavoloId = tavoloRecord?.id ?? null
   const totale = righe.reduce((sum: number, r: any) => sum + r.prezzo * r.quantita, 0)
 
-  // Cerca il gruppo attivo per questo tavolo nel turno corrente
+  // Cerca il gruppo attivo per questo tavolo (senza vincoli temporali — il conto è aperto fino a chiusura manuale)
   let gruppoId: string | null = null
   let tavoloLabel = tavolo
 
@@ -50,78 +44,49 @@ export async function POST(req: Request) {
     const oggi = new Date()
     const localOggi = new Date(oggi.toLocaleString('en-US', { timeZone: 'Europe/Rome' }))
     const dataStr = `${localOggi.getFullYear()}-${String(localOggi.getMonth() + 1).padStart(2, '0')}-${String(localOggi.getDate()).padStart(2, '0')}`
-    const minutiOra = localOggi.getHours() * 60 + localOggi.getMinutes()
 
-    // Recupera turni di servizio dell'utente
-    let turnoAttivoId: string | null = null
-    try {
-      const turni: { id: string; oraInizio: string; oraFine: string }[] = JSON.parse(user.turniServizio ?? '[]')
-      const turnoAttivo = turni.find(t => minutiOra >= toMinutes(t.oraInizio) && minutiOra < toMinutes(t.oraFine))
-      turnoAttivoId = turnoAttivo?.id ?? null
-    } catch {}
-
-    // Cerca il gruppo per oggi che contiene questo tavolo
     const gruppo = await prisma.gruppoTavoli.findFirst({
       where: { userId: user.id, data: dataStr, tavoli: { some: { id: tavoloId } } },
     })
-
     if (gruppo) {
-      // Usa oraFine della prenotazione se disponibile, altrimenti fallback alla fine del turno
-      let withinWindow = true
-      if (gruppo.oraFine) {
-        // Il gruppo è attivo solo fino alla fine della prenotazione specifica
-        withinWindow = minutiOra < toMinutes(gruppo.oraFine)
-      } else if (gruppo.turnoId) {
-        try {
-          const turni: { id: string; oraInizio: string; oraFine: string }[] = JSON.parse(user.turniServizio ?? '[]')
-          const turno = turni.find(t => t.id === gruppo.turnoId)
-          if (turno) {
-            const inizioT = toMinutes(turno.oraInizio)
-            const fineT = toMinutes(turno.oraFine)
-            withinWindow = inizioT > fineT
-              ? (minutiOra >= inizioT || minutiOra < fineT)
-              : (minutiOra >= inizioT && minutiOra < fineT)
-          }
-        } catch {}
-      }
-
-      if (withinWindow) {
-        gruppoId = gruppo.id
-        tavoloLabel = `T${gruppo.label}`
-      }
+      gruppoId = gruppo.id
+      tavoloLabel = `T${gruppo.label}`
     }
   }
 
-  // Se il tavolo è in un gruppo attivo, aggiungi a ordine esistente
-  if (gruppoId) {
-    const ordineEsistente = await prisma.ordine.findFirst({
-      where: { gruppoId, status: 'nuovo' },
-      orderBy: { createdAt: 'desc' },
+  // Cerca un conto aperto per questo gruppo o per questo singolo tavolo
+  const ordineAperto = await prisma.ordine.findFirst({
+    where: gruppoId
+      ? { gruppoId, status: 'aperto' }
+      : { tavoloId, gruppoId: null, status: 'aperto' },
+    orderBy: { createdAt: 'desc' },
+    include: { righe: true },
+  })
+
+  if (ordineAperto) {
+    await prisma.rigaOrdine.createMany({
+      data: righe.map((r: any) => ({
+        ordineId: ordineAperto.id,
+        piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
+        quantita: r.quantita, note: r.note ?? '',
+      })),
     })
-    if (ordineEsistente) {
-      await prisma.rigaOrdine.createMany({
-        data: righe.map((r: any) => ({
-          ordineId: ordineEsistente.id,
-          piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
-          quantita: r.quantita, note: r.note ?? '',
-        })),
-      })
-      const ordineAggiornato = await prisma.ordine.update({
-        where: { id: ordineEsistente.id },
-        data: { totale: ordineEsistente.totale + totale },
-        include: { righe: true },
-      })
-      return NextResponse.json({ ordine: ordineAggiornato })
-    }
+    const ordineAggiornato = await prisma.ordine.update({
+      where: { id: ordineAperto.id },
+      data: { totale: ordineAperto.totale + totale },
+      include: { righe: true },
+    })
+    return NextResponse.json({ ordine: ordineAggiornato })
   }
 
-  // Nessun ordine attivo: crea nuovo
+  // Nessun conto aperto: ne apre uno nuovo
   const ordine = await prisma.ordine.create({
     data: {
       userId: user.id,
       tavolo: tavoloLabel,
       tavoloId,
       gruppoId,
+      status: 'aperto',
       totale,
       note,
       righe: {
