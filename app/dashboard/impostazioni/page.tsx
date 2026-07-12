@@ -64,7 +64,17 @@ const PAGAMENTI_LISTA = [
 type Orari = Record<string, string>
 type Servizi = Record<string, boolean>
 type Pagamenti = string[]
-interface Regole { preavvisoMin: string; copertiMin: string; copertiMax: string; durataMedia: string; walkIn: boolean; noteAggiuntive: string }
+interface Regole {
+  preavvisoMinMinuti: string      // preavviso minimo prenotazione tavolo (minuti)
+  preavvisoOrdiniMinMinuti: string // preavviso minimo ordini asporto/delivery (minuti)
+  anticipoMaxGiorni: string       // quanti giorni in anticipo si può prenotare
+  copertiMin: string
+  copertiMax: string
+  durataMedia: string             // durata media tavola (minuti)
+  walkIn: boolean
+  fasceOrdini: string             // fasce orarie per ordini: "12:00-15:00, 19:00-23:00"
+  noteAggiuntive: string
+}
 interface Menu { tipoCucina: string; specialita: string; nonDisponibile: string; allergeniGestiti: string }
 interface InfoPratiche { parcheggio: string; accessibile: boolean; animali: boolean; dresscode: string; altro: string }
 interface Faq { domanda: string; risposta: string }
@@ -200,7 +210,7 @@ export default function Impostazioni() {
   const [sitoWeb, setSitoWeb] = useState('')
   const [orari, setOrari] = useState<Orari>({})
   const [servizi, setServizi] = useState<Servizi>({})
-  const [regole, setRegole] = useState<Regole>({ preavvisoMin: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, noteAggiuntive: '' })
+  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, fasceOrdini: '', noteAggiuntive: '' })
   const [menu, setMenu] = useState<Menu>({ tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' })
   const [pagamenti, setPagamenti] = useState<Pagamenti>([])
   const [info, setInfo] = useState<InfoPratiche>({ parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' })
@@ -229,7 +239,7 @@ export default function Impostazioni() {
       setSitoWeb(s.sitoWeb ?? '')
       setOrari(jp(s.orariApertura, {}))
       setServizi(jp(s.serviziOfferti, {}))
-      setRegole(jp(s.regolePrenotazione, { preavvisoMin: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, noteAggiuntive: '' }))
+      setRegole(jp(s.regolePrenotazione, { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', walkIn: true, fasceOrdini: '', noteAggiuntive: '' }))
       setMenu(jp(s.menuOfferta, { tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' }))
       setPagamenti(jp(s.pagamenti, []))
       setInfo(jp(s.infoPratiche, { parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' }))
@@ -370,7 +380,7 @@ export default function Impostazioni() {
           )}
 
           {sezioneAttiva === 'turni' && (
-            <Section title="Turni di servizio" subtitle="Definisci i turni della giornata. Verranno usati nella mappa tavoli per filtrare le prenotazioni per fascia oraria."
+            <Section title="Turni di servizio" subtitle="Definisci i turni della giornata. Vengono usati nella mappa tavoli e come orari consentiti nella pagina pubblica di prenotazione tavoli (hanno priorità sugli orari di apertura)."
               onSave={() => saveSezione('turni', { turniServizio: JSON.stringify(turniServizio) })}
               status={st('turni')}>
               <div className="space-y-3">
@@ -522,30 +532,48 @@ export default function Impostazioni() {
                   className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
               </div>
             )}
-            <Section title="Regole prenotazioni" subtitle="Il bot userà queste regole per gestire le richieste in modo corretto."
+            <Section title="Regole prenotazioni" subtitle="Usate dal bot e dalla pagina pubblica di prenotazione per validare date, orari e numero di persone."
               onSave={() => saveSezione('prenotazioni', { regolePrenotazione: JSON.stringify(regole) })}
               status={st('prenotazioni')}>
+              <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider">Prenotazione tavolo</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+                Per gli orari consentiti vengono usati i <strong>Turni di servizio</strong> (se impostati), altrimenti gli <strong>Orari di apertura</strong>. Configurali nella rispettiva sezione.
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Preavviso minimo">
-                  <input type="text" value={regole.preavvisoMin} onChange={e => { setRegole(r => ({ ...r, preavvisoMin: e.target.value })); dirty('prenotazioni') }}
-                    placeholder="es. 2 ore, 1 giorno" className={cls} />
+                <Field label="Preavviso minimo (minuti)" hint="Es. 120 = il cliente non può prenotare a meno di 2 ore dall'orario scelto">
+                  <input type="number" min={0} value={regole.preavvisoMinMinuti} onChange={e => { setRegole(r => ({ ...r, preavvisoMinMinuti: e.target.value })); dirty('prenotazioni') }}
+                    placeholder="es. 60" className={cls} />
                 </Field>
-                <Field label="Durata media tavola">
-                  <input type="text" value={regole.durataMedia} onChange={e => { setRegole(r => ({ ...r, durataMedia: e.target.value })); dirty('prenotazioni') }}
-                    placeholder="es. 90 minuti" className={cls} />
+                <Field label="Anticipo massimo (giorni)" hint="Es. 30 = si può prenotare al massimo 30 giorni in anticipo">
+                  <input type="number" min={0} value={regole.anticipoMaxGiorni} onChange={e => { setRegole(r => ({ ...r, anticipoMaxGiorni: e.target.value })); dirty('prenotazioni') }}
+                    placeholder="es. 30" className={cls} />
                 </Field>
                 <Field label="Coperti minimi">
-                  <input type="number" value={regole.copertiMin} onChange={e => { setRegole(r => ({ ...r, copertiMin: e.target.value })); dirty('prenotazioni') }}
+                  <input type="number" min={1} value={regole.copertiMin} onChange={e => { setRegole(r => ({ ...r, copertiMin: e.target.value })); dirty('prenotazioni') }}
                     placeholder="1" className={cls} />
                 </Field>
                 <Field label="Coperti massimi">
-                  <input type="number" value={regole.copertiMax} onChange={e => { setRegole(r => ({ ...r, copertiMax: e.target.value })); dirty('prenotazioni') }}
-                    placeholder="10" className={cls} />
+                  <input type="number" min={1} value={regole.copertiMax} onChange={e => { setRegole(r => ({ ...r, copertiMax: e.target.value })); dirty('prenotazioni') }}
+                    placeholder="es. 10" className={cls} />
+                </Field>
+                <Field label="Durata media tavola (min)">
+                  <input type="number" min={0} value={regole.durataMedia} onChange={e => { setRegole(r => ({ ...r, durataMedia: e.target.value })); dirty('prenotazioni') }}
+                    placeholder="90" className={cls} />
                 </Field>
               </div>
               <Toggle label="Accettate walk-in (senza prenotazione)" checked={regole.walkIn}
                 onChange={v => { setRegole(r => ({ ...r, walkIn: v })); dirty('prenotazioni') }} />
-              <Field label="Note aggiuntive per il bot">
+              <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mt-2">Ordini asporto & delivery</p>
+              <Field label="Preavviso minimo ordini (minuti)" hint="Es. 30 = il cliente non può ordinare con meno di 30 minuti di anticipo">
+                <input type="number" min={0} value={regole.preavvisoOrdiniMinMinuti} onChange={e => { setRegole(r => ({ ...r, preavvisoOrdiniMinMinuti: e.target.value })); dirty('prenotazioni') }}
+                  placeholder="es. 30" className={cls} />
+              </Field>
+              <Field label="Fasce orarie ordini" hint="Sovrascrivono gli orari di apertura per ordini asporto/delivery. Es: 12:00-14:30, 19:00-23:00">
+                <input type="text" value={regole.fasceOrdini} onChange={e => { setRegole(r => ({ ...r, fasceOrdini: e.target.value })); dirty('prenotazioni') }}
+                  placeholder="es. 12:00-14:30, 19:00-23:00" className={cls} />
+              </Field>
+              <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mt-2">Note aggiuntive</p>
+              <Field label="Note per il bot">
                 <textarea value={regole.noteAggiuntive} onChange={e => { setRegole(r => ({ ...r, noteAggiuntive: e.target.value })); dirty('prenotazioni') }}
                   rows={3} placeholder="es. Per gruppi superiori a 8 persone è richiesto un menu fisso." className={`${cls} resize-none`} />
               </Field>

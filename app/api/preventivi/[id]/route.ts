@@ -72,7 +72,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: true })
   }
 
-  await prisma.preventivo.updateMany({ where: { id, userId: user.id }, data })
+  const updateData: Record<string, unknown> = {}
+  if (data.status !== undefined) updateData.status = data.status
+  if (data.note !== undefined) updateData.note = data.note
+  if (data.items !== undefined) updateData.items = typeof data.items === 'string' ? data.items : JSON.stringify(data.items)
+  if (data.totale !== undefined) updateData.totale = data.totale
+  if (data.clienteName !== undefined) updateData.clienteName = data.clienteName
+  if (data.clienteEmail !== undefined) updateData.clienteEmail = data.clienteEmail
+  if (data.tipo !== undefined) updateData.tipo = data.tipo
+  if (data.tavoliIds !== undefined) updateData.tavoliIds = data.tavoliIds
+
+  await prisma.preventivo.updateMany({ where: { id, userId: user.id }, data: updateData })
 
   // Sincronizza lead
   if (data.status && LEAD_STATUS_MAP[data.status] && preventivo.leadId) {

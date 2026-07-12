@@ -20,6 +20,7 @@ interface Richiesta {
   totale: number
   status: string
   note?: string
+  tavoliIds?: string | null
   createdAt: string
   leadId?: string
 }
@@ -42,7 +43,7 @@ function SintesiRichiesta({ items, note }: { items: ItemExt[]; note?: string }) 
     i.quantita > 1 ? `${i.descrizione} × ${i.quantita}` : i.descrizione
   )
   const dataMatch = note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
-  const oraMatch = note?.match(/ORA_ISO:(\d{2}:\d{2})/)
+  const oraMatch = note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? note?.match(/ORA_ISO:(\d{2}:\d{2})/)
   // Estrai anche da note testuale (es: "Coperti: 4")
   const copertiNote = note?.match(/Coperti:\s*(\d+)/)
   const allergieNote = note?.match(/Allergie:\s*([^.]+)/)
@@ -127,10 +128,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATI_CONCLUSI = ['concluso_completato', 'concluso_cancellato', 'concluso_no_show']
 
-function NuovaRichiestaModal({ onClose, onSave, initial }: {
+function NuovaRichiestaModal({ onClose, onSave, initial, onAssegnaTavolo }: {
   onClose: () => void
   onSave: (data: object) => void
   initial?: Richiesta | null
+  onAssegnaTavolo?: () => void
 }) {
   const [clienteName, setClienteName] = useState(initial?.clienteName ?? '')
   const [clienteEmail, setClienteEmail] = useState(initial?.clienteEmail ?? '')
@@ -140,6 +142,8 @@ function NuovaRichiestaModal({ onClose, onSave, initial }: {
     initial ? JSON.parse(initial.items) : [{ descrizione: '', quantita: 1, prezzo: 0 }]
   )
 
+  const isTavolo = initial?.tipo === 'tavolo'
+
   function addItem() { setItems([...items, { descrizione: '', quantita: 1, prezzo: 0 }]) }
   function updateItem(i: number, field: keyof Item, value: string | number) {
     setItems(items.map((item, idx) => idx === i ? { ...item, [field]: value } : item))
@@ -148,8 +152,8 @@ function NuovaRichiestaModal({ onClose, onSave, initial }: {
   const totale = items.reduce((sum, i) => sum + i.quantita * i.prezzo, 0)
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 space-y-5 my-4">
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 space-y-5 my-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink-navy">{initial ? 'Gestisci richiesta' : 'Nuova richiesta'}</h2>
           <button onClick={onClose} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
@@ -220,6 +224,15 @@ function NuovaRichiestaModal({ onClose, onSave, initial }: {
           </div>
         )}
 
+        {isTavolo && onAssegnaTavolo && (
+          <div className="border-t border-ink-navy/10 pt-4">
+            <button type="button" onClick={onAssegnaTavolo}
+              className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg border border-ink-navy/15 hover:bg-mist text-sm font-semibold text-ink-navy transition-colors text-left">
+              🍽️ Assegna / cambia tavolo
+            </button>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note</label>
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
@@ -228,8 +241,11 @@ function NuovaRichiestaModal({ onClose, onSave, initial }: {
 
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
-          <button onClick={() => onSave({ clienteName, clienteEmail, tipo, items, note })}
+          <button
             disabled={!clienteName.trim() || items.every(i => !i.descrizione)}
+            onClick={() => {
+              onSave({ clienteName, clienteEmail, tipo, items, note })
+            }}
             className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">
             Salva richiesta
           </button>
@@ -305,10 +321,11 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
 interface TavoloBasic { id: string; numero: number; posti: number; note: string | null }
 interface AppBasic { id: string; data: string; durata: number; status: string; tavoloId?: string | null; tavoliIds?: string | null; note?: string | null }
 
-function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma }: {
+function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma, initialTavoliIds }: {
   richiesta: Richiesta
   onClose: () => void
   onConferma: (data: string, ora: string, servizio: string, durata: number, coperti?: number, allergie?: string, occasione?: string, tavoliIds?: string[]) => void
+  initialTavoliIds?: string[]
 }) {
   const isTavolo = richiesta.tipo === 'tavolo'
   const items = JSON.parse(richiesta.items) as ItemExt[]
@@ -317,7 +334,7 @@ function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma }: {
     : richiesta.tipo === 'ordine' ? 'Ordine asporto'
     : (items[0]?.descrizione ?? '')
   const dataMatch = richiesta.note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
-  const oraMatch = richiesta.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
+  const oraMatch = richiesta.note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? richiesta.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
   const copertiNote = richiesta.note?.match(/Coperti:\s*(\d+)/)
   const allergieNote = richiesta.note?.match(/Allergie:\s*([^.]+)/)
   const occasioneNote = richiesta.note?.match(/Occasione:\s*([^.]+)/)
@@ -330,7 +347,7 @@ function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma }: {
   const [allergie, setAllergie] = useState(items[0]?.allergie ?? allergieNote?.[1]?.trim() ?? '')
   const [occasione, setOccasione] = useState(items[0]?.occasione ?? occasioneNote?.[1]?.trim() ?? '')
   const [tavoli, setTavoli] = useState<TavoloBasic[]>([])
-  const [selectedTavoliIds, setSelectedTavoliIds] = useState<string[]>([])
+  const [selectedTavoliIds, setSelectedTavoliIds] = useState<string[]>(initialTavoliIds ?? [])
   const [appuntamenti, setAppuntamenti] = useState<AppBasic[]>([])
 
   useEffect(() => {
@@ -563,7 +580,8 @@ function Richieste() {
   async function handleSave(form: object) {
     try {
       if (editingRichiesta) {
-        const items = (form as { items: Item[] }).items
+        const f = form as { items: Item[]; tavoliIds?: string; tipo?: string }
+        const items = f.items
         const totale = items.reduce((sum, i) => sum + i.quantita * i.prezzo, 0)
         const nuovoStatus = editingRichiesta.status === 'da_verificare' && totale > 0 ? 'inviato' : undefined
         await fetch(`/api/preventivi/${editingRichiesta.id}`, {
@@ -571,6 +589,15 @@ function Richieste() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...form, items: JSON.stringify(items), totale, ...(nuovoStatus ? { status: nuovoStatus } : {}) }),
         })
+        // Se è una richiesta tavolo con tavoliIds, delega tutto al server
+        if (editingRichiesta.tipo === 'tavolo' && f.tavoliIds !== undefined) {
+          const nuoviIds: string[] = (() => { try { return JSON.parse(f.tavoliIds ?? '[]') } catch { return [] } })()
+          await fetch(`/api/preventivi/${editingRichiesta.id}/assegna-tavolo`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tavoliIds: nuoviIds }),
+          })
+        }
       } else {
         await fetch('/api/preventivi', {
           method: 'POST', credentials: 'include',
@@ -581,7 +608,10 @@ function Richieste() {
     } finally {
       setShowModal(false)
       setEditingRichiesta(null)
-      await fetchRichieste()
+      await Promise.all([
+        fetchRichieste(),
+        fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? [])),
+      ])
     }
   }
 
@@ -659,33 +689,44 @@ function Richieste() {
 
   async function handleConfermaAppuntamento(data: string, ora: string, servizio: string, durata: number, coperti?: number, allergie?: string, occasione?: string, tavoliIds?: string[]) {
     if (!confermaApp) return
-    const res = await fetch('/api/appuntamenti', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clienteNome: confermaApp.clienteName,
-        clienteEmail: confermaApp.clienteEmail,
-        servizio,
-        data: new Date(`${data}T${ora}`).toISOString(),
-        durata,
-        note: `Da richiesta #${String(confermaApp.numero).padStart(3, '0')}`,
-        coperti,
-        allergie,
-        occasione,
-      }),
-    })
-    if (tavoliIds && tavoliIds.length > 0 && res.ok) {
-      const newApp = await res.json()
-      const appId = newApp.appuntamento?.id
-      if (appId) {
-        await fetch(`/api/appuntamenti/${appId}`, {
-          method: 'PATCH', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tavoliIds }),
-        })
-      }
+    const numStr = `#${String(confermaApp.numero).padStart(3, '0')}`
+
+    // Se esiste già un appuntamento collegato, usa quello (evita duplicati)
+    const appEsistente = appuntamenti.find(a => a.note?.includes(numStr))
+    let appId: string | null = appEsistente?.id ?? null
+
+    if (!appEsistente) {
+      const res = await fetch('/api/appuntamenti', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteNome: confermaApp.clienteName,
+          clienteEmail: confermaApp.clienteEmail,
+          servizio,
+          data: new Date(`${data}T${ora}`).toISOString(),
+          durata,
+          note: `Da richiesta ${numStr}`,
+          coperti,
+          allergie,
+          occasione,
+        }),
+      })
+      if (res.ok) appId = (await res.json()).appuntamento?.id ?? null
+    }
+
+    if (appId && tavoliIds && tavoliIds.length > 0) {
+      const patchRes = await fetch(`/api/appuntamenti/${appId}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tavoliIds }),
+      })
+      if (!patchRes.ok) console.error('[tavolo] PATCH fallito', await patchRes.text())
+      else console.log('[tavolo] PATCH ok, appId:', appId, 'tavoliIds:', tavoliIds)
+    } else {
+      console.warn('[tavolo] PATCH saltato — appId:', appId, 'tavoliIds:', tavoliIds)
     }
     setConfermaApp(null)
+    fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? []))
   }
 
   async function handleInviaProposta(messaggio: string, note: string) {
@@ -1042,6 +1083,10 @@ function Richieste() {
           onClose={() => { setShowModal(false); setEditingRichiesta(null) }}
           onSave={handleSave}
           initial={editingRichiesta}
+          onAssegnaTavolo={editingRichiesta?.tipo === 'tavolo' ? () => {
+            setShowModal(false)
+            setConfermaApp(editingRichiesta)
+          } : undefined}
         />
       )}
 
@@ -1200,80 +1245,6 @@ function Richieste() {
                 </div>
               </div>
 
-              {/* Assegna tavolo — solo per tavoli accettati senza tavolo ancora assegnato */}
-              {selected.status === 'accettato' && selected.tipo === 'tavolo' && (() => {
-                const numStr = `#${String(selected.numero).padStart(3, '0')}`
-                const appCollegato = appuntamenti.find(a => a.note?.includes(numStr) || a.note?.includes(`Da richiesta ${numStr}`))
-                if (!appCollegato) return null
-                const hasTavolo = appCollegato.tavoloId || (appCollegato.tavoliIds && appCollegato.tavoliIds !== '[]')
-                const dataApp = new Date(appCollegato.data)
-                const fineApp = new Date(dataApp.getTime() + appCollegato.durata * 60000)
-                return (
-                  <div className="border-t border-ink-navy/8 pt-4">
-                    <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">
-                      {hasTavolo ? 'Tavolo assegnato' : 'Assegna tavolo'}
-                    </p>
-                    {hasTavolo ? (
-                      <p className="text-sm text-ink-navy/60">
-                        {tavoli.filter(t => {
-                          try { return (JSON.parse(appCollegato.tavoliIds ?? '[]') as string[]).includes(t.id) } catch { return t.id === appCollegato.tavoloId }
-                        }).sort((a,b)=>a.numero-b.numero).map(t=>`T${t.numero} (${t.posti}p)`).join(' + ') || '—'}
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                          {tavoli.map(t => {
-                            const checked = assegnaTavoliIds.includes(t.id)
-                            const occupato = !checked && appuntamenti.some(a => {
-                              if (a.id === appCollegato.id || a.status === 'cancellato') return false
-                              const usaTavolo = a.tavoloId === t.id || (() => { try { return (JSON.parse(a.tavoliIds ?? '[]') as string[]).includes(t.id) } catch { return false } })()
-                              if (!usaTavolo) return false
-                              const aStart = new Date(a.data).getTime()
-                              return aStart < fineApp.getTime() && aStart + a.durata * 60000 > dataApp.getTime()
-                            })
-                            return (
-                              <label key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${
-                                occupato ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60'
-                                : checked ? 'border-electric-blue/40 bg-electric-blue/10 cursor-pointer'
-                                : 'border-ink-navy/10 hover:bg-mist cursor-pointer'
-                              }`}>
-                                <input type="checkbox" checked={checked} disabled={occupato}
-                                  onChange={e => setAssegnaTavoliIds(prev => e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id))}
-                                  className="accent-electric-blue w-4 h-4 shrink-0" />
-                                <span className="text-sm text-ink-navy/70 flex-1">
-                                  <span className="font-semibold">T{t.numero}</span>
-                                  <span className="text-ink-navy/35"> · {t.posti} posti{t.note ? ` · ${t.note}` : ''}</span>
-                                </span>
-                                {occupato && <span className="text-xs text-red-500 font-medium">occupato</span>}
-                              </label>
-                            )
-                          })}
-                        </div>
-                        {assegnaTavoliIds.length > 0 && (
-                          <button
-                            disabled={assegnaLoading}
-                            onClick={async () => {
-                              setAssegnaLoading(true)
-                              await fetch(`/api/appuntamenti/${appCollegato.id}`, {
-                                method: 'PATCH', credentials: 'include',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ tavoliIds: assegnaTavoliIds }),
-                              })
-                              const d = await fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json())
-                              setAppuntamenti(d.appuntamenti ?? [])
-                              setAssegnaTavoliIds([])
-                              setAssegnaLoading(false)
-                            }}
-                            className="w-full bg-electric-blue text-white text-sm font-semibold py-2 rounded-lg hover:bg-electric-blue/90 disabled:opacity-50">
-                            {assegnaLoading ? 'Salvataggio...' : `Assegna ${assegnaTavoliIds.length > 1 ? assegnaTavoliIds.length + ' tavoli' : 'tavolo'}`}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-
               {/* Footer */}
               <div className="px-5 py-3 border-t border-ink-navy/8 flex gap-2">
                 <button onClick={() => { setEditingRichiesta(selected); setSelected(null); setShowModal(true) }}
@@ -1303,6 +1274,7 @@ function Richieste() {
           richiesta={confermaApp}
           onClose={() => setConfermaApp(null)}
           onConferma={(d, o, s, dur, cop, all, occ, tids) => handleConfermaAppuntamento(d, o, s, dur, cop, all, occ, tids)}
+          initialTavoliIds={(() => { try { return JSON.parse(confermaApp.tavoliIds ?? '[]') as string[] } catch { return [] } })()}
         />
       )}
     </div>

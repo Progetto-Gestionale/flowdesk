@@ -49,6 +49,9 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
   const [cattivaId, setCattivaId] = useState<string | null>(null)
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
+  const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
+  const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
+  const [regole, setRegole] = useState<{ preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; fasceOrdini?: string }>({})
 
   const [carrello, setCarrello] = useState<RigaCarrello[]>([])
   const [step, setStep] = useState<'menu' | 'checkout' | 'inviato'>('menu')
@@ -74,9 +77,10 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
 
   function selezionaSuggerimento(s: any) {
     const a = s.address ?? {}
-    const via = [a.road ?? a.pedestrian ?? a.footway ?? '', a.house_number ?? ''].filter(Boolean).join(' ')
+    const strada = a.road ?? a.pedestrian ?? a.footway ?? a.residential ?? a.path ?? a.name ?? s.display_name.split(',')[0] ?? ''
+    const via = [strada, a.house_number ?? ''].filter(Boolean).join(' ')
     const cap = (a.postcode ?? '').replace(/\s/g, '').slice(0, 5)
-    const citta = a.city ?? a.town ?? a.village ?? a.county ?? ''
+    const citta = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? ''
     setDati(d => ({ ...d, via, cap, citta }))
     setSuggerimenti([])
     setErrIndirizzo('')
@@ -104,6 +108,20 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
       })
       .catch(() => setErrore('Errore di connessione'))
       .finally(() => setLoading(false))
+    fetch(`/api/public/info?publicId=${publicId}`)
+      .then(r => r.json())
+      .then(d => {
+        try { setOrariApertura(JSON.parse(d.orariApertura ?? '{}')) } catch {}
+        try { setTurniServizio(JSON.parse(d.turniServizio ?? '[]')) } catch {}
+        try {
+          const r = JSON.parse(d.regolePrenotazione ?? '{}')
+          setRegole({
+            preavvisoOrdiniMinMinuti: r.preavvisoOrdiniMinMinuti ? Number(r.preavvisoOrdiniMinMinuti) : undefined,
+            anticipoMaxGiorni: r.anticipoMaxGiorni ? Number(r.anticipoMaxGiorni) : undefined,
+            fasceOrdini: r.fasceOrdini || undefined,
+          })
+        } catch {}
+      }).catch(() => {})
   }, [publicId])
 
   function aggiungi(piatto: Piatto) {
@@ -131,9 +149,77 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
   const checkoutValido = dati.nome && dati.email && dati.data && dati.ora &&
     (dati.tipo === 'asporto' || (dati.via && dati.cap && /^\d{5}$/.test(dati.cap) && dati.citta))
 
+  const GIORNI_KEY = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab']
+
+  function fascePer(dataStr: string): { inizio: string; fine: string }[] {
+    if (!dataStr) return []
+    const dow = new Date(dataStr + 'T12:00:00').getDay()
+    const chiave = GIORNI_KEY[dow]
+    if (turniServizio.length > 0) return turniServizio.map(t => ({ inizio: t.oraInizio, fine: t.oraFine }))
+    const orarioGiorno = orariApertura[chiave]
+    if (!orarioGiorno) return []
+    return orarioGiorno.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+      const [inizio, fine] = s.split('-').map(t => t.trim())
+      return { inizio: inizio ?? '', fine: fine ?? '' }
+    }).filter(f => f.inizio && f.fine)
+  }
+
+  function oraInFasce(ora: string, fasce: { inizio: string; fine: string }[]): boolean {
+    if (fasce.length === 0) return true
+    return fasce.some(f => ora >= f.inizio && ora <= f.fine)
+  }
+
+  function minOraPerData(dataStr: string): string {
+    if (dataStr !== oggi) return ''
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  }
+
+  function validaDataOra(dataStr: string, oraStr: string, preavvisoMinuti?: number, anticipoMaxGiorni?: number): string | null {
+    const ora = new Date(`${dataStr}T${oraStr}:00`)
+    const now = new Date()
+    if (ora <= now) return "L'orario selezionato è già passato."
+    if (preavvisoMinuti && preavvisoMinuti > 0) {
+      const minConsentita = new Date(now.getTime() + preavvisoMinuti * 60000)
+      if (ora < minConsentita) {
+        const label = preavvisoMinuti < 60
+          ? `${preavvisoMinuti} minuti`
+          : preavvisoMinuti % 60 === 0
+            ? `${preavvisoMinuti / 60} ${preavvisoMinuti / 60 === 1 ? 'ora' : 'ore'}`
+            : `${Math.floor(preavvisoMinuti / 60)}h ${preavvisoMinuti % 60}min`
+        return `Richiediamo almeno ${label} di preavviso.`
+      }
+    }
+    if (anticipoMaxGiorni && anticipoMaxGiorni > 0) {
+      const maxConsentita = new Date(now.getTime() + anticipoMaxGiorni * 86400000)
+      if (ora > maxConsentita) return `Si può ordinare al massimo ${anticipoMaxGiorni} giorni in anticipo.`
+    }
+    return null
+  }
+
+  function fascePerOrdini(): { inizio: string; fine: string }[] {
+    if (regole.fasceOrdini) {
+      return regole.fasceOrdini.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+        const [inizio, fine] = s.split('-').map(t => t.trim())
+        return { inizio: inizio ?? '', fine: fine ?? '' }
+      }).filter(f => f.inizio && f.fine)
+    }
+    return fascePer(dati.data)
+  }
+
   async function inviaOrdine() {
     if (!checkoutValido) return
     setErrIndirizzo('')
+    // Blocca date/orari passati e fuori preavviso
+    if (dati.data < oggi) { setErrIndirizzo('La data selezionata è già passata.'); return }
+    const errDataOra = validaDataOra(dati.data, dati.ora, regole.preavvisoOrdiniMinMinuti, regole.anticipoMaxGiorni)
+    if (errDataOra) { setErrIndirizzo(errDataOra); return }
+    // Blocca orari fuori fasce ordini (o apertura come fallback)
+    const fasceOrdine = fascePerOrdini()
+    if (fasceOrdine.length > 0 && !oraInFasce(dati.ora, fasceOrdine)) {
+      setErrIndirizzo(`Orario non disponibile. Ordini accettati: ${fasceOrdine.map(f => `${f.inizio}–${f.fine}`).join(', ')}.`)
+      return
+    }
     setInviando(true)
     try {
       if (dati.tipo === 'delivery') {
@@ -418,9 +504,19 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Orario *</label>
               <input type="time" value={dati.ora}
+                min={minOraPerData(dati.data)}
                 onChange={e => setDati(d => ({ ...d, ora: e.target.value }))} className={inpFocus} />
             </div>
           </div>
+          {(() => {
+            const fasce = fascePerOrdini()
+            if (fasce.length === 0) return null
+            return (
+              <p className="text-xs text-gray-400">
+                Ordini accettati: {fasce.map(f => `${f.inizio}–${f.fine}`).join(' · ')}
+              </p>
+            )
+          })()}
         </div>
 
         {/* Indirizzo (solo delivery) */}

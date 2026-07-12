@@ -13,6 +13,8 @@ export async function GET(req: Request) {
     nomeLocale: owner.nomeLocale,
     maxCoperti: owner.maxCoperti,
     orariApertura: owner.orariApertura,
+    turniServizio: owner.turniServizio,
+    regolePrenotazione: owner.regolePrenotazione,
     menuLogoUrl: owner.menuLogoUrl,
     menuColoreP: owner.menuColoreP,
   })

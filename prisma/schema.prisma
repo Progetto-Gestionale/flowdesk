@@ -327,6 +327,7 @@ model Preventivo {
   totale            Float
   status            String   @default("bozza")
   note              String?
+  tavoliIds         String?
   tokenRisposta     String?  @unique
   messaggioProposta String?
   createdAt         DateTime @default(now())

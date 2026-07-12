@@ -1162,7 +1162,7 @@ export default function AnalyticsPage() {
                   {modalSezione && (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-navy/40 p-0 sm:p-4"
                       onClick={() => setModalSezione(null)}>
-                      <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col"
+                      <div className="bg-white w-full sm:max-w-4xl rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col"
                         onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-5 py-4 border-b border-ink-navy/8 flex-shrink-0">
                           <div>
@@ -1241,7 +1241,7 @@ export default function AnalyticsPage() {
                   {modalKpi && (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-navy/40 p-0 sm:p-4"
                       onClick={() => setModalKpi(null)}>
-                      <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col"
+                      <div className="bg-white w-full sm:max-w-4xl rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col"
                         onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-5 py-4 border-b border-ink-navy/8 flex-shrink-0">
                           <div>

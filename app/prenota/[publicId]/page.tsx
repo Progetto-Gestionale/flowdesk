@@ -55,6 +55,9 @@ export default function PrenotaPage() {
   const [coloreP, setColoreP] = useState('#4f46e5')
   const [loadingInfo, setLoadingInfo] = useState(true)
   const [errore, setErrore] = useState('')
+  const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
+  const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
+  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; fasceOrdini?: string }>({})
 
   // Tab principale
   const [tab, setTab] = useState<'tavolo' | 'asporto'>('tavolo')
@@ -99,6 +102,19 @@ export default function PrenotaPage() {
         setNomeLocale(d.nomeLocale ?? 'Il locale')
         setLogoUrl(d.menuLogoUrl ?? null)
         setColoreP(d.menuColoreP ?? '#4f46e5')
+        try { setOrariApertura(JSON.parse(d.orariApertura ?? '{}')) } catch {}
+        try { setTurniServizio(JSON.parse(d.turniServizio ?? '[]')) } catch {}
+        try {
+          const r = JSON.parse(d.regolePrenotazione ?? '{}')
+          setRegole({
+            preavvisoMinMinuti: r.preavvisoMinMinuti ? Number(r.preavvisoMinMinuti) : undefined,
+            preavvisoOrdiniMinMinuti: r.preavvisoOrdiniMinMinuti ? Number(r.preavvisoOrdiniMinMinuti) : undefined,
+            anticipoMaxGiorni: r.anticipoMaxGiorni ? Number(r.anticipoMaxGiorni) : undefined,
+            copertiMin: r.copertiMin ? Number(r.copertiMin) : undefined,
+            copertiMax: r.copertiMax ? Number(r.copertiMax) : undefined,
+            fasceOrdini: r.fasceOrdini || undefined,
+          })
+        } catch {}
       })
       .catch(() => setErrore('Errore di connessione'))
       .finally(() => setLoadingInfo(false))
@@ -146,12 +162,95 @@ export default function PrenotaPage() {
   const checkoutValido = dati.nome && dati.email && dati.telefono && dati.data && dati.ora &&
     (dati.tipo === 'asporto' || (dati.via && dati.cap && /^\d{5}$/.test(dati.cap) && dati.citta))
 
+  // ── Helpers orari ────────────────────────────────────────────────────────
+  const GIORNI_KEY = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab']
+
+  function fascePer(dataStr: string): { inizio: string; fine: string }[] {
+    if (!dataStr) return []
+    // Prima controlla turniServizio (più precisi)
+    const dow = new Date(dataStr + 'T12:00:00').getDay()
+    const chiave = GIORNI_KEY[dow]
+    // Usa turniServizio se disponibili
+    if (turniServizio.length > 0) {
+      return [...turniServizio]
+        .sort((a, b) => a.oraInizio.localeCompare(b.oraInizio))
+        .map(t => ({ inizio: t.oraInizio, fine: t.oraFine }))
+    }
+    // Altrimenti usa orariApertura
+    const orarioGiorno = orariApertura[chiave]
+    if (!orarioGiorno) return []
+    return orarioGiorno.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+      const [inizio, fine] = s.split('-').map(t => t.trim())
+      return { inizio: inizio ?? '', fine: fine ?? '' }
+    }).filter(f => f.inizio && f.fine)
+  }
+
+  function oraInFasce(ora: string, fasce: { inizio: string; fine: string }[]): boolean {
+    if (fasce.length === 0) return true // nessun vincolo
+    return fasce.some(f => ora >= f.inizio && ora <= f.fine)
+  }
+
+  function minOraPerData(dataStr: string): string {
+    if (dataStr !== oggi) return ''
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  }
+
+  function validaDataOra(dataStr: string, oraStr: string, preavvisoMinuti?: number, anticipoMaxGiorni?: number): string | null {
+    const ora = new Date(`${dataStr}T${oraStr}:00`)
+    const now = new Date()
+    if (ora <= now) return "L'orario selezionato è già passato."
+    if (preavvisoMinuti && preavvisoMinuti > 0) {
+      const minConsentita = new Date(now.getTime() + preavvisoMinuti * 60000)
+      if (ora < minConsentita) {
+        const label = preavvisoMinuti < 60
+          ? `${preavvisoMinuti} minuti`
+          : preavvisoMinuti % 60 === 0
+            ? `${preavvisoMinuti / 60} ${preavvisoMinuti / 60 === 1 ? 'ora' : 'ore'}`
+            : `${Math.floor(preavvisoMinuti / 60)}h ${preavvisoMinuti % 60}min`
+        return `Richiediamo almeno ${label} di preavviso.`
+      }
+    }
+    if (anticipoMaxGiorni && anticipoMaxGiorni > 0) {
+      const maxConsentita = new Date(now.getTime() + anticipoMaxGiorni * 86400000)
+      if (ora > maxConsentita) return `Si può prenotare al massimo ${anticipoMaxGiorni} giorni in anticipo.`
+    }
+    return null
+  }
+
+  function fascePerOrdini(): { inizio: string; fine: string }[] {
+    if (regole.fasceOrdini) {
+      return regole.fasceOrdini.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+        const [inizio, fine] = s.split('-').map(t => t.trim())
+        return { inizio: inizio ?? '', fine: fine ?? '' }
+      }).filter(f => f.inizio && f.fine)
+    }
+    return fascePer(dati.data)
+  }
+
   // ── Submit tavolo ─────────────────────────────────────────────────────────
   async function prenotaTavolo(e: React.FormEvent) {
     e.preventDefault()
     if (!formTavolo.nome || !formTavolo.email || !formTavolo.telefono || !formTavolo.data || !formTavolo.ora || !formTavolo.persone) {
       setErrTavolo('Compila tutti i campi obbligatori.')
       return
+    }
+    // Blocca date/orari passati e fuori preavviso
+    if (formTavolo.data < oggi) { setErrTavolo('La data selezionata è già passata.'); return }
+    const errDataOra = validaDataOra(formTavolo.data, formTavolo.ora, regole.preavvisoMinMinuti, regole.anticipoMaxGiorni)
+    if (errDataOra) { setErrTavolo(errDataOra); return }
+    // Blocca orari fuori apertura
+    const fasceTavolo = fascePer(formTavolo.data)
+    if (fasceTavolo.length > 0 && !oraInFasce(formTavolo.ora, fasceTavolo)) {
+      setErrTavolo(`Orario non disponibile. Siamo aperti: ${fasceTavolo.map(f => `${f.inizio}–${f.fine}`).join(', ')}.`)
+      return
+    }
+    // Blocca coperti fuori range
+    if (regole.copertiMin && formTavolo.persone < regole.copertiMin) {
+      setErrTavolo(`Il numero minimo di persone è ${regole.copertiMin}.`); return
+    }
+    if (regole.copertiMax && formTavolo.persone > regole.copertiMax) {
+      setErrTavolo(`Il numero massimo di persone è ${regole.copertiMax}.`); return
     }
     setInvioTavolo(true)
     setErrTavolo('')
@@ -186,9 +285,10 @@ export default function PrenotaPage() {
 
   function selezionaSuggerimento(s: any) {
     const a = s.address ?? {}
-    const via = [a.road ?? a.pedestrian ?? a.footway ?? '', a.house_number ?? ''].filter(Boolean).join(' ')
+    const strada = a.road ?? a.pedestrian ?? a.footway ?? a.residential ?? a.path ?? a.name ?? s.display_name.split(',')[0] ?? ''
+    const via = [strada, a.house_number ?? ''].filter(Boolean).join(' ')
     const cap = (a.postcode ?? '').replace(/\s/g, '').slice(0, 5)
-    const citta = a.city ?? a.town ?? a.village ?? a.county ?? ''
+    const citta = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? ''
     setDati(d => ({ ...d, via, cap, citta }))
     setSuggerimenti([])
     setErrIndirizzo('')
@@ -198,6 +298,16 @@ export default function PrenotaPage() {
   async function inviaOrdine() {
     if (!checkoutValido) return
     setErrIndirizzo('')
+    // Blocca date/orari passati e fuori preavviso
+    if (dati.data < oggi) { setErrIndirizzo('La data selezionata è già passata.'); return }
+    const errDataOraOrdine = validaDataOra(dati.data, dati.ora, regole.preavvisoOrdiniMinMinuti)
+    if (errDataOraOrdine) { setErrIndirizzo(errDataOraOrdine); return }
+    // Blocca orari fuori fasce ordini (o apertura come fallback)
+    const fasceOrdine = fascePerOrdini()
+    if (fasceOrdine.length > 0 && !oraInFasce(dati.ora, fasceOrdine)) {
+      setErrIndirizzo(`Orario non disponibile. Ordini accettati: ${fasceOrdine.map(f => `${f.inizio}–${f.fine}`).join(', ')}.`)
+      return
+    }
     setInviando(true)
     try {
       // Verifica indirizzo delivery con Nominatim (OpenStreetMap)
@@ -354,10 +464,20 @@ export default function PrenotaPage() {
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Ora *</label>
                     <input type="time" required value={formTavolo.ora}
+                      min={minOraPerData(formTavolo.data)}
                       onChange={e => setFormTavolo(f => ({ ...f, ora: e.target.value }))}
                       className={inp} />
                   </div>
                 </div>
+                {(() => {
+                  const fasce = fascePer(formTavolo.data)
+                  if (fasce.length === 0) return null
+                  return (
+                    <p className="text-xs text-gray-400">
+                      Orari disponibili: {fasce.map(f => `${f.inizio}–${f.fine}`).join(' · ')}
+                    </p>
+                  )
+                })()}
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-2">Numero persone *</label>
                   <div className="flex items-center gap-3">
@@ -417,7 +537,7 @@ export default function PrenotaPage() {
 
               {errTavolo && <p className="text-sm text-red-500 text-center">{errTavolo}</p>}
 
-              <button type="submit" disabled={invioTavolo}
+              <button type="submit" disabled={invioTavolo || !formTavolo.nome || !formTavolo.email || !formTavolo.telefono || !formTavolo.data || !formTavolo.ora}
                 className="w-full py-3.5 rounded-2xl text-white font-bold text-sm shadow disabled:opacity-50"
                 style={{ background: coloreP }}>
                 {invioTavolo ? 'Invio in corso…' : 'Invia richiesta'}
@@ -613,9 +733,19 @@ export default function PrenotaPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Orario *</label>
                   <input type="time" value={dati.ora}
+                    min={minOraPerData(dati.data)}
                     onChange={e => setDati(d => ({ ...d, ora: e.target.value }))} className={inp} />
                 </div>
               </div>
+              {(() => {
+                const fasce = fascePerOrdini()
+                if (fasce.length === 0) return null
+                return (
+                  <p className="text-xs text-gray-400">
+                    Ordini accettati: {fasce.map(f => `${f.inizio}–${f.fine}`).join(' · ')}
+                  </p>
+                )
+              })()}
             </div>
 
             {/* Indirizzo delivery */}
