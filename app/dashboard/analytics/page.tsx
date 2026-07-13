@@ -508,8 +508,8 @@ export default function AnalyticsPage() {
 
   const ritardiConTimbro = dettaglio ? dettaglio.ritardi.filter(r => r.hasTimbro) : []
   const assenzeIngiustificate = dettaglio ? dettaglio.ritardi.filter(r => !r.hasTimbro) : []
-  const ritardiMin = ritardiConTimbro.reduce((s, r) => s + r.ritardoMin, 0)
-  const straordMin = ritardiConTimbro.reduce((s, r) => s + r.straordinarioMin, 0)
+  const ritardiMin = ritardiConTimbro.reduce((s, r) => s + (r.ritardoMin > 5 ? r.ritardoMin : 0), 0)
+  const straordMin = ritardiConTimbro.reduce((s, r) => s + (r.straordinarioMin > 5 ? r.straordinarioMin : 0), 0)
   const ritardiCount = ritardiConTimbro.filter(r => r.ritardoMin > 5).length
   const straordCount = ritardiConTimbro.filter(r => r.straordinarioMin > 5).length
   // aggregazione per mese (per vista anno nel modal)
@@ -839,9 +839,6 @@ export default function AnalyticsPage() {
                   </button>
                 ))}
               </div>
-              <span className="text-[11px] text-ink-navy/35">
-                <b className="text-ink-navy/50">Turni</b>: ore da programma &nbsp;·&nbsp; <b className="text-ink-navy/50">Cartellino</b>: ore effettive da timbro QR
-              </span>
               {mesiDisponibili.length > 0 && (
                 <select value={meseSel} onChange={e => cambiaMe(e.target.value)}
                   className="text-sm border border-ink-navy/10 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-electric-blue bg-white">
@@ -851,6 +848,9 @@ export default function AnalyticsPage() {
                 </select>
               )}
             </div>
+            <p className="text-[11px] text-ink-navy/35 mt-1.5">
+              <b className="text-ink-navy/50">Turni</b>: ore da programma &nbsp;·&nbsp; <b className="text-ink-navy/50">Cartellino</b>: ore effettive da timbro QR
+            </p>
           </div>
 
           {loadingStaff ? (
@@ -1061,13 +1061,14 @@ export default function AnalyticsPage() {
                       <p className="text-xs text-amber-500 mb-2">Nessun timbro registrato nel periodo</p>
                     )}
                     {/* Barre */}
-                    <div className="mt-4 flex items-end gap-1.5" style={{ height: 120 }}>
+                    <div className="mt-4 flex gap-1.5" style={{ height: 120 }}>
                       {barre.map((b, i) => {
-                        const h = Math.round((b.ore / maxOre) * 96)
+                        const h = Math.round((b.ore / maxOre) * 90)
                         const barH = Math.max(h, b.presente ? 4 : 2)
                         return (
-                          <div key={i} className="flex-1 flex flex-col items-center gap-1" style={{ height: 130 }}>
-                            <div className="w-full flex flex-col items-center justify-end" style={{ height: 108 }}>
+                          <div key={i} className="flex-1 flex flex-col items-center">
+                            {/* area barre: altezza fissa uguale per tutte le colonne */}
+                            <div className="w-full flex flex-col items-center justify-end" style={{ height: 96 }}>
                               {b.ore > 0 && (
                                 <span className="text-[9px] font-bold text-electric-blue leading-none mb-0.5">{b.ore}h</span>
                               )}
@@ -1076,8 +1077,11 @@ export default function AnalyticsPage() {
                                 style={{ height: `${barH}px` }}
                               />
                             </div>
-                            <span className="text-[10px] font-medium text-ink-navy/40 leading-none">{b.label}</span>
-                            <span className="text-[9px] text-ink-navy/25 leading-none">{b.sublabel ?? ''}</span>
+                            {/* area label: altezza fissa uguale per tutte le colonne */}
+                            <div className="flex flex-col items-center justify-start mt-1" style={{ height: 22 }}>
+                              <span className="text-[10px] font-medium text-ink-navy/40 leading-none">{b.label}</span>
+                              {b.sublabel && <span className="text-[9px] text-ink-navy/25 leading-none mt-0.5">{b.sublabel}</span>}
+                            </div>
                           </div>
                         )
                       })}
