@@ -101,6 +101,16 @@ export function IconBot({ className = base }: IconProps) {
   )
 }
 
+export function IconCash({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="20" height="13" rx="2" />
+      <circle cx="12" cy="12.5" r="2.5" />
+      <path d="M6 9.5v6M18 9.5v6" />
+    </svg>
+  )
+}
+
 export function IconReceipt({ className = base }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">

@@ -324,10 +324,14 @@ const VistaMappa = forwardRef<VistaMappHandle, {
 }>(function VistaMappa({ tavoli, gruppi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap }, ref) {
   const [editMode, setEditMode] = useState(false)
   const [hoveredTavoloId, setHoveredTavoloId] = useState<string | null>(null)
-  const [zoom, setZoom] = useState(1)
-  const zoomRef = useRef(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const panRef = useRef({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(() => {
+    try { return parseFloat(localStorage.getItem('mappa-zoom') ?? '1') || 1 } catch { return 1 }
+  })
+  const zoomRef = useRef(zoom)
+  const [pan, setPan] = useState<{ x: number; y: number }>(() => {
+    try { return JSON.parse(localStorage.getItem('mappa-pan') ?? 'null') ?? { x: 0, y: 0 } } catch { return { x: 0, y: 0 } }
+  })
+  const panRef = useRef(pan)
   const [mapData, setMapData] = useState<Record<string, MapData>>({})
   const mdRef = useRef<Record<string, MapData>>({})
   const [elementi, setElementi] = useState<Elemento[]>([])
@@ -351,7 +355,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     }).catch(() => {})
   }, [])
 
-  function setZoomSync(nz: number) { zoomRef.current = nz; setZoom(nz) }
+  function setZoomSync(nz: number) { zoomRef.current = nz; setZoom(nz); try { localStorage.setItem('mappa-zoom', String(nz)) } catch {} }
 
   function centroVisibile() {
     const cx = (340 - panRef.current.x) / zoomRef.current
@@ -373,7 +377,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     if ((e.target as HTMLElement).dataset.drag) return
     e.preventDefault()
     const sx = e.clientX, sy = e.clientY, ox = panRef.current.x, oy = panRef.current.y
-    function mv(ev: MouseEvent) { const np = { x: ox + (ev.clientX - sx), y: oy + (ev.clientY - sy) }; panRef.current = np; setPan({ ...np }) }
+    function mv(ev: MouseEvent) { const np = { x: ox + (ev.clientX - sx), y: oy + (ev.clientY - sy) }; panRef.current = np; setPan({ ...np }); try { localStorage.setItem('mappa-pan', JSON.stringify(np)) } catch {} }
     function up() { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
     window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
   }
@@ -651,6 +655,9 @@ export default function TavoliPage() {
 
   async function chiudiConto(o: Ordine) {
     setChiudendo(o.id)
+    // ottimistico: sposta subito
+    setOrdiniAperti(prev => prev.filter(x => x.id !== o.id))
+    setOrdiniChiusi(prev => [{ ...o, status: 'chiuso' }, ...prev])
     try {
       await fetch('/api/tavoli/chiudi-conto', {
         method: 'POST', credentials: 'include',
@@ -859,15 +866,10 @@ export default function TavoliPage() {
 
       {/* Tab switch */}
       <div className="flex gap-2">
-        {[{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }, { k: 'conto', l: 'Conto' }].map(t => (
-          <button key={t.k} onClick={() => { setVista(t.k as 'mappa' | 'lista' | 'conto'); if (t.k === 'conto') fetchOrdini() }}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'} relative`}>
+        {[{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }].map(t => (
+          <button key={t.k} onClick={() => setVista(t.k as 'mappa' | 'lista' | 'conto')}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
             {t.l}
-            {t.k === 'conto' && ordiniAperti.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-zest-lime text-ink-navy text-[10px] font-bold rounded-full flex items-center justify-center">
-                {ordiniAperti.length}
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -920,15 +922,6 @@ export default function TavoliPage() {
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
               onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />
-          </div>
-          <div className={vista !== 'conto' ? 'hidden' : ''}>
-            <VistaConto
-              ordiniAperti={ordiniAperti}
-              ordiniChiusi={ordiniChiusi}
-              onChiudi={chiudiConto}
-              chiudendo={chiudendo}
-              onRiapri={riapriConto}
-              onElimina={eliminaOrdine} />
           </div>
         </>
       )}
