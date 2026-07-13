@@ -19,6 +19,19 @@ export async function GET() {
     await prisma.tavolo.updateMany({ where: { userId: user.id, salaId: null }, data: { salaId: sala.id } })
     return NextResponse.json({ sale: [sala] })
   }
+  // Se ci sono sale ma alcuni tavoli non hanno salaId, assegnali alla prima sala
+  const firstSala = sale[0]
+  const orphans = await prisma.tavolo.count({ where: { userId: user.id, salaId: null } })
+  if (orphans > 0) {
+    await prisma.tavolo.updateMany({ where: { userId: user.id, salaId: null }, data: { salaId: firstSala.id } })
+    // Aggiorna il conteggio nella risposta
+    const saleConCount = await prisma.sala.findMany({
+      where: { userId: user.id },
+      orderBy: { ordine: 'asc' },
+      include: { _count: { select: { tavoli: true } } },
+    })
+    return NextResponse.json({ sale: saleConCount })
+  }
   return NextResponse.json({ sale })
 }
 

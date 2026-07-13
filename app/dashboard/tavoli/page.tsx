@@ -672,7 +672,11 @@ export default function TavoliPage() {
   useEffect(() => { turnoSelRef.current = turnoSel }, [turnoSel])
 
   const salaAttiva = sale.find(s => s.id === salaAttivaId) ?? null
-  const tavoliSala = salaAttivaId ? tavoli.filter(t => t.salaId === salaAttivaId) : tavoli
+  // Con più sale: filtra per sala attiva; include anche salaId=null nella prima sala (retrocompatibilità)
+  const primaSlalaId = sale[0]?.id ?? null
+  const tavoliSala = !salaAttivaId || sale.length <= 1
+    ? tavoli
+    : tavoli.filter(t => t.salaId === salaAttivaId || (salaAttivaId === primaSlalaId && t.salaId === null))
 
   async function fetchTavoli() {
     const res = await fetch('/api/tavoli', { credentials: 'include' })
@@ -733,8 +737,9 @@ export default function TavoliPage() {
   }
 
   useEffect(() => {
-    fetchTavoli()
-    fetchSale()
+    // fetchSale prima: può assegnare salaId ai tavoli sul DB (auto-assign).
+    // fetchTavoli dopo: così prende i salaId già aggiornati.
+    fetchSale().then(() => fetchTavoli())
     fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(d => {
       setPublicId(d.user?.publicId ?? null)
       try {
