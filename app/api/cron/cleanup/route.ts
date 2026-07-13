@@ -14,7 +14,6 @@ export async function GET(req: Request) {
   let leadCancellati = 0
   let convEliminate = 0
   let richiesteConcluse = 0
-  let ordiniEliminati = 0
 
   // 1a. Auto-conferma ordini e delivery non ancora gestiti manualmente
   //     (status non in stati finali) con data passata
@@ -80,23 +79,6 @@ export async function GET(req: Request) {
     richiesteConcluse += res.count
   }
 
-  // 1d. Elimina ordini/delivery già completati nei giorni precedenti (punto 5)
-  const inizioOggi = new Date(ora)
-  inizioOggi.setHours(0, 0, 0, 0)
-  const delRes = await prisma.appuntamento.deleteMany({
-    where: {
-      status: 'completato',
-      data: { lt: inizioOggi },
-      OR: [
-        { servizio: { contains: 'asporto',  mode: 'insensitive' } },
-        { servizio: { contains: 'ordine',   mode: 'insensitive' } },
-        { servizio: { contains: 'delivery', mode: 'insensitive' } },
-        { servizio: { contains: 'domicilio',mode: 'insensitive' } },
-      ],
-    },
-  })
-  ordiniEliminati = delRes.count
-
   // 2. Archivia lead con status 'chiuso' da più di 30 giorni
   const trentaGorniFa = new Date(ora.getTime() - 30 * 24 * 60 * 60 * 1000)
   const leadDaArchiviare = await prisma.lead.findMany({
@@ -142,7 +124,7 @@ export async function GET(req: Request) {
     ok: true,
     appuntamentiCompletati: appAggiornati,
     richiesteConcluse,
-    ordiniEliminati,
+
     leadArchiviati: leadCancellati,
     conversazioniEliminate: convEliminate,
     eseguitoAlle: ora.toISOString(),

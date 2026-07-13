@@ -91,7 +91,7 @@ export default function OrdiniPage() {
   const [savingBlocco, setSavingBlocco] = useState(false)
 
   async function fetchOrdini() {
-    const res = await fetch('/api/ordini', { credentials: 'include' })
+    const res = await fetch('/api/ordini?oggi=1', { credentials: 'include' })
     const data = await res.json().catch(() => ({}))
     setOrdini(data.ordini ?? [])
   }
