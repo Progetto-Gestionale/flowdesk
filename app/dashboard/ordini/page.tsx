@@ -21,6 +21,7 @@ interface Ordine {
   id: string
   tavolo: string
   tavoloId: string | null
+  gruppoId: string | null
   tipo: string
   clienteInfo: string | null
   status: string
@@ -276,9 +277,11 @@ export default function OrdiniPage() {
                           const cfg = STATUS_CONFIG[o.status] ?? STATUS_CONFIG.nuovo
                           const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
                           const tavoloAssegnato = tavoli.find(t => t.id === o.tavoloId)
-                          const labelTavolo = tavoloAssegnato
-                            ? (tavoloAssegnato.etichetta ?? `Tavolo ${tavoloAssegnato.numero}`)
-                            : `Tavolo ${o.tavolo}`
+                          const labelTavolo = o.gruppoId
+                            ? o.tavolo  // già "T2+T3" impostato al momento dell'ordine
+                            : tavoloAssegnato
+                              ? (tavoloAssegnato.etichetta ?? `Tavolo ${tavoloAssegnato.numero}`)
+                              : `Tavolo ${o.tavolo}`
                           return (
                             <div key={o.id} className={`relative bg-white rounded-2xl border shadow-sm overflow-hidden ${o.status === 'nuovo' ? 'border-amber-300 ring-2 ring-amber-200' : 'border-ink-navy/10'}`}>
                               <div className="flex items-center justify-between px-4 py-3 border-b border-ink-navy/8">

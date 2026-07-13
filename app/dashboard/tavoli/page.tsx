@@ -321,7 +321,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
   tavoloAppMap?: Map<string, AppuntamentoLight>
   tavoloCarryMap?: Map<string, { carryIn: boolean; carryOut: boolean }>
   tavoloAppsMap?: Map<string, (AppuntamentoLight & { carryIn: boolean; carryOut: boolean })[]>
-}>(function VistaMappa({ tavoli, gruppi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap }, ref) {
+  onTavoloClick?: (tavoloId: string, gruppoId: string | null, label: string) => void
+}>(function VistaMappa({ tavoli, gruppi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap, onTavoloClick }, ref) {
   const [editMode, setEditMode] = useState(false)
   const [hoveredTavoloId, setHoveredTavoloId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(() => {
@@ -565,7 +566,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                 )}
                 <div data-drag={editMode && !selectMode ? "1" : undefined}
                   onMouseDown={editMode && !selectMode ? e => startDragT(e, t.id) : selectMode ? e => { e.stopPropagation(); onToggleSelect(t.id) } : undefined}
-                  style={{ width: w, height: h, backgroundColor: colore, borderRadius: isC ? '50%' : 10, cursor: selectMode ? 'pointer' : editMode ? 'grab' : 'default', position: 'absolute', top: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: isSelected ? `0 0 0 3px #6366f1, 0 3px 12px rgba(0,0,0,0.15)` : '0 3px 12px rgba(0,0,0,0.15)', opacity: selectMode && !isSelected ? 0.75 : 1 }}>
+                  onClick={!editMode && !selectMode ? () => onTavoloClick?.(t.id, gruppo?.id ?? null, label) : undefined}
+                  style={{ width: w, height: h, backgroundColor: colore, borderRadius: isC ? '50%' : 10, cursor: selectMode ? 'pointer' : editMode ? 'grab' : 'pointer', position: 'absolute', top: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: isSelected ? `0 0 0 3px #6366f1, 0 3px 12px rgba(0,0,0,0.15)` : '0 3px 12px rgba(0,0,0,0.15)', opacity: selectMode && !isSelected ? 0.75 : 1 }}>
                   <span style={{ color: '#fff', fontWeight: 700, fontSize: Math.min(w, h) < 80 ? 10 : 13, textAlign: 'center', padding: '0 6px', lineHeight: 1.3, pointerEvents: 'none' }}>{label}</span>
                   <span style={{ color: '#fff', fontSize: Math.min(w, h) < 80 ? 10 : 12, fontWeight: 600, marginTop: 3, pointerEvents: 'none', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 20, padding: '1px 7px' }}>{t.posti}</span>
                 </div>
@@ -619,6 +621,12 @@ export default function TavoliPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [fondendo, setFondendo] = useState(false)
+
+  // Modal conto da mappa
+  const [contoModal, setContoModal] = useState<{ tavoloId: string; gruppoId: string | null; label: string } | null>(null)
+  const [contoModificaOrdine, setContoModificaOrdine] = useState<Ordine | null>(null)
+  const [contoRigheLocali, setContoRigheLocali] = useState<RigaOrdine[]>([])
+  const [contoSalvando, setContoSalvando] = useState(false)
 
   // Modal modifica
   const [conferma, setConferma] = useState<{ msg: string; onConfirm: () => void } | null>(null)
@@ -683,6 +691,52 @@ export default function TavoliPage() {
     await fetch(`/api/ordini/${o.id}`, { method: 'DELETE', credentials: 'include' })
     await fetchOrdini()
   }
+
+  function apriContoModifica(o: Ordine) {
+    setContoModificaOrdine(o)
+    setContoRigheLocali([...o.righe])
+  }
+
+  async function contoRimuoviRiga(rigaId: string) {
+    if (!contoModificaOrdine) return
+    setContoRigheLocali(prev => prev.filter(r => r.id !== rigaId))
+    setContoSalvando(true)
+    const res = await fetch(`/api/ordini/${contoModificaOrdine.id}/riga`, {
+      method: 'DELETE', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rigaId }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (data.ordine) {
+      setOrdiniAperti(prev => prev.map(x => x.id === contoModificaOrdine.id ? { ...x, totale: data.ordine.totale, righe: contoRigheLocali.filter(r => r.id !== rigaId) } : x))
+      setContoModificaOrdine(prev => prev ? { ...prev, totale: data.ordine.totale } : null)
+    }
+    setContoSalvando(false)
+    fetchOrdini()
+  }
+
+  async function contoCambiaQuantita(rigaId: string, delta: number) {
+    if (!contoModificaOrdine) return
+    const riga = contoRigheLocali.find(r => r.id === rigaId)
+    if (!riga) return
+    const nuova = riga.quantita + delta
+    if (nuova <= 0) { contoRimuoviRiga(rigaId); return }
+    setContoRigheLocali(prev => prev.map(r => r.id === rigaId ? { ...r, quantita: nuova } : r))
+    setContoSalvando(true)
+    const res = await fetch(`/api/ordini/${contoModificaOrdine.id}/riga`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rigaId, quantita: nuova }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (data.ordine) {
+      setOrdiniAperti(prev => prev.map(x => x.id === contoModificaOrdine.id ? { ...x, totale: data.ordine.totale } : x))
+      setContoModificaOrdine(prev => prev ? { ...prev, totale: data.ordine.totale } : null)
+    }
+    setContoSalvando(false)
+    fetchOrdini()
+  }
+
   const giornoSelRef = useRef(giornoSel)
   const turnoSelRef = useRef(turnoSel)
   useEffect(() => { giornoSelRef.current = giornoSel }, [giornoSel])
@@ -915,7 +969,8 @@ export default function TavoliPage() {
             <VistaMappa ref={mappaRef} tavoli={tavoli} gruppi={gruppi}
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
-              onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />
+              onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap}
+              onTavoloClick={(tid, gid, lbl) => setContoModal({ tavoloId: tid, gruppoId: gid, label: lbl })} />
           </div>
           <div className={vista !== 'lista' ? 'hidden' : ''}>
             <VistaLista tavoli={tavoli} gruppi={gruppi} publicId={publicId}
@@ -925,6 +980,87 @@ export default function TavoliPage() {
           </div>
         </>
       )}
+
+      {/* Modal CONTO da mappa */}
+      {contoModal && (() => {
+        const ordineAperto = ordiniAperti.find(o =>
+          contoModal.gruppoId ? o.gruppoId === contoModal.gruppoId : o.tavoloId === contoModal.tavoloId
+        )
+        const fmt = (n: number) => `€${n.toFixed(2)}`
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4" onClick={() => { setContoModal(null); setContoModificaOrdine(null) }}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-ink-navy/8 flex items-center justify-between">
+                <h3 className="text-base font-bold text-ink-navy">Conto — {contoModal.label}</h3>
+                <button onClick={() => { setContoModal(null); setContoModificaOrdine(null) }} className="text-ink-navy/30 hover:text-ink-navy/60 text-xl font-bold leading-none">✕</button>
+              </div>
+              {!ordineAperto ? (
+                <div className="px-5 py-8 text-center text-sm text-ink-navy/30">Nessun conto aperto per questo tavolo</div>
+              ) : contoModificaOrdine ? (
+                // Modalità modifica righe
+                <>
+                  <div className="px-5 py-3 bg-electric-blue/5 border-b border-ink-navy/8">
+                    <p className="text-xs text-ink-navy/50">Modifica righe — l'ordine resta aperto</p>
+                  </div>
+                  <div className="divide-y divide-ink-navy/6 max-h-72 overflow-y-auto">
+                    {contoRigheLocali.length === 0 && <p className="px-5 py-4 text-sm text-ink-navy/30 text-center">Ordine vuoto</p>}
+                    {contoRigheLocali.map(r => (
+                      <div key={r.id} className="flex items-center gap-3 px-5 py-3">
+                        <span className="flex-1 text-sm text-ink-navy truncate">{r.nome}</span>
+                        <span className="text-sm text-ink-navy/50 shrink-0">{fmt(r.prezzo * r.quantita)}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => contoCambiaQuantita(r.id, -1)} disabled={contoSalvando}
+                            className="w-6 h-6 rounded-full bg-ink-navy/8 hover:bg-ink-navy/15 text-ink-navy font-bold text-sm flex items-center justify-center disabled:opacity-40">−</button>
+                          <span className="w-5 text-center text-sm font-semibold text-ink-navy">{r.quantita}</span>
+                          <button onClick={() => contoCambiaQuantita(r.id, +1)} disabled={contoSalvando}
+                            className="w-6 h-6 rounded-full bg-ink-navy/8 hover:bg-ink-navy/15 text-ink-navy font-bold text-sm flex items-center justify-center disabled:opacity-40">+</button>
+                        </div>
+                        <button onClick={() => contoRimuoviRiga(r.id)} disabled={contoSalvando}
+                          className="text-red-400 hover:text-red-600 text-sm font-bold disabled:opacity-40 pl-1">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-5 py-3 border-t border-ink-navy/8 flex items-center justify-between">
+                    <span className="text-sm font-bold text-ink-navy">{fmt(contoRigheLocali.reduce((s, r) => s + r.prezzo * r.quantita, 0))}</span>
+                    <button onClick={() => setContoModificaOrdine(null)} className="text-xs text-electric-blue font-semibold hover:underline">← Torna al conto</button>
+                  </div>
+                </>
+              ) : (
+                // Vista conto normale
+                <>
+                  <div className="divide-y divide-ink-navy/6 max-h-72 overflow-y-auto">
+                    {ordineAperto.righe.map(r => (
+                      <div key={r.id} className="flex items-center justify-between px-5 py-2.5 gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-bold text-ink-navy/40 w-5 shrink-0 text-center">{r.quantita}×</span>
+                          <span className="text-sm text-ink-navy truncate">{r.nome}</span>
+                          {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+                        </div>
+                        <span className="text-sm text-ink-navy/60 shrink-0">{fmt(r.prezzo * r.quantita)}</span>
+                      </div>
+                    ))}
+                    {ordineAperto.righe.length === 0 && <p className="px-5 py-4 text-sm text-ink-navy/30 text-center">Nessuna voce</p>}
+                  </div>
+                  <div className="px-5 py-4 border-t border-ink-navy/8">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-base font-bold text-ink-navy">{fmt(ordineAperto.totale)}</span>
+                      <button onClick={() => apriContoModifica(ordineAperto)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors">
+                        Modifica righe
+                      </button>
+                    </div>
+                    <button onClick={() => { chiudiConto(ordineAperto); setContoModal(null) }}
+                      disabled={chiudendo === ordineAperto.id}
+                      className="w-full py-2.5 rounded-xl bg-ink-navy text-white text-sm font-semibold hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
+                      {chiudendo === ordineAperto.id ? '…' : 'Chiudi tavolo'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Modal CREA */}
       {showCrea && (
