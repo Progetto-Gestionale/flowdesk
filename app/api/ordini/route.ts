@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const giorni = parseInt(searchParams.get('giorni') ?? '30')
+  const giorni = parseInt(searchParams.get('giorni') ?? '90')
   const dal = new Date()
   dal.setDate(dal.getDate() - giorni)
 
