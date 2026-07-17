@@ -3,6 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+function oreLabel(ore: number): string {
+  const h = Math.floor(ore)
+  const m = Math.round((ore - h) * 60)
+  if (m === 0) return `${h}h`
+  if (h === 0) return `${m}min`
+  return `${h}h ${m}min`
+}
+
 function minToLabel(min: number): string {
   const abs = Math.abs(min)
   const h = Math.floor(abs / 60)
@@ -139,9 +147,9 @@ function scaricaPdf(
     ${righe.map(r => `<tr>
       <td>${r.dataFmt}</td>
       <td class="${r.ore === 0 ? 'zero' : ''}">${r.orari}</td>
-      <td class="ore ${r.ore === 0 ? 'zero' : ''}">${r.ore > 0 ? r.ore + 'h' : '—'}</td>
+      <td class="ore ${r.ore === 0 ? 'zero' : ''}">${r.ore > 0 ? oreLabel(r.ore) : '—'}</td>
     </tr>`).join('')}
-    <tr class="total-row"><td colspan="2">Totale ore</td><td class="ore">${totaleOre}h</td></tr>
+    <tr class="total-row"><td colspan="2">Totale ore</td><td class="ore">${oreLabel(totaleOre)}</td></tr>
   </tbody>
 </table>
 ${assenzaHtml}
@@ -705,6 +713,104 @@ export default function AnalyticsPage() {
     }
   }
 
+  function scaricaPdfTavoli() {
+    if (!datiTavoliAdv) return
+    const d = datiTavoliAdv
+    const righe = periodoAdv === 'mese'
+      ? raggruppaSettimane(d.andamento).map(w => `<tr>
+          <td>${w.label}</td>
+          <td class="num">${w.ordini || '—'}</td>
+          <td class="num">${w.coperti || '—'}</td>
+          <td class="num eur">${w.incasso > 0 ? '€' + w.incasso.toFixed(0) : '—'}</td>
+        </tr>`)
+      : [...d.andamento].filter(b => periodoAdv !== 'anno' || b.ordini > 0 || b.incasso > 0).reverse().map(b => {
+          const lbl = periodoAdv === 'anno'
+            ? new Date(b.data + '-01T12:00:00').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+            : new Date(b.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'long' })
+          return `<tr>
+            <td class="cap">${lbl}</td>
+            <td class="num">${b.ordini || '—'}</td>
+            <td class="num">${b.coperti || '—'}</td>
+            <td class="num eur">${b.incasso > 0 ? '€' + b.incasso.toFixed(0) : '—'}</td>
+          </tr>`
+        })
+    const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Analisi Tavoli – ${labelAdv}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:13px;color:#111;padding:32px}
+h1{font-size:22px;font-weight:700;margin-bottom:4px}.sub{color:#666;margin-bottom:24px}
+.kpi{display:flex;gap:16px;margin-bottom:24px}.kpi-box{background:#f8fafc;border-radius:8px;padding:12px 16px;min-width:120px}
+.kpi-box p{font-size:11px;color:#888;margin-bottom:4px}.kpi-box b{font-size:20px;color:#1e293b}
+table{width:100%;border-collapse:collapse}th{background:#4f46e5;color:#fff;text-align:left;padding:9px 12px;font-size:12px}
+th.num{text-align:right}td{padding:9px 12px;border-bottom:1px solid #e5e7eb}td.num{text-align:right}
+td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-child(even) td{background:#f9fafb}
+.total-row td{background:#eef2ff;font-weight:700;border-top:2px solid #4f46e5}
+@media print{body{padding:16px}@page{margin:1.5cm}}</style></head><body>
+<h1>Analisi Tavoli</h1><div class="sub">Periodo: ${labelAdv}</div>
+<div class="kpi">
+  <div class="kpi-box"><p>Incasso totale</p><b>€${d.totaleIncasso.toFixed(0)}</b></div>
+  <div class="kpi-box"><p>Conti chiusi</p><b>${d.totaleOrdini}</b></div>
+  <div class="kpi-box"><p>Coperti</p><b>${d.copertiConfermati}</b></div>
+  <div class="kpi-box"><p>Spesa media/persona</p><b>${d.spesaMediaPersona > 0 ? '€' + d.spesaMediaPersona.toFixed(2) : '—'}</b></div>
+  <div class="kpi-box"><p>Durata media</p><b>${d.durataMediaMinuti > 0 ? d.durataMediaMinuti + ' min' : '—'}</b></div>
+</div>
+<table><thead><tr><th>${periodoAdv === 'anno' ? 'Mese' : periodoAdv === 'mese' ? 'Settimana' : 'Data'}</th><th class="num">Conti</th><th class="num">Coperti</th><th class="num">Incasso</th></tr></thead>
+<tbody>${righe.join('')}
+<tr class="total-row"><td>Totale</td><td class="num">${d.totaleOrdini}</td><td class="num">${d.copertiConfermati}</td><td class="num eur">€${d.totaleIncasso.toFixed(0)}</td></tr>
+</tbody></table>
+<div style="margin-top:24px;font-size:11px;color:#aaa">Generato il ${new Date().toLocaleDateString('it-IT')}</div>
+</body></html>`
+    const win = window.open('', '_blank'); if (!win) return; win.document.write(html); win.document.close()
+  }
+
+  function scaricaPdfOrdini() {
+    if (!datiOrdiniAdv) return
+    const d = datiOrdiniAdv
+    const righe = periodoAdv === 'mese'
+      ? raggruppaSettimane(d.andamento).map(w => `<tr>
+          <td>${w.label}</td>
+          <td class="num">${w.asporto || '—'}</td>
+          <td class="num">${w.delivery || '—'}</td>
+          <td class="num">${w.ordini || '—'}</td>
+          <td class="num eur">${w.incasso > 0 ? '€' + w.incasso.toFixed(0) : '—'}</td>
+        </tr>`)
+      : [...d.andamento].filter(b => periodoAdv !== 'anno' || b.ordini > 0 || b.incasso > 0).reverse().map(b => {
+          const lbl = periodoAdv === 'anno'
+            ? new Date(b.data + '-01T12:00:00').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+            : new Date(b.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'long' })
+          return `<tr>
+            <td class="cap">${lbl}</td>
+            <td class="num">${b.asporto || '—'}</td>
+            <td class="num">${b.delivery || '—'}</td>
+            <td class="num">${b.ordini || '—'}</td>
+            <td class="num eur">${b.incasso > 0 ? '€' + b.incasso.toFixed(0) : '—'}</td>
+          </tr>`
+        })
+    const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Analisi Ordini – ${labelAdv}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:13px;color:#111;padding:32px}
+h1{font-size:22px;font-weight:700;margin-bottom:4px}.sub{color:#666;margin-bottom:24px}
+.kpi{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}.kpi-box{background:#f8fafc;border-radius:8px;padding:12px 16px;min-width:120px}
+.kpi-box p{font-size:11px;color:#888;margin-bottom:4px}.kpi-box b{font-size:20px;color:#1e293b}
+table{width:100%;border-collapse:collapse}th{background:#4f46e5;color:#fff;text-align:left;padding:9px 12px;font-size:12px}
+th.num{text-align:right}td{padding:9px 12px;border-bottom:1px solid #e5e7eb}td.num{text-align:right}
+td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-child(even) td{background:#f9fafb}
+.total-row td{background:#eef2ff;font-weight:700;border-top:2px solid #4f46e5}
+@media print{body{padding:16px}@page{margin:1.5cm}}</style></head><body>
+<h1>Analisi Ordini & Asporto</h1><div class="sub">Periodo: ${labelAdv}</div>
+<div class="kpi">
+  <div class="kpi-box"><p>Incasso totale</p><b>€${d.totaleIncasso.toFixed(0)}</b></div>
+  <div class="kpi-box"><p>Totale ordini</p><b>${d.totaleOrdini}</b></div>
+  <div class="kpi-box"><p>Asporto</p><b>${d.asportoCount}</b></div>
+  <div class="kpi-box"><p>Delivery</p><b>${d.deliveryCount}</b></div>
+  <div class="kpi-box"><p>Spesa media/ordine</p><b>${d.spesaMedia > 0 ? '€' + d.spesaMedia.toFixed(2) : '—'}</b></div>
+</div>
+<table><thead><tr><th>${periodoAdv === 'anno' ? 'Mese' : periodoAdv === 'mese' ? 'Settimana' : 'Data'}</th><th class="num">Asporto</th><th class="num">Delivery</th><th class="num">Totale</th><th class="num">Incasso</th></tr></thead>
+<tbody>${righe.join('')}
+<tr class="total-row"><td>Totale</td><td class="num">${d.asportoCount}</td><td class="num">${d.deliveryCount}</td><td class="num">${d.totaleOrdini}</td><td class="num eur">€${d.totaleIncasso.toFixed(0)}</td></tr>
+</tbody></table>
+<div style="margin-top:24px;font-size:11px;color:#aaa">Generato il ${new Date().toLocaleDateString('it-IT')}</div>
+</body></html>`
+    const win = window.open('', '_blank'); if (!win) return; win.document.write(html); win.document.close()
+  }
+
   // ── Dettaglio calcolato client-side ──────────────────────────────────────
   const perGiornoDettaglio = dettaglio
     ? (fonteDettaglio === 'cartellino' ? dettaglio.timbraturePerGiorno : dettaglio.turniPerGiorno)
@@ -814,7 +920,15 @@ export default function AnalyticsPage() {
       {/* ── TAVOLI ── */}
       {tabAnalytics === 'tavoli' && (
         <div className="space-y-6">
-          <SelectorPeriodoAdv />
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <SelectorPeriodoAdv />
+            {datiTavoliAdv && (
+              <button onClick={scaricaPdfTavoli}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-navy text-white text-xs font-semibold hover:bg-ink-navy/80 transition-colors">
+                ↓ Scarica PDF
+              </button>
+            )}
+          </div>
           {loadingTavoliAdv && !datiTavoliAdv && <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>}
           {datiTavoliAdv && (() => {
             const d = datiTavoliAdv
@@ -930,7 +1044,15 @@ export default function AnalyticsPage() {
       {/* ── ORDINI ── */}
       {tabAnalytics === 'ordini' && (
         <div className="space-y-6">
-          <SelectorPeriodoAdv />
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <SelectorPeriodoAdv />
+            {datiOrdiniAdv && (
+              <button onClick={scaricaPdfOrdini}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink-navy text-white text-xs font-semibold hover:bg-ink-navy/80 transition-colors">
+                ↓ Scarica PDF
+              </button>
+            )}
+          </div>
           {loadingOrdiniAdv && !datiOrdiniAdv && <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>}
           {datiOrdiniAdv && (() => {
             const d = datiOrdiniAdv
@@ -1279,7 +1401,7 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { val: dip.oreLavorate, label: 'ore' },
+                      { val: oreLabel(dip.oreLavorate), label: 'ore' },
                       { val: dip.giorniLavorati, label: 'giorni' },
                       { val: dip.ritardi.count, label: 'ritardi', red: dip.ritardi.count > 0 },
                     ].map(k => (
@@ -1437,8 +1559,8 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="bg-electric-blue/8 rounded-2xl p-4">
                       <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wide">Ore totali</p>
-                      <p className="text-3xl font-bold mt-1 text-electric-blue">{oreLavorateDettaglio}</p>
-                      <p className="text-xs text-ink-navy/35 mt-0.5">ore</p>
+                      <p className="text-3xl font-bold mt-1 text-electric-blue">{oreLabel(oreLavorateDettaglio)}</p>
+                      <p className="text-xs text-ink-navy/35 mt-0.5">totale</p>
                     </div>
                     <button onClick={() => dettaglio.usaTimbri && ritardiMin > 0 && setModalKpi('ritardi')}
                       className={`rounded-2xl p-4 text-left transition-colors ${ritardiMin > 0 ? 'bg-red-50 hover:bg-red-100 cursor-pointer' : 'bg-green-50 cursor-default'}`}>
@@ -1479,7 +1601,7 @@ export default function AnalyticsPage() {
                             {/* area barre: altezza fissa uguale per tutte le colonne */}
                             <div className="w-full flex flex-col items-center justify-end" style={{ height: 96 }}>
                               {b.ore > 0 && (
-                                <span className="text-[9px] font-bold text-electric-blue leading-none mb-0.5">{b.ore}h</span>
+                                <span className="text-[9px] font-bold text-electric-blue leading-none mb-0.5">{oreLabel(b.ore)}</span>
                               )}
                               <div
                                 className={`w-full rounded-t-md ${b.presente ? 'bg-electric-blue' : 'bg-ink-navy/8'}`}
@@ -1513,7 +1635,7 @@ export default function AnalyticsPage() {
                         <p className="mt-4 text-center py-6 text-ink-navy/25 text-sm">Nessun timbro nel periodo</p>
                       ) : (
                         <div className="mt-4 space-y-2">
-                          {ritardiConTimbro.slice(0, 7).map((r, i) => {
+                          {ritardiConTimbro.filter(r => r.ritardoMin > 5 || r.straordinarioMin > 5).slice(0, 7).map((r, i) => {
                             const isRit = r.ritardoMin > 5
                             const isStr = r.straordinarioMin > 5
                             const maxMin = Math.max(...ritardiConTimbro.map(x => Math.max(x.ritardoMin, x.straordinarioMin)), 1)
@@ -1536,7 +1658,7 @@ export default function AnalyticsPage() {
                               </div>
                             )
                           })}
-                          {ritardiConTimbro.length > 7 && <p className="text-[10px] text-center text-ink-navy/30">+{ritardiConTimbro.length - 7} altri giorni</p>}
+                          {ritardiConTimbro.filter(r => r.ritardoMin > 5 || r.straordinarioMin > 5).length > 7 && <p className="text-[10px] text-center text-ink-navy/30">+{ritardiConTimbro.filter(r => r.ritardoMin > 5 || r.straordinarioMin > 5).length - 7} altri giorni</p>}
                           <div className="flex justify-between pt-1 text-[10px] text-ink-navy/35 font-medium">
                             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-200 inline-block"/>Ritardo</span>
                             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-electric-blue/30 inline-block"/>Straordinario</span>
@@ -1598,7 +1720,7 @@ export default function AnalyticsPage() {
                       className="w-full flex items-center justify-between px-5 py-4 hover:bg-mist transition-colors">
                       <div className="text-left">
                         <p className="text-sm font-semibold text-ink-navy">Dettaglio turni</p>
-                        <p className="text-xs text-ink-navy/40 mt-0.5">{giorniLavoratiDettaglio} giorni · {oreLavorateDettaglio}h totali</p>
+                        <p className="text-xs text-ink-navy/40 mt-0.5">{giorniLavoratiDettaglio} giorni · {oreLabel(oreLavorateDettaglio)} totali</p>
                       </div>
                       <svg className="w-4 h-4 text-ink-navy/30 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
                     </button>
@@ -1713,15 +1835,17 @@ export default function AnalyticsPage() {
                           {/* Settimana: lista per giorno */}
                           {dettaglio.periodo === 'settimana' && (
                             <div className="divide-y divide-ink-navy/6">
-                              {ritardiConTimbro.map((r, i) => {
+                              {ritardiConTimbro.filter(r => {
                                 const val = modalKpi === 'ritardi' ? r.ritardoMin : r.straordinarioMin
-                                const hasVal = val > (modalKpi === 'ritardi' ? 2 : 5)
+                                return val > (modalKpi === 'ritardi' ? 2 : 5)
+                              }).map((r, i) => {
+                                const val = modalKpi === 'ritardi' ? r.ritardoMin : r.straordinarioMin
                                 return (
                                   <div key={i} className="px-5 py-4">
                                     <div className="flex items-center justify-between mb-2">
                                       <span className="text-sm font-semibold text-ink-navy">{fmtData(r.data)}</span>
-                                      <span className={`text-sm font-bold ${hasVal ? (modalKpi === 'ritardi' ? 'text-red-500' : 'text-electric-blue') : 'text-green-500'}`}>
-                                        {hasVal ? minToLabel(val) : '—'}
+                                      <span className={`text-sm font-bold ${modalKpi === 'ritardi' ? 'text-red-500' : 'text-electric-blue'}`}>
+                                        {minToLabel(val)}
                                       </span>
                                     </div>
                                     <div className="flex gap-4 text-xs text-ink-navy/50">
@@ -1731,7 +1855,9 @@ export default function AnalyticsPage() {
                                   </div>
                                 )
                               })}
-                              {ritardiConTimbro.length === 0 && <p className="px-5 py-8 text-sm text-ink-navy/30 text-center">Nessun dato</p>}
+                              {ritardiConTimbro.filter(r => (modalKpi === 'ritardi' ? r.ritardoMin : r.straordinarioMin) > (modalKpi === 'ritardi' ? 2 : 5)).length === 0 && (
+                                <p className="px-5 py-8 text-sm text-ink-navy/30 text-center">Nessun {modalKpi === 'ritardi' ? 'ritardo' : 'straordinario'} nel periodo</p>
+                              )}
                             </div>
                           )}
                           {/* Mese: barre giornaliere */}
