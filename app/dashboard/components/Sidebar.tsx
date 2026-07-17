@@ -31,9 +31,6 @@ const navFood = [
     items: [
       { label: 'Menu', href: '/dashboard/menu', Icon: IconFork },
       { label: 'Analytics', href: '/dashboard/analytics', Icon: IconChartBar },
-      { label: 'Analytics Tavoli', href: '/dashboard/analytics/tavoli', Icon: IconChartBar },
-      { label: 'Analytics Ordini', href: '/dashboard/analytics/ordini', Icon: IconChartBar },
-      { label: 'Analytics Menu', href: '/dashboard/analytics/menu', Icon: IconChartBar },
       { label: 'Staff', href: '/dashboard/staff', Icon: IconUsers },
       { label: 'QR Timbratura', href: '/dashboard/timbrature', Icon: IconClock },
     ],

@@ -216,7 +216,7 @@ interface DettaglioDip {
 interface Preventivo { id: string; tipo: string | null; totale: number; status: string; createdAt: string }
 
 type Periodo = 'settimana' | 'mese' | 'anno'
-type TabAnalytics = 'servizi' | 'tavoli' | 'ordini' | 'personale'
+type TabAnalytics = 'servizi' | 'tavoli' | 'ordini' | 'menu' | 'personale'
 type ExpandedCard = 'giorni' | 'ore' | 'ferie' | 'malattie' | 'permessi' | 'preferenze' | 'ritardi' | 'straordinari' | null
 
 // ── MiniCalendario ────────────────────────────────────────────────────────────
@@ -335,6 +335,31 @@ export default function AnalyticsPage() {
   const [fonteStaff, setFonteStaff] = useState<'turni' | 'cartellino'>('turni')
   const [preventivi, setPreventivi] = useState<Preventivo[]>([])
   const [loadingOrdini, setLoadingOrdini] = useState(false)
+
+  // ── nuove analytics avanzate ──
+  type PeriodoAdv = 'settimana' | 'mese' | 'anno'
+  const [periodoAdv, setPeriodoAdv] = useState<PeriodoAdv>('settimana')
+
+  interface BucketAdv { data: string; incasso: number; ordini: number; coperti: number; asporto: number; delivery: number }
+  interface DatiTavoliAdv {
+    totaleIncasso: number; totaleOrdini: number; copertiConfermati: number
+    spesaMediaPersona: number; tassoNoShow: number; durataMediaMinuti: number
+    andamento: BucketAdv[]
+  }
+  interface DatiOrdiniAdv {
+    totaleIncasso: number; totaleOrdini: number; asportoCount: number; deliveryCount: number
+    spesaMedia: number; tassoNonConsegnati: number
+    andamento: BucketAdv[]; fasceOrarie: { ora: string; count: number }[]
+  }
+  interface PiattoAdv { id: string; nome: string; quantita: number; incasso: number }
+  interface DatiMenuAdv { top10: PiattoAdv[]; bottom10: PiattoAdv[]; totale: number }
+
+  const [datiTavoliAdv, setDatiTavoliAdv] = useState<DatiTavoliAdv | null>(null)
+  const [loadingTavoliAdv, setLoadingTavoliAdv] = useState(false)
+  const [datiOrdiniAdv, setDatiOrdiniAdv] = useState<DatiOrdiniAdv | null>(null)
+  const [loadingOrdiniAdv, setLoadingOrdiniAdv] = useState(false)
+  const [datiMenuAdv, setDatiMenuAdv] = useState<DatiMenuAdv | null>(null)
+  const [loadingMenuAdv, setLoadingMenuAdv] = useState(false)
 
   // Dettaglio dipendente
   const [dettaglioDipId, setDettaglioDipId] = useState<string | null>(null)
@@ -459,6 +484,30 @@ export default function AnalyticsPage() {
       .then(d => { setPreventivi(d.preventivi ?? []); setLoadingOrdini(false) })
   }, [tabAnalytics])
 
+  useEffect(() => {
+    if (tabAnalytics !== 'tavoli') return
+    setLoadingTavoliAdv(true)
+    fetch(`/api/analytics/tavoli?periodo=${periodoAdv}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setDatiTavoliAdv(d); setLoadingTavoliAdv(false) })
+  }, [tabAnalytics, periodoAdv])
+
+  useEffect(() => {
+    if (tabAnalytics !== 'ordini') return
+    setLoadingOrdiniAdv(true)
+    fetch(`/api/analytics/ordini?periodo=${periodoAdv}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setDatiOrdiniAdv(d); setLoadingOrdiniAdv(false) })
+  }, [tabAnalytics, periodoAdv])
+
+  useEffect(() => {
+    if (tabAnalytics !== 'menu') return
+    setLoadingMenuAdv(true)
+    fetch(`/api/analytics/menu?periodo=${periodoAdv}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setDatiMenuAdv(d); setLoadingMenuAdv(false) })
+  }, [tabAnalytics, periodoAdv])
+
   function cambiaMe(mese: string) {
     setMeseSel(mese)
     setLoadingStaff(true)
@@ -492,8 +541,31 @@ export default function AnalyticsPage() {
     { key: 'servizi', label: 'Servizi' },
     { key: 'tavoli', label: 'Tavoli' },
     { key: 'ordini', label: 'Ordini & Asporto' },
+    { key: 'menu', label: 'Menu' },
     { key: 'personale', label: 'Personale' },
   ]
+
+  function fmtEur(n: number) {
+    return '€' + n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
+  function fmtDataAdv(s: string) {
+    if (periodoAdv === 'anno') return new Date(s + 'T12:00:00').toLocaleDateString('it-IT', { month: 'short' })
+    return new Date(s + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
+  }
+  const periodoAdvLabel = periodoAdv === 'settimana' ? 'questa settimana' : periodoAdv === 'mese' ? 'questo mese' : 'ultimi 12 mesi'
+
+  function SelectorPeriodoAdv() {
+    return (
+      <div className="flex rounded-xl border border-ink-navy/10 bg-white overflow-hidden shadow-sm text-sm font-medium w-fit">
+        {(['settimana', 'mese', 'anno'] as const).map(p => (
+          <button key={p} onClick={() => setPeriodoAdv(p)}
+            className={`px-4 py-2 capitalize transition-colors ${periodoAdv === p ? 'bg-electric-blue text-white' : 'text-ink-navy/50 hover:bg-mist'}`}>
+            {p.charAt(0).toUpperCase() + p.slice(1)}
+          </button>
+        ))}
+      </div>
+    )
+  }
 
   // ── Dettaglio calcolato client-side ──────────────────────────────────────
   const perGiornoDettaglio = dettaglio
@@ -707,118 +779,311 @@ export default function AnalyticsPage() {
       {/* ── TAVOLI ── */}
       {tabAnalytics === 'tavoli' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Revenue totale</p>
-              <p className="text-3xl font-bold text-emerald-600 mt-1">€{data.perMese.reduce((s, m) => s + m.revenue, 0).toLocaleString('it-IT')}</p>
-              <p className="text-xs text-ink-navy/35 mt-1">ultimi 12 mesi</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-              <p className="text-xs text-ink-navy/50 uppercase tracking-wide">Prenotazioni tavoli</p>
-              <p className="text-3xl font-bold text-ink-navy mt-1">{data.totaleApp}</p>
-              <p className="text-xs text-ink-navy/35 mt-1">nel periodo selezionato</p>
-            </div>
-          </div>
-
-          {maxRevenue > 0 ? (
-            <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-ink-navy mb-4">Revenue tavoli per periodo</h2>
-              <div className="flex items-end gap-3 h-40">
-                {data.perMese.map(m => {
-                  const h = Math.round((m.revenue / maxRevenue) * 130)
-                  return (
-                    <div key={m.mese} className="flex-1 flex flex-col items-center gap-1">
-                      {m.revenue > 0 && <span className="text-xs text-ink-navy/50 font-medium">€{m.revenue.toLocaleString('it-IT')}</span>}
-                      <div className="w-full flex flex-col justify-end" style={{ height: '130px' }}>
-                        <div className="w-full bg-emerald-500 rounded-t-lg" style={{ height: `${Math.max(h, m.revenue > 0 ? 4 : 0)}px` }} />
-                      </div>
-                      <span className="text-xs text-ink-navy/35">{bucketLabel(m.mese)}</span>
+          <SelectorPeriodoAdv />
+          {loadingTavoliAdv && !datiTavoliAdv && <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>}
+          {datiTavoliAdv && (() => {
+            const d = datiTavoliAdv
+            const maxInc = Math.max(...d.andamento.map(b => b.incasso), 1)
+            const maxCop = Math.max(...d.andamento.map(b => b.coperti), 1)
+            return (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                  {[
+                    { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600' },
+                    { label: 'Tavoli serviti', val: String(d.totaleOrdini), sub: 'conti chiusi', color: 'text-ink-navy' },
+                    { label: 'Coperti', val: String(d.copertiConfermati), sub: 'da prenotazioni', color: 'text-ink-navy' },
+                    { label: 'Spesa media/persona', val: fmtEur(d.spesaMediaPersona), sub: 'incasso ÷ coperti', color: 'text-electric-blue' },
+                    { label: 'Tasso no-show', val: d.tassoNoShow.toFixed(1) + '%', sub: 'prenotazioni non arrivate', color: d.tassoNoShow > 15 ? 'text-red-500' : d.tassoNoShow > 8 ? 'text-amber-500' : 'text-green-500' },
+                    { label: 'Durata media tavolo', val: d.durataMediaMinuti > 0 ? d.durataMediaMinuti + ' min' : '—', sub: "dall'ordine alla chiusura", color: 'text-electric-blue' },
+                  ].map(k => (
+                    <div key={k.label} className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+                      <p className="text-xs text-ink-navy/50 uppercase tracking-wide">{k.label}</p>
+                      <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.val}</p>
+                      <p className="text-xs text-ink-navy/35 mt-1">{k.sub}</p>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
-              <p className="text-ink-navy/35 text-sm">Nessun dato revenue disponibile</p>
-            </div>
-          )}
-
-          <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-ink-navy/8"><h2 className="text-base font-semibold text-ink-navy">Dettaglio revenue mensile</h2></div>
-            <table className="w-full text-sm">
-              <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
-                <tr><th className="text-left px-6 py-3">Periodo</th><th className="text-right px-4 py-3">Prenotazioni</th><th className="text-right px-6 py-3">Revenue</th></tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {[...data.perMese].reverse().map(m => (
-                  <tr key={m.mese} className="hover:bg-mist">
-                    <td className="px-6 py-3 font-medium text-ink-navy">{bucketFull(m.mese)}</td>
-                    <td className="text-right px-4 py-3 text-ink-navy/70">{m.totale}</td>
-                    <td className="text-right px-6 py-3 text-emerald-600 font-medium">{m.revenue > 0 ? `€${m.revenue.toLocaleString('it-IT')}` : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </div>
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento incasso</h2>
+                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                    <div className="flex items-end gap-1.5" style={{ height: 140 }}>
+                      {d.andamento.map(b => {
+                        const h = Math.round((b.incasso / maxInc) * 120)
+                        return (
+                          <div key={b.data} className="flex-1 flex flex-col items-center gap-1">
+                            {b.incasso > 0 && <span className="text-[10px] text-ink-navy/50 font-medium leading-none">{fmtEur(b.incasso)}</span>}
+                            <div className="w-full flex flex-col justify-end" style={{ height: '120px' }}>
+                              <div className="w-full bg-emerald-500 rounded-t-lg" style={{ height: `${Math.max(h, b.incasso > 0 ? 4 : 0)}px` }} />
+                            </div>
+                            <span className="text-[10px] text-ink-navy/35 leading-none">{fmtDataAdv(b.data)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento coperti</h2>
+                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                    <div className="flex items-end gap-1.5" style={{ height: 140 }}>
+                      {d.andamento.map(b => {
+                        const h = Math.round((b.coperti / maxCop) * 120)
+                        return (
+                          <div key={b.data} className="flex-1 flex flex-col items-center gap-1">
+                            {b.coperti > 0 && <span className="text-[10px] text-ink-navy/50 font-medium leading-none">{b.coperti}</span>}
+                            <div className="w-full flex flex-col justify-end" style={{ height: '120px' }}>
+                              <div className="w-full bg-electric-blue rounded-t-lg" style={{ height: `${Math.max(h, b.coperti > 0 ? 4 : 0)}px` }} />
+                            </div>
+                            <span className="text-[10px] text-ink-navy/35 leading-none">{fmtDataAdv(b.data)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-ink-navy/8"><h2 className="text-base font-semibold text-ink-navy">Dettaglio giornaliero</h2></div>
+                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm px-6 py-8 text-center">Nessun dato</p> : (
+                    <table className="w-full text-sm">
+                      <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
+                        <tr>
+                          <th className="text-left px-6 py-3">Data</th>
+                          <th className="text-right px-4 py-3">Conti chiusi</th>
+                          <th className="text-right px-4 py-3">Coperti</th>
+                          <th className="text-right px-6 py-3">Incasso</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {[...d.andamento].reverse().map(b => (
+                          <tr key={b.data} className="hover:bg-mist">
+                            <td className="px-6 py-3 font-medium text-ink-navy">{new Date(b.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'long' })}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{b.ordini || '—'}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{b.coperti || '—'}</td>
+                            <td className="text-right px-6 py-3 text-emerald-600 font-medium">{b.incasso > 0 ? fmtEur(b.incasso) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
 
       {/* ── ORDINI ── */}
       {tabAnalytics === 'ordini' && (
         <div className="space-y-6">
-          {loadingOrdini ? (
-            <div className="text-center text-ink-navy/35 py-12">Caricamento...</div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: 'Ordini asporto', val: ordiniList.length, sub: 'totale ordini', color: 'text-ink-navy' },
-                  { label: 'Revenue asporto', val: `€${totOrdini.toLocaleString('it-IT')}`, sub: 'valore totale', color: 'text-emerald-600' },
-                  { label: 'Delivery', val: deliveryList.length, sub: 'totale delivery', color: 'text-ink-navy' },
-                  { label: 'Revenue delivery', val: `€${totDelivery.toLocaleString('it-IT')}`, sub: 'valore totale', color: 'text-emerald-600' },
-                ].map(k => (
-                  <div key={k.label} className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-                    <p className="text-xs text-ink-navy/50 uppercase tracking-wide">{k.label}</p>
-                    <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.val}</p>
-                    <p className="text-xs text-ink-navy/35 mt-1">{k.sub}</p>
-                  </div>
-                ))}
-              </div>
-              {preventivi.filter(p => p.tipo === 'ordine' || p.tipo === 'delivery').length === 0 ? (
-                <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
-                  <p className="text-ink-navy/35 text-sm">Nessun ordine o delivery ancora</p>
+          <SelectorPeriodoAdv />
+          {loadingOrdiniAdv && !datiOrdiniAdv && <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>}
+          {datiOrdiniAdv && (() => {
+            const d = datiOrdiniAdv
+            const maxInc = Math.max(...d.andamento.map(b => b.incasso), 1)
+            const maxOrd = Math.max(...d.andamento.map(b => b.ordini), 1)
+            const maxFascia = Math.max(...d.fasceOrarie.map(f => f.count), 1)
+            return (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                  {[
+                    { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600' },
+                    { label: 'Totale ordini', val: String(d.totaleOrdini), sub: 'asporto + delivery', color: 'text-ink-navy' },
+                    { label: 'Asporto', val: String(d.asportoCount), sub: 'ordini da ritirare', color: 'text-electric-blue' },
+                    { label: 'Delivery', val: String(d.deliveryCount), sub: 'ordini a domicilio', color: 'text-electric-blue' },
+                    { label: 'Spesa media/ordine', val: fmtEur(d.spesaMedia), sub: 'incasso ÷ ordini', color: 'text-electric-blue' },
+                    { label: 'Non consegnati', val: d.tassoNonConsegnati.toFixed(1) + '%', sub: 'annullati o non ritirati', color: d.tassoNonConsegnati > 10 ? 'text-red-500' : d.tassoNonConsegnati > 5 ? 'text-amber-500' : 'text-green-500' },
+                  ].map(k => (
+                    <div key={k.label} className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
+                      <p className="text-xs text-ink-navy/50 uppercase tracking-wide">{k.label}</p>
+                      <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.val}</p>
+                      <p className="text-xs text-ink-navy/35 mt-1">{k.sub}</p>
+                    </div>
+                  ))}
                 </div>
-              ) : (
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento incasso</h2>
+                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                    <div className="flex items-end gap-1.5" style={{ height: 140 }}>
+                      {d.andamento.map(b => {
+                        const h = Math.round((b.incasso / maxInc) * 120)
+                        return (
+                          <div key={b.data} className="flex-1 flex flex-col items-center gap-1">
+                            {b.incasso > 0 && <span className="text-[10px] text-ink-navy/50 font-medium leading-none">{fmtEur(b.incasso)}</span>}
+                            <div className="w-full flex flex-col justify-end" style={{ height: '120px' }}>
+                              <div className="w-full bg-emerald-500 rounded-t-lg" style={{ height: `${Math.max(h, b.incasso > 0 ? 4 : 0)}px` }} />
+                            </div>
+                            <span className="text-[10px] text-ink-navy/35 leading-none">{fmtDataAdv(b.data)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                    <h2 className="text-base font-semibold text-ink-navy mb-4">Asporto vs Delivery</h2>
+                    {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                      <>
+                        <div className="flex items-end gap-1.5" style={{ height: 120 }}>
+                          {d.andamento.map(b => {
+                            const hA = Math.round((b.asporto / maxOrd) * 100)
+                            const hD = Math.round((b.delivery / maxOrd) * 100)
+                            return (
+                              <div key={b.data} className="flex-1 flex flex-col items-center gap-1">
+                                <div className="w-full flex flex-col justify-end gap-0.5" style={{ height: '100px' }}>
+                                  <div className="w-full bg-purple-400 rounded-t-sm" style={{ height: `${Math.max(hD, b.delivery > 0 ? 3 : 0)}px` }} />
+                                  <div className="w-full bg-electric-blue" style={{ height: `${Math.max(hA, b.asporto > 0 ? 3 : 0)}px` }} />
+                                </div>
+                                <span className="text-[10px] text-ink-navy/35 leading-none">{fmtDataAdv(b.data)}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="flex gap-4 mt-3 text-xs text-ink-navy/50">
+                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-electric-blue inline-block" /> Asporto</span>
+                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-purple-400 inline-block" /> Delivery</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                    <h2 className="text-base font-semibold text-ink-navy mb-4">Fasce orarie più richieste</h2>
+                    {d.fasceOrarie.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                      <div className="flex items-end gap-1" style={{ height: 120 }}>
+                        {d.fasceOrarie.map(f => {
+                          const h = Math.round((f.count / maxFascia) * 100)
+                          return (
+                            <div key={f.ora} className="flex-1 flex flex-col items-center gap-1">
+                              {f.count > 0 && <span className="text-[10px] text-ink-navy/50 leading-none">{f.count}</span>}
+                              <div className="w-full flex flex-col justify-end" style={{ height: '100px' }}>
+                                <div className="w-full bg-amber-400 rounded-t-sm" style={{ height: `${Math.max(h, f.count > 0 ? 3 : 0)}px` }} />
+                              </div>
+                              <span className="text-[10px] text-ink-navy/35 leading-none">{f.ora.slice(0, 5)}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 border-b border-ink-navy/8"><h2 className="text-base font-semibold text-ink-navy">Ultimi ordini</h2></div>
+                  <div className="px-6 py-4 border-b border-ink-navy/8"><h2 className="text-base font-semibold text-ink-navy">Dettaglio giornaliero</h2></div>
+                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm px-6 py-8 text-center">Nessun dato</p> : (
+                    <table className="w-full text-sm">
+                      <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
+                        <tr>
+                          <th className="text-left px-6 py-3">Data</th>
+                          <th className="text-right px-4 py-3">Asporto</th>
+                          <th className="text-right px-4 py-3">Delivery</th>
+                          <th className="text-right px-4 py-3">Totale</th>
+                          <th className="text-right px-6 py-3">Incasso</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {[...d.andamento].reverse().map(b => (
+                          <tr key={b.data} className="hover:bg-mist">
+                            <td className="px-6 py-3 font-medium text-ink-navy">{new Date(b.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'long' })}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{b.asporto || '—'}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{b.delivery || '—'}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{b.ordini || '—'}</td>
+                            <td className="text-right px-6 py-3 text-emerald-600 font-medium">{b.incasso > 0 ? fmtEur(b.incasso) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* ── MENU ── */}
+      {tabAnalytics === 'menu' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <SelectorPeriodoAdv />
+            {datiMenuAdv && <p className="text-xs text-ink-navy/40">{datiMenuAdv.totale} piatti ordinati nel periodo</p>}
+          </div>
+          {loadingMenuAdv && !datiMenuAdv && <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>}
+          {datiMenuAdv && datiMenuAdv.top10.length === 0 && (
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-12 text-center shadow-sm">
+              <p className="text-ink-navy/35 text-sm">Nessun ordine nel periodo selezionato</p>
+            </div>
+          )}
+          {datiMenuAdv && datiMenuAdv.top10.length > 0 && (() => {
+            const d = datiMenuAdv
+            const maxTop = Math.max(...d.top10.map(p => p.quantita), 1)
+            const maxBot = Math.max(...d.bottom10.map(p => p.quantita), 1)
+            return (
+              <>
+                <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                  <h2 className="text-base font-semibold text-ink-navy mb-5">Piatti più richiesti</h2>
+                  <div className="space-y-3">
+                    {d.top10.map((p, i) => (
+                      <div key={p.id} className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-ink-navy/30 w-5 text-right shrink-0">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium text-ink-navy truncate">{p.nome}</span>
+                            <span className="text-xs text-ink-navy/50 ml-2 shrink-0">{p.quantita} pz · {fmtEur(p.incasso)}</span>
+                          </div>
+                          <div className="h-2 bg-mist rounded-full overflow-hidden">
+                            <div className="h-full bg-electric-blue rounded-full" style={{ width: `${Math.round((p.quantita / maxTop) * 100)}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {d.bottom10.length > 0 && d.totale > 1 && (
+                  <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                    <h2 className="text-base font-semibold text-ink-navy mb-5">Piatti meno richiesti</h2>
+                    <div className="space-y-3">
+                      {d.bottom10.map((p, i) => (
+                        <div key={p.id} className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-ink-navy/30 w-5 text-right shrink-0">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-ink-navy truncate">{p.nome}</span>
+                              <span className="text-xs text-ink-navy/50 ml-2 shrink-0">{p.quantita} pz · {fmtEur(p.incasso)}</span>
+                            </div>
+                            <div className="h-2 bg-mist rounded-full overflow-hidden">
+                              <div className="h-full bg-red-400 rounded-full" style={{ width: `${Math.max(Math.round((p.quantita / maxBot) * 100), 4)}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-ink-navy/8"><h2 className="text-base font-semibold text-ink-navy">Classifica completa</h2></div>
                   <table className="w-full text-sm">
                     <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
-                      <tr><th className="text-left px-6 py-3">Data</th><th className="text-left px-4 py-3">Tipo</th><th className="text-right px-4 py-3">Status</th><th className="text-right px-6 py-3">Totale</th></tr>
+                      <tr>
+                        <th className="text-left px-6 py-3">#</th>
+                        <th className="text-left px-4 py-3">Piatto</th>
+                        <th className="text-right px-4 py-3">Pezzi</th>
+                        <th className="text-right px-6 py-3">Incasso</th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {preventivi.filter(p => p.tipo === 'ordine' || p.tipo === 'delivery').slice(0, 30).map(p => (
+                      {d.top10.map((p, i) => (
                         <tr key={p.id} className="hover:bg-mist">
-                          <td className="px-6 py-3 text-ink-navy/70">{new Date(p.createdAt).toLocaleDateString('it-IT')}</td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.tipo === 'delivery' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                              {p.tipo === 'delivery' ? 'Delivery' : 'Asporto'}
-                            </span>
-                          </td>
-                          <td className="text-right px-4 py-3">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.status === 'confermato' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-600'}`}>
-                              {p.status === 'da_verificare' ? 'Da verificare' : p.status === 'confermato' ? 'Confermato' : p.status}
-                            </span>
-                          </td>
-                          <td className="text-right px-6 py-3 text-emerald-600 font-medium">€{p.totale.toLocaleString('it-IT')}</td>
+                          <td className="px-6 py-3 text-ink-navy/40 font-semibold">{i + 1}</td>
+                          <td className="px-4 py-3 font-medium text-ink-navy">{p.nome}</td>
+                          <td className="text-right px-4 py-3 text-ink-navy/70">{p.quantita}</td>
+                          <td className="text-right px-6 py-3 text-emerald-600 font-medium">{fmtEur(p.incasso)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </>
-          )}
+              </>
+            )
+          })()}
         </div>
       )}
 
