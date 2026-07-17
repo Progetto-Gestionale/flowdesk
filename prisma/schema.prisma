@@ -96,6 +96,7 @@ model Ordine {
   clienteInfo String?       // JSON: {nome, email, telefono, indirizzo, data, ora}
   status      String        @default("nuovo")
   totale      Float
+  coperti     Int?
   note        String?
   createdAt   DateTime      @default(now())
   closedAt    DateTime?

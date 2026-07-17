@@ -567,6 +567,25 @@ export default function AnalyticsPage() {
     { key: 'personale', label: 'Personale' },
   ]
 
+  function raggruppaSettimane(andamento: { data: string; incasso: number; ordini: number; coperti: number; asporto: number; delivery: number }[]) {
+    const weeks: { label: string; incasso: number; ordini: number; coperti: number; asporto: number; delivery: number }[] = []
+    const size = 7
+    for (let i = 0; i < andamento.length; i += size) {
+      const slice = andamento.slice(i, i + size)
+      const from = new Date(slice[0].data + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
+      const to = new Date(slice[slice.length - 1].data + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
+      weeks.push({
+        label: `${from} – ${to}`,
+        incasso: slice.reduce((s, b) => s + b.incasso, 0),
+        ordini: slice.reduce((s, b) => s + b.ordini, 0),
+        coperti: slice.reduce((s, b) => s + b.coperti, 0),
+        asporto: slice.reduce((s, b) => s + b.asporto, 0),
+        delivery: slice.reduce((s, b) => s + b.delivery, 0),
+      })
+    }
+    return weeks.reverse()
+  }
+
   function fmtEur(n: number) {
     return '€' + n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
@@ -861,20 +880,29 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
                   <div className="px-6 py-4 border-b border-ink-navy/8">
-                    <h2 className="text-base font-semibold text-ink-navy">{periodoAdv === 'anno' ? 'Dettaglio mensile' : 'Dettaglio giornaliero'}</h2>
+                    <h2 className="text-base font-semibold text-ink-navy">
+                      {periodoAdv === 'anno' ? 'Dettaglio mensile' : periodoAdv === 'mese' ? 'Riepilogo settimanale' : 'Dettaglio giornaliero'}
+                    </h2>
                   </div>
                   {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm px-6 py-8 text-center">Nessun dato</p> : (
                     <table className="w-full text-sm">
                       <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
                         <tr>
-                          <th className="text-left px-6 py-3">{periodoAdv === 'anno' ? 'Mese' : 'Data'}</th>
+                          <th className="text-left px-6 py-3">{periodoAdv === 'anno' ? 'Mese' : periodoAdv === 'mese' ? 'Settimana' : 'Data'}</th>
                           <th className="text-right px-4 py-3">Conti chiusi</th>
                           <th className="text-right px-4 py-3">Coperti</th>
                           <th className="text-right px-6 py-3">Incasso</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {[...d.andamento]
+                        {periodoAdv === 'mese' ? raggruppaSettimane(d.andamento).map(w => (
+                          <tr key={w.label} className="hover:bg-mist">
+                            <td className="px-6 py-3 font-medium text-ink-navy">{w.label}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{w.ordini || '—'}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{w.coperti || '—'}</td>
+                            <td className="text-right px-6 py-3 text-emerald-600 font-medium">{w.incasso > 0 ? fmtEur(w.incasso) : '—'}</td>
+                          </tr>
+                        )) : [...d.andamento]
                           .filter(b => periodoAdv !== 'anno' || b.ordini > 0 || b.incasso > 0 || b.coperti > 0)
                           .reverse().map(b => {
                           const dataLabel = periodoAdv === 'anno'
@@ -1009,13 +1037,15 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
                   <div className="px-6 py-4 border-b border-ink-navy/8">
-                    <h2 className="text-base font-semibold text-ink-navy">{periodoAdv === 'anno' ? 'Dettaglio mensile' : 'Dettaglio giornaliero'}</h2>
+                    <h2 className="text-base font-semibold text-ink-navy">
+                      {periodoAdv === 'anno' ? 'Dettaglio mensile' : periodoAdv === 'mese' ? 'Riepilogo settimanale' : 'Dettaglio giornaliero'}
+                    </h2>
                   </div>
                   {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm px-6 py-8 text-center">Nessun dato</p> : (
                     <table className="w-full text-sm">
                       <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
                         <tr>
-                          <th className="text-left px-6 py-3">{periodoAdv === 'anno' ? 'Mese' : 'Data'}</th>
+                          <th className="text-left px-6 py-3">{periodoAdv === 'anno' ? 'Mese' : periodoAdv === 'mese' ? 'Settimana' : 'Data'}</th>
                           <th className="text-right px-4 py-3">Asporto</th>
                           <th className="text-right px-4 py-3">Delivery</th>
                           <th className="text-right px-4 py-3">Totale</th>
@@ -1023,7 +1053,15 @@ export default function AnalyticsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {[...d.andamento]
+                        {periodoAdv === 'mese' ? raggruppaSettimane(d.andamento).map(w => (
+                          <tr key={w.label} className="hover:bg-mist">
+                            <td className="px-6 py-3 font-medium text-ink-navy">{w.label}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{w.asporto || '—'}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{w.delivery || '—'}</td>
+                            <td className="text-right px-4 py-3 text-ink-navy/70">{w.ordini || '—'}</td>
+                            <td className="text-right px-6 py-3 text-emerald-600 font-medium">{w.incasso > 0 ? fmtEur(w.incasso) : '—'}</td>
+                          </tr>
+                        )) : [...d.andamento]
                           .filter(b => periodoAdv !== 'anno' || b.ordini > 0 || b.incasso > 0)
                           .reverse().map(b => {
                           const dataLabel = periodoAdv === 'anno'

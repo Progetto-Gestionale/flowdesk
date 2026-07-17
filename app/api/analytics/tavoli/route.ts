@@ -81,15 +81,7 @@ export async function GET(req: Request) {
       status: 'chiuso',
       createdAt: { gte: from, lt: toEffettivo },
     },
-    select: { id: true, totale: true, createdAt: true, closedAt: true },
-  })
-
-  const appuntamenti = await prisma.appuntamento.findMany({
-    where: {
-      userId: user.id,
-      data: { gte: from, lt: toEffettivo },
-    },
-    select: { status: true, coperti: true, data: true },
+    select: { id: true, totale: true, coperti: true, createdAt: true, closedAt: true },
   })
 
   for (const o of ordini) {
@@ -97,12 +89,8 @@ export async function GET(req: Request) {
     if (bucketMap[k]) {
       bucketMap[k].incasso += o.totale
       bucketMap[k].ordini += 1
+      bucketMap[k].coperti += o.coperti ?? 0
     }
-  }
-  for (const a of appuntamenti) {
-    if (a.status === 'cancellato' || a.status === 'no_show') continue
-    const k = bucketKey(a.data, byMonth)
-    if (bucketMap[k]) bucketMap[k].coperti += a.coperti
   }
 
   const andamento = Object.entries(bucketMap)
@@ -110,11 +98,7 @@ export async function GET(req: Request) {
     .map(([data, v]) => ({ data, ...v }))
 
   const totaleIncasso = ordini.reduce((s, o) => s + o.totale, 0)
-  const copertiConfermati = appuntamenti
-    .filter(a => a.status !== 'cancellato' && a.status !== 'no_show')
-    .reduce((s, a) => s + a.coperti, 0)
-  const noShow = appuntamenti.filter(a => a.status === 'no_show').length
-  const tassoNoShow = appuntamenti.length > 0 ? (noShow / appuntamenti.length) * 100 : 0
+  const copertiConfermati = ordini.reduce((s, o) => s + (o.coperti ?? 0), 0)
   const spesaMediaPersona = copertiConfermati > 0 ? totaleIncasso / copertiConfermati : 0
   const ordiniConDurata = ordini.filter(o => o.closedAt != null)
   const durataMedia = ordiniConDurata.length > 0
@@ -126,7 +110,7 @@ export async function GET(req: Request) {
     totaleOrdini: ordini.length,
     copertiConfermati,
     spesaMediaPersona,
-    tassoNoShow,
+    tassoNoShow: 0,
     durataMediaMinuti: Math.round(durataMedia),
     andamento,
   })

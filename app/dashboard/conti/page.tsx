@@ -192,6 +192,8 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
 export default function ContiPage() {
   const [tutti, setTutti] = useState<Ordine[]>([])
   const [chiudendo, setChiudendo] = useState<string | null>(null)
+  const [copertiModal, setCopertiModal] = useState<Ordine | null>(null)
+  const [copertiValue, setCopertiValue] = useState(2)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'tavoli' | 'ordini'>('tavoli')
@@ -230,14 +232,15 @@ export default function ContiPage() {
     if (modificando?.id === updated.id) setModificando(updated)
   }
 
-  async function chiudiConto(o: Ordine) {
+  async function chiudiConto(o: Ordine, coperti: number) {
+    setCopertiModal(null)
     setChiudendo(o.id)
     setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'chiuso' } : x))
     try {
       await fetch('/api/tavoli/chiudi-conto', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tavoloId: o.tavoloId, gruppoId: o.gruppoId }),
+        body: JSON.stringify({ tavoloId: o.tavoloId, gruppoId: o.gruppoId, coperti }),
       })
     } finally {
       setChiudendo(null)
@@ -269,7 +272,7 @@ export default function ContiPage() {
               Modifica
             </button>
             {aperto && (
-              <button onClick={() => chiudiConto(o)} disabled={chiudendo === o.id}
+              <button onClick={() => { setCopertiModal(o); setCopertiValue(2) }} disabled={chiudendo === o.id}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
                 {chiudendo === o.id ? '…' : 'Chiudi tavolo'}
               </button>
@@ -402,6 +405,32 @@ export default function ContiPage() {
 
       {modificando && (
         <ModificaModal ordine={modificando} onClose={() => setModificando(null)} onOrdineUpdated={aggiorna} />
+      )}
+
+      {copertiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-navy/30 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-xs mx-4">
+            <h3 className="text-base font-bold text-ink-navy mb-1">Chiudi {copertiModal.tavolo}</h3>
+            <p className="text-sm text-ink-navy/50 mb-5">Quanti coperti al tavolo?</p>
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <button onClick={() => setCopertiValue(v => Math.max(1, v - 1))}
+                className="w-10 h-10 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-xl font-bold hover:bg-mist transition-colors flex items-center justify-center">−</button>
+              <span className="text-4xl font-bold text-ink-navy w-12 text-center">{copertiValue}</span>
+              <button onClick={() => setCopertiValue(v => v + 1)}
+                className="w-10 h-10 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-xl font-bold hover:bg-mist transition-colors flex items-center justify-center">+</button>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setCopertiModal(null)}
+                className="flex-1 py-2.5 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-sm font-semibold hover:bg-mist transition-colors">
+                Annulla
+              </button>
+              <button onClick={() => chiudiConto(copertiModal, copertiValue)}
+                className="flex-1 py-2.5 bg-ink-navy text-white rounded-xl text-sm font-semibold hover:bg-ink-navy/80 transition-colors">
+                Conferma
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

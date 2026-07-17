@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
-  const { tavoloId, gruppoId } = await req.json()
+  const { tavoloId, gruppoId, coperti } = await req.json()
   if (!tavoloId && !gruppoId) return NextResponse.json({ error: 'tavoloId o gruppoId richiesti' }, { status: 400 })
 
   // Chiude tutti i conti aperti per questo tavolo/gruppo
@@ -15,7 +15,8 @@ export async function POST(req: Request) {
     ? { userId: user.id, gruppoId, status: { notIn: ['chiuso'] } }
     : { userId: user.id, tavoloId, gruppoId: null, status: { notIn: ['chiuso'] } }
 
-  await prisma.ordine.updateMany({ where, data: { status: 'chiuso', closedAt: new Date() } })
+  const copertiVal = typeof coperti === 'number' && coperti > 0 ? coperti : null
+  await prisma.ordine.updateMany({ where, data: { status: 'chiuso', closedAt: new Date(), ...(copertiVal ? { coperti: copertiVal } : {}) } })
 
   // Marca come "confermato" SOLO l'appuntamento della serata corrente il cui orario è già passato.
   // Filtro temporale: data >= inizio serata (04:00 UTC di oggi o ieri) e data <= adesso.
