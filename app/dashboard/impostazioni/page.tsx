@@ -27,11 +27,9 @@ const SEZIONI = [
   { id: 'generale', label: 'Locale', Icon: IconHome },
   { id: 'orari', label: 'Orari', Icon: IconClock },
   { id: 'turni', label: 'Turni', Icon: IconRefresh },
-  { id: 'servizi', label: 'Servizi', Icon: IconSettings },
   { id: 'prenotazioni', label: 'Prenotazioni', Icon: IconCalendar },
   { id: 'menu', label: 'Menu & Offerta', Icon: IconFork },
   { id: 'pagamenti', label: 'Pagamenti', Icon: IconCard },
-  { id: 'faq', label: 'FAQ', Icon: IconHelp },
   { id: 'bot', label: 'Bot', Icon: IconBot },
   { id: 'account', label: 'Account', Icon: IconUser },
 ]
@@ -187,6 +185,169 @@ function MenuStrumenti({ publicId }: { publicId: string }) {
         <button onClick={() => copia('embed', embedCode!)}
           className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
           {copiato === 'embed' ? '✓ Copiato' : 'Copia codice'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Strumenti prenotazioni ────────────────────────────────────────────────────
+function PrenotazioniStrumenti({ publicId }: { publicId: string }) {
+  const [copiato, setCopiato] = useState<string | null>(null)
+
+  function copia(key: string, value: string) {
+    navigator.clipboard.writeText(value).catch(() => {})
+    setCopiato(key)
+    setTimeout(() => setCopiato(null), 2000)
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const prenotaUrl = `${origin}/prenota/${publicId}`
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(prenotaUrl)}&size=400x400`
+  const buttonCode = `<a href="${prenotaUrl}" target="_blank" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#fff;border-radius:8px;text-decoration:none;font-family:sans-serif;font-weight:600">Prenota ora</a>`
+  const iframeCode = `<iframe src="${prenotaUrl}" width="100%" height="700" frameborder="0" style="border-radius:12px"></iframe>`
+
+  return (
+    <div className="space-y-4 mb-4">
+      <h3 className="font-semibold text-ink-navy text-sm">Strumenti prenotazioni & ordini</h3>
+
+      {/* Link */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">Link prenotazioni</p>
+        <p className="text-xs text-ink-navy/50">Pagina pubblica con form prenotazione tavolo + menu asporto/delivery. Condividilo su WhatsApp, Instagram bio, Google My Business.</p>
+        <div className="flex gap-2">
+          <input readOnly value={prenotaUrl}
+            className="flex-1 bg-mist border border-ink-navy/10 rounded-xl px-3 py-2 text-xs text-ink-navy/70 font-mono" />
+          <button onClick={() => copia('link', prenotaUrl)}
+            className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 shrink-0">
+            {copiato === 'link' ? '✓' : 'Copia'}
+          </button>
+        </div>
+        <a href={prenotaUrl} target="_blank" rel="noopener noreferrer"
+          className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
+      </div>
+
+      {/* QR */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">QR Code prenotazioni</p>
+        <p className="text-xs text-ink-navy/50">Stampalo e posizionalo all&apos;entrata, sul menu cartaceo o in vetrina.</p>
+        <div className="flex gap-6 items-start">
+          <img src={qrUrl} alt="QR prenotazioni" className="w-36 h-36 rounded-xl border border-ink-navy/10 shrink-0" />
+          <div className="space-y-2 flex-1">
+            <a href={qrUrl} download="prenota-qr.png" target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
+              ↓ Scarica PNG
+            </a>
+            <button onClick={() => copia('qr', qrUrl)}
+              className="w-full px-4 py-2 rounded-xl border border-ink-navy/15 text-ink-navy/70 text-sm font-medium hover:bg-mist">
+              {copiato === 'qr' ? '✓ Copiato URL' : 'Copia URL QR'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Pulsante per sito */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">Pulsante &ldquo;Prenota ora&rdquo; per il sito</p>
+        <p className="text-xs text-ink-navy/50">Incolla questo codice HTML nel tuo sito web per aggiungere un pulsante di prenotazione.</p>
+        <div className="bg-mist rounded-xl p-3 font-mono text-xs text-ink-navy/70 break-all">{buttonCode}</div>
+        <div className="flex gap-2">
+          <button onClick={() => copia('btn', buttonCode)}
+            className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
+            {copiato === 'btn' ? '✓ Copiato' : 'Copia codice'}
+          </button>
+          <a href={prenotaUrl} target="_blank" rel="noopener noreferrer"
+            className="px-4 py-2 rounded-xl border border-ink-navy/15 text-ink-navy/70 text-sm font-medium hover:bg-mist">
+            Anteprima →
+          </a>
+        </div>
+      </div>
+
+      {/* iframe embed */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">Incorpora pagina intera nel sito</p>
+        <p className="text-xs text-ink-navy/50">La pagina di prenotazione comparirà direttamente all&apos;interno del tuo sito.</p>
+        <div className="bg-mist rounded-xl p-3 font-mono text-xs text-ink-navy/70 break-all">{iframeCode}</div>
+        <button onClick={() => copia('iframe', iframeCode)}
+          className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
+          {copiato === 'iframe' ? '✓ Copiato' : 'Copia codice'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── PDF menu strumenti ────────────────────────────────────────────────────────
+function MenuPdfStrumenti() {
+  const [generando, setGenerando] = useState<string | null>(null)
+
+  async function scaricaPdf(tipo: 'locale' | 'asporto') {
+    setGenerando(tipo)
+    try {
+      const res = await fetch(`/api/menu/categorie?tipo=${tipo}`, { credentials: 'include' })
+      const data = await res.json()
+      const categorie: { nome: string; piatti: { nome: string; descrizione: string | null; prezzo: number; disponibile: boolean }[] }[] = data.categorie ?? []
+      const tipoLabel = tipo === 'locale' ? 'Menu Tavoli' : 'Menu Asporto & Delivery'
+
+      const righe = categorie.map(cat => `
+        <div class="categoria">
+          <div class="cat-header">${cat.nome}</div>
+          ${cat.piatti.filter(p => p.disponibile).map(p => `
+            <div class="piatto">
+              <div class="piatto-info">
+                <span class="piatto-nome">${p.nome}</span>
+                ${p.descrizione ? `<span class="piatto-desc">${p.descrizione}</span>` : ''}
+              </div>
+              <span class="piatto-prezzo">€${p.prezzo.toFixed(2)}</span>
+            </div>
+          `).join('')}
+        </div>
+      `).join('')
+
+      const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
+        <title>${tipoLabel}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0 }
+          body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1f36; background: #fff; padding: 40px; max-width: 700px; margin: 0 auto }
+          h1 { font-size: 26px; font-weight: 800; color: #1a1f36; margin-bottom: 4px }
+          .subtitle { font-size: 12px; color: #888; margin-bottom: 32px }
+          .categoria { margin-bottom: 28px }
+          .cat-header { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 6px; margin-bottom: 12px }
+          .piatto { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f0f0 }
+          .piatto-info { flex: 1 }
+          .piatto-nome { font-size: 14px; font-weight: 600; display: block }
+          .piatto-desc { font-size: 12px; color: #777; display: block; margin-top: 2px }
+          .piatto-prezzo { font-size: 14px; font-weight: 700; color: #4f46e5; white-space: nowrap }
+          @media print { body { padding: 20px } }
+        </style>
+      </head><body>
+        <h1>${tipoLabel}</h1>
+        <p class="subtitle">Generato il ${new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+        ${righe || '<p style="color:#999;font-size:14px">Nessun piatto disponibile</p>'}
+        <script>window.onload = () => { window.print() }<\/script>
+      </body></html>`
+
+      const w = window.open('', '_blank')
+      if (w) { w.document.write(html); w.document.close() }
+    } finally {
+      setGenerando(null)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4 mb-4">
+      <div>
+        <p className="font-semibold text-ink-navy text-sm">Scarica PDF menu</p>
+        <p className="text-xs text-ink-navy/50 mt-1">Genera un PDF stampabile con tutti i piatti disponibili.</p>
+      </div>
+      <div className="flex gap-3 flex-wrap">
+        <button onClick={() => scaricaPdf('locale')} disabled={generando === 'locale'}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ink-navy text-white text-sm font-semibold hover:bg-ink-navy/80 disabled:opacity-50 transition-colors">
+          {generando === 'locale' ? 'Generazione...' : '↓ PDF Menu Tavoli'}
+        </button>
+        <button onClick={() => scaricaPdf('asporto')} disabled={generando === 'asporto'}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 disabled:opacity-50 transition-colors">
+          {generando === 'asporto' ? 'Generazione...' : '↓ PDF Menu Asporto & Delivery'}
         </button>
       </div>
     </div>
@@ -435,46 +596,10 @@ export default function Impostazioni() {
             </Section>
           )}
 
-          {sezioneAttiva === 'servizi' && (
-            <Section title="Servizi disponibili" subtitle="Attiva solo i servizi che offri. Il bot saprà cosa proporre e cosa escludere."
-              onSave={() => saveSezione('servizi', { serviziOfferti: JSON.stringify(servizi) })}
-              status={st('servizi')}>
-              <div className="grid grid-cols-2 gap-3">
-                {SERVIZI_LISTA.map(s => (
-                  <button key={s.id} onClick={() => { setServizi(prev => ({ ...prev, [s.id]: !prev[s.id] })); dirty('servizi') }}
-                    className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${servizi[s.id] ? 'border-electric-blue bg-electric-blue/10' : 'border-ink-navy/10 bg-white hover:border-ink-navy/15'}`}>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${servizi[s.id] ? 'bg-electric-blue' : 'bg-ink-navy/15'}`} />
-                    <div>
-                      <p className={`text-sm font-semibold ${servizi[s.id] ? 'text-electric-blue' : 'text-ink-navy/70'}`}>{s.label}</p>
-                      <p className={`text-xs ${servizi[s.id] ? 'text-electric-blue' : 'text-ink-navy/35'}`}>{servizi[s.id] ? 'Attivo' : 'Non disponibile'}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </Section>
-          )}
 
           {sezioneAttiva === 'prenotazioni' && (
             <>
-            {publicId && (
-              <div className="bg-white border border-electric-blue/25 rounded-2xl p-5 space-y-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <span>🔗</span>
-                  <p className="font-semibold text-ink-navy text-sm">Link prenotazioni & ordini</p>
-                </div>
-                <p className="text-xs text-ink-navy/50">Pagina pubblica con form prenotazione tavolo + menu asporto/delivery. Mandalo su WhatsApp o mettilo in bio.</p>
-                <div className="flex gap-2">
-                  <input readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/prenota/${publicId}`}
-                    className="flex-1 bg-mist border border-ink-navy/10 rounded-xl px-3 py-2 text-xs text-ink-navy/70 font-mono" />
-                  <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/prenota/${publicId}`)}
-                    className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 shrink-0">
-                    Copia
-                  </button>
-                </div>
-                <a href={`/prenota/${publicId}`} target="_blank" rel="noopener noreferrer"
-                  className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
-              </div>
-            )}
+            {publicId && <PrenotazioniStrumenti publicId={publicId} />}
             <Section title="Prenotazione tavoli" subtitle="Regole per la pagina pubblica di prenotazione e per il bot."
               onSave={() => saveSezione('prenotazioni', { regolePrenotazione: JSON.stringify(regole) })}
               status={st('prenotazioni')}>
@@ -566,7 +691,7 @@ export default function Impostazioni() {
 
           {sezioneAttiva === 'menu' && (
             <>
-              <MenuStrumenti publicId={publicId} />
+              <MenuPdfStrumenti />
 
               {/* Aspetto menu */}
               <div className="bg-white border border-ink-navy/10 rounded-xl p-5 space-y-4">
@@ -647,31 +772,6 @@ export default function Impostazioni() {
             </Section>
           )}
 
-          {sezioneAttiva === 'faq' && (
-            <Section title="Domande frequenti" subtitle="Aggiungi le domande che i clienti ti fanno più spesso. Il bot risponderà automaticamente."
-              onSave={() => saveSezione('faq', { faq: JSON.stringify(faq) })}
-              status={st('faq')}>
-              <div className="space-y-3">
-                {faq.map((f, i) => (
-                  <div key={i} className="bg-mist border border-ink-navy/10 rounded-xl p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider">Domanda {i + 1}</span>
-                      <button onClick={() => { setFaq(prev => prev.filter((_, j) => j !== i)); dirty('faq') }}
-                        className="text-xs text-red-400 hover:text-red-600">Rimuovi</button>
-                    </div>
-                    <input type="text" value={f.domanda} onChange={e => { setFaq(prev => prev.map((x, j) => j === i ? { ...x, domanda: e.target.value } : x)); dirty('faq') }}
-                      placeholder="Es. Avete il menu per celiaci?" className={cls} />
-                    <textarea value={f.risposta} onChange={e => { setFaq(prev => prev.map((x, j) => j === i ? { ...x, risposta: e.target.value } : x)); dirty('faq') }}
-                      rows={2} placeholder="Es. Sì, abbiamo pasta e pizza senza glutine disponibili su richiesta." className={`${cls} resize-none`} />
-                  </div>
-                ))}
-                <button onClick={() => { setFaq(prev => [...prev, { domanda: '', risposta: '' }]); dirty('faq') }}
-                  className="w-full text-sm text-electric-blue font-semibold border-2 border-dashed border-electric-blue/25 rounded-xl py-3 hover:bg-electric-blue/10 transition-colors">
-                  + Aggiungi domanda
-                </button>
-              </div>
-            </Section>
-          )}
 
           {sezioneAttiva === 'bot' && (<>
             {/* Stato chatbot */}
