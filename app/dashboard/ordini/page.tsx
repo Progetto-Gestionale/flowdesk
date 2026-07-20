@@ -41,10 +41,11 @@ interface AppuntamentoOrdine {
   allergie?: string
 }
 
-function inferTipoOrdine(servizio?: string): 'delivery' | 'asporto' {
+function inferTipoOrdine(servizio?: string): 'delivery' | 'asporto' | null {
   const s = (servizio ?? '').toLowerCase()
   if (/delivery|consegna|domicilio/.test(s)) return 'delivery'
-  return 'asporto'
+  if (/asporto|take away|takeaway|ordine/.test(s)) return 'asporto'
+  return null // prenotazioni tavolo (e altri servizi) non sono ordini → escluse
 }
 
 function getServiceWindow(): { start: Date; end: Date } {

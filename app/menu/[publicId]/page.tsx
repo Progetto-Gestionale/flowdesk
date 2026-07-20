@@ -166,7 +166,15 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
 
   function oraInFasce(ora: string, fasce: { inizio: string; fine: string }[]): boolean {
     if (fasce.length === 0) return true
-    return fasce.some(f => ora >= f.inizio && ora <= f.fine)
+    const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+    const o = toMin(ora)
+    return fasce.some(f => {
+      const start = toMin(f.inizio)
+      let end = toMin(f.fine)
+      if (end === 0) end = 24 * 60 // "00:00" indica la mezzanotte di fine giornata
+      if (end >= start) return o >= start && o <= end // fascia normale
+      return o >= start || o <= end // fascia che scavalca la mezzanotte (es. 18:00–02:00)
+    })
   }
 
   function minOraPerData(dataStr: string): string {
@@ -578,6 +586,11 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
       {/* Bottone invio */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg">
         <div className="max-w-lg mx-auto">
+          {dati.tipo !== 'delivery' && errIndirizzo && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 font-medium mb-2">
+              {errIndirizzo}
+            </div>
+          )}
           <button onClick={inviaOrdine} disabled={inviando || !checkoutValido}
             className="w-full py-3.5 rounded-2xl text-white font-bold text-base disabled:opacity-50 transition-opacity"
             style={{ backgroundColor: coloreP }}>

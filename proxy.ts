@@ -12,6 +12,7 @@ const isPublic = createRouteMatcher([
   '/chat/(.*)',
   '/api/chat(.*)',
   '/api/public/(.*)',
+  '/menu(.*)',
   '/ordina(.*)',
   '/api/ordina(.*)',
   '/prenota(.*)',
