@@ -122,11 +122,15 @@ export default function OrdiniPage() {
     return () => clearInterval(interval)
   }, [])
 
-  async function segnaConsegnato(id: string) {
-    await fetch(`/api/ordini/${id}`, {
+  // La cucina segna l'ordine come "pronto".
+  // Per i delivery lo stato diventa 'pronto' (poi il fattorino lo segnerà 'consegnato'
+  // dalla pagina Delivery o dall'area dipendenti); per asporto/tavolo resta 'consegnato'.
+  async function avanzaOrdine(o: Ordine) {
+    const nuovoStatus = o.tipo === 'delivery' ? 'pronto' : 'consegnato'
+    await fetch(`/api/ordini/${o.id}`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'consegnato' }),
+      body: JSON.stringify({ status: nuovoStatus }),
     })
     fetchOrdini()
   }
@@ -170,7 +174,10 @@ export default function OrdiniPage() {
     return d >= serviceStart && d < serviceEnd
   })
 
-  const isDoneOrdine = (o: Ordine) => ['consegnato', 'chiuso'].includes(o.status)
+  // Per la cucina un delivery è "concluso" già quando è pronto (la consegna la gestisce il fattorino)
+  const isDoneOrdine = (o: Ordine) => o.tipo === 'delivery'
+    ? ['pronto', 'consegnato', 'chiuso'].includes(o.status)
+    : ['consegnato', 'chiuso'].includes(o.status)
   const isDoneApp = (a: AppuntamentoOrdine) => a.status === 'completato'
 
   const ordiniAttivi = ordini.filter(o => !isDoneOrdine(o))
@@ -232,9 +239,9 @@ export default function OrdiniPage() {
           <div className="flex items-center gap-2 flex-wrap mt-2">
             <span className={`text-sm font-semibold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
             {!isDone && (
-              <button onClick={() => segnaConsegnato(o.id)}
+              <button onClick={() => avanzaOrdine(o)}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
-                Pronto
+                {o.tipo === 'delivery' ? 'Segna pronto' : 'Pronto'}
               </button>
             )}
             {isDone && (

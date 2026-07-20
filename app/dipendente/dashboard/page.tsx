@@ -48,7 +48,10 @@ interface GiornoDisponibile {
   note: string
 }
 
-type Sezione = 'home' | 'timbra' | 'turni' | 'disponibilita' | 'richieste' | 'account'
+type Sezione = 'home' | 'timbra' | 'delivery' | 'turni' | 'disponibilita' | 'richieste' | 'account'
+
+interface DeliveryRiga { id: string; nome: string; quantita: number }
+interface DeliveryOrdine { id: string; clienteInfo: string | null; totale: number; createdAt: string; righe: DeliveryRiga[] }
 
 const TIPO_LABEL: Record<string, string> = {
   assenza: 'Assenza', malattia: 'Malattia', permesso: 'Permesso',
@@ -71,6 +74,7 @@ const inp = 'w-full border border-ink-navy/15 rounded-xl px-3 py-2.5 text-sm tex
 
 const NAV_ITEMS: { key: Sezione; label: string; emoji: string; desc: string; color: string }[] = [
   { key: 'timbra',       label: 'Timbra',        emoji: '📷', desc: 'Registra entrata o uscita', color: 'bg-electric-blue' },
+  { key: 'delivery',     label: 'Delivery',      emoji: '🛵', desc: 'Ordini da consegnare',      color: 'bg-teal-500' },
   { key: 'turni',        label: 'I miei turni',  emoji: '📅', desc: 'Vedi i turni assegnati',    color: 'bg-violet-500' },
   { key: 'disponibilita',label: 'Disponibilità', emoji: '✅', desc: 'Indica quando sei libero',  color: 'bg-emerald-500' },
   { key: 'richieste',    label: 'Richieste',     emoji: '📋', desc: 'Ferie, permessi, assenze',  color: 'bg-amber-500' },
@@ -90,6 +94,9 @@ export default function DipendenteDashboard() {
   const [scanError, setScanError] = useState<string | null>(null)
   const scannerRef = useRef<HTMLDivElement>(null)
   const html5QrRef = useRef<unknown>(null)
+
+  // Delivery
+  const [deliveryOrdini, setDeliveryOrdini] = useState<DeliveryOrdine[]>([])
 
   // Password
   const [nuovaPassword, setNuovaPassword] = useState('')
@@ -143,6 +150,21 @@ export default function DipendenteDashboard() {
     if (res.ok) { const d = await res.json(); setTimbratureOggi(d.timbrature ?? []) }
   }
 
+  async function fetchDelivery() {
+    const res = await fetch('/api/dipendente/delivery', { credentials: 'include' })
+    if (res.ok) { const d = await res.json(); setDeliveryOrdini(d.ordini ?? []) }
+  }
+
+  async function segnaConsegnato(id: string) {
+    setDeliveryOrdini(prev => prev.filter(o => o.id !== id))
+    await fetch('/api/dipendente/delivery', {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    fetchDelivery()
+  }
+
   async function fermaScanner() {
     if (html5QrRef.current) {
       const s = html5QrRef.current as { stop: () => Promise<void> }
@@ -184,9 +206,15 @@ export default function DipendenteDashboard() {
     return () => { mounted = false; fermaScanner() }
   }, [scanning])
 
-  useEffect(() => { fetchProfilo() }, [])
+  useEffect(() => { fetchProfilo(); fetchDelivery() }, [])
   useEffect(() => { if (sezione === 'disponibilita') fetchDisponibilita() }, [sezione, meseDisp])
   useEffect(() => { if (sezione === 'timbra') fetchTimbrature() }, [sezione])
+  useEffect(() => {
+    if (sezione !== 'delivery') return
+    fetchDelivery()
+    const iv = setInterval(fetchDelivery, 15000)
+    return () => clearInterval(iv)
+  }, [sezione])
 
   async function handleLogout() {
     await fetch('/api/dipendente/logout', { method: 'POST', credentials: 'include' })
@@ -366,6 +394,24 @@ export default function DipendenteDashboard() {
               <span className="text-ink-navy/20 shrink-0">›</span>
             </button>
 
+            {/* Consegne delivery */}
+            <button onClick={() => setSezione('delivery')}
+              className="w-full bg-white rounded-xl border border-ink-navy/10 shadow-sm p-4 flex items-center gap-4 active:bg-mist transition-colors">
+              <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
+                <span className="text-xl">🛵</span>
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <p className="font-semibold text-ink-navy text-sm">Consegne delivery</p>
+                <p className="text-xs text-ink-navy/40 mt-0.5">
+                  {deliveryOrdini.length > 0 ? `${deliveryOrdini.length} ordini da consegnare` : 'Nessun ordine da consegnare'}
+                </p>
+              </div>
+              {deliveryOrdini.length > 0 && (
+                <span className="bg-teal-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shrink-0">{deliveryOrdini.length}</span>
+              )}
+              <span className="text-ink-navy/20 shrink-0">›</span>
+            </button>
+
             {/* Prossimi turni */}
             {turniProssimi.length > 0 && (
               <button onClick={() => setSezione('turni')}
@@ -524,6 +570,43 @@ export default function DipendenteDashboard() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── DELIVERY ── */}
+            {sezione === 'delivery' && (
+              <div className="space-y-3">
+                {deliveryOrdini.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-ink-navy/10 p-10 text-center shadow-sm">
+                    <p className="text-3xl mb-3">🛵</p>
+                    <p className="text-ink-navy/40 text-sm">Nessun ordine da consegnare</p>
+                  </div>
+                ) : deliveryOrdini.map(o => {
+                  let ci: { nome?: string; telefono?: string; indirizzo?: string; ora?: string } = {}
+                  try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
+                  return (
+                    <div key={o.id} className="bg-white rounded-2xl border border-teal-200 shadow-sm overflow-hidden">
+                      <div className="bg-teal-50 px-4 py-3 border-b border-teal-200 flex items-center justify-between gap-2">
+                        <p className="font-bold text-teal-800 truncate">{ci.nome || 'Cliente'}</p>
+                        {ci.ora && <span className="text-base font-bold text-ink-navy shrink-0">🕐 {ci.ora}</span>}
+                      </div>
+                      <div className="px-4 py-3 space-y-1.5">
+                        {ci.indirizzo && <p className="text-base font-bold text-ink-navy">📍 {ci.indirizzo}</p>}
+                        {ci.telefono && <a href={`tel:${ci.telefono}`} className="inline-block text-sm text-electric-blue font-semibold">📞 {ci.telefono}</a>}
+                        <div className="pt-1">
+                          {o.righe.map(r => <p key={r.id} className="text-sm text-ink-navy/60">{r.quantita}× {r.nome}</p>)}
+                        </div>
+                        <p className="text-sm font-semibold text-ink-navy pt-1">Totale € {o.totale.toFixed(2)}</p>
+                      </div>
+                      <div className="px-4 pb-4">
+                        <button onClick={() => segnaConsegnato(o.id)}
+                          className="w-full bg-teal-600 text-white font-semibold py-2.5 rounded-xl hover:bg-teal-700 transition-colors text-sm">
+                          Segna consegnato
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
@@ -801,6 +884,8 @@ export default function DipendenteDashboard() {
           {([
             { key: 'timbra', label: 'Timbra',
               icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M4 8.5a1.5 1.5 0 0 1 1.5-1.5h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z"/><circle cx="12" cy="13" r="3.3"/></svg> },
+            { key: 'delivery', label: 'Delivery',
+              icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 18h7M4 8h4l2.5 7M15.5 18l-2-8h4l2.5 5"/></svg> },
             { key: 'turni', label: 'Turni',
               icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> },
             { key: 'disponibilita', label: 'Disponib.',

@@ -341,3 +341,15 @@ export function IconClock({ className = base }: IconProps) {
     </svg>
   )
 }
+
+export function IconDelivery({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="18" r="2.5" />
+      <circle cx="18" cy="18" r="2.5" />
+      <path d="M8.5 18h7" />
+      <path d="M4 8h4l2.5 7" />
+      <path d="M15.5 18l-2-8h4l2.5 5" />
+    </svg>
+  )
+}

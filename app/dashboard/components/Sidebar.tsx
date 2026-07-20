@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   IconGrid, IconUsers, IconChat, IconClipboard, IconCalendar,
   IconFork, IconReceipt, IconTable, IconChartBar, IconSettings,
-  IconStethoscope, IconFolder, IconClock, IconCash,
+  IconStethoscope, IconFolder, IconClock, IconCash, IconDelivery,
 } from './../../components/icons'
 
 const navFood = [
@@ -16,6 +16,7 @@ const navFood = [
       { label: 'Tavoli & QR', href: '/dashboard/tavoli', Icon: IconTable },
       { label: 'Conti', href: '/dashboard/conti', Icon: IconCash },
       { label: 'Ordini', href: '/dashboard/ordini', Icon: IconReceipt },
+      { label: 'Delivery', href: '/dashboard/delivery', Icon: IconDelivery },
       { label: 'Prenotazioni tavoli', href: '/dashboard/clienti/preventivi', Icon: IconClipboard },
       { label: 'Calendario', href: '/dashboard/clienti/calendario', Icon: IconCalendar },
     ],
