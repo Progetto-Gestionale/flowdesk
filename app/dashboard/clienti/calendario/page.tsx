@@ -563,6 +563,7 @@ export default function Calendario() {
                 const isT = isSameDay(day, today)
                 const isPast = day < today && !isT
                 const confermati = dayApps.filter(a => a.status === 'confermato')
+                const completatiN = dayApps.filter(a => a.status === 'completato').length
                 const noShowN = dayApps.filter(a => a.status === 'no_show').length
                 const cancellatiN = dayApps.filter(a => a.status === 'cancellato').length
                 const totalCoperti = confermati.reduce((s, a) => s + (a.coperti ?? 1), 0)
@@ -587,21 +588,23 @@ export default function Calendario() {
                         </span>
                       )}
                     </div>
-                    {/* Riepilogo conteggi per stato — clicca per i dettagli */}
-                    <div className="flex flex-wrap items-start gap-1 p-1.5 flex-1 content-start">
+                    {/* Riepilogo conteggi per stato con etichetta — clicca per i dettagli */}
+                    <div className="flex flex-col gap-0.5 p-1.5 flex-1">
                       {dayApps.length === 0
-                        ? <p className={`w-full text-[10px] text-center mt-1 ${isT ? 'text-white/30' : 'text-ink-navy/15'}`}>—</p>
+                        ? <p className={`text-[10px] text-center mt-1 ${isT ? 'text-white/30' : 'text-ink-navy/15'}`}>—</p>
                         : ([
-                            ['confermato', confermati.length] as const,
-                            ['no_show', noShowN] as const,
-                            ['cancellato', cancellatiN] as const,
-                          ]).filter(([, n]) => n > 0).map(([st, n]) => {
+                            ['confermato', 'Confermati', confermati.length] as const,
+                            ['completato', 'Completati', completatiN] as const,
+                            ['no_show', 'No show', noShowN] as const,
+                            ['cancellato', 'Cancellati', cancellatiN] as const,
+                          ]).filter(([, , n]) => n > 0).map(([st, etichetta, n]) => {
                             const sc = STATUS_COLORS[st] ?? STATUS_COLORS.confermato
                             return (
                               <span key={st}
-                                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-bold ${isT ? 'bg-white/20 text-white' : `${sc.bg} ${sc.text}`}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${isT ? 'bg-white/70' : sc.dot}`} />
-                                {n}
+                                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${isT ? 'bg-white/20 text-white' : `${sc.bg} ${sc.text}`}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isT ? 'bg-white/70' : sc.dot}`} />
+                                <span className="truncate">{etichetta}</span>
+                                <span className="ml-auto font-bold">{n}</span>
                               </span>
                             )
                           })

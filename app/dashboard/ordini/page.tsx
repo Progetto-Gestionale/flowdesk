@@ -198,18 +198,29 @@ export default function OrdiniPage() {
     return (
       <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${theme ? theme.border : 'border-ink-navy/10'}`}>
         {/* Header */}
-        <div className={`px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
-          <div className="flex items-center gap-2 min-w-0">
+        <div className={`px-4 py-3 border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
+          {/* Riga 1: tavolo/nome + (tavolo: ora ordine · asporto/delivery: tipo a destra) */}
+          <div className="flex items-center justify-between gap-2">
             <span className={`text-sm font-bold truncate ${theme ? theme.text : 'text-ink-navy/50'}`}>{label}</span>
-            {!isTavolo && theme && (
+            {isTavolo ? (
+              <span className={`text-xs shrink-0 ${theme ? theme.text + '/60' : 'text-ink-navy/35'}`}>{ora}</span>
+            ) : (
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${tipoKey === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'}`}>
                 {tipoKey === 'delivery' ? 'Delivery' : 'Asporto'}
               </span>
             )}
-            <span className={`text-xs ${theme ? theme.text + '/60' : 'text-ink-navy/35'}`}>{ora}</span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <span className={`text-sm ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
+
+          {/* Orario ritiro/consegna in evidenza (asporto/delivery) */}
+          {!isTavolo && ci.ora && (
+            <p className={`mt-1 text-sm font-bold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy'}`}>
+              {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ci.ora}
+            </p>
+          )}
+
+          {/* Riga 2: prezzo + azione */}
+          <div className="flex items-center gap-2 flex-wrap mt-2">
+            <span className={`text-sm font-semibold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
             {!isDone && (
               <button onClick={() => segnaConsegnato(o.id)}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
@@ -256,9 +267,8 @@ export default function OrdiniPage() {
                 className="text-xs text-electric-blue hover:underline">cambia tavolo</button>
             </div>
           )}
-          {!isTavolo && (ci.ora || ci.telefono || ci.indirizzo) && (
+          {!isTavolo && (ci.telefono || ci.indirizzo) && (
             <div className="px-4 py-2 space-y-0.5">
-              {ci.ora && <p className="text-xs text-ink-navy/50 font-medium">Ritiro/consegna: {ci.ora}</p>}
               {ci.telefono && <p className="text-xs text-ink-navy/50">{ci.telefono}</p>}
               {ci.indirizzo && <p className="text-xs text-ink-navy/50">{ci.indirizzo}</p>}
             </div>
@@ -290,26 +300,33 @@ export default function OrdiniPage() {
 
     return (
       <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${theme ? theme.border : 'border-ink-navy/10'}`}>
-        <div className={`px-4 py-3 flex items-center justify-between gap-3 border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
-          <div className="flex items-center gap-2 min-w-0">
+        <div className={`px-4 py-3 border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
+          {/* Riga 1: nome + tipo a destra */}
+          <div className="flex items-center justify-between gap-2">
             <span className={`text-sm font-bold truncate ${theme ? theme.text : 'text-ink-navy/50'}`}>{a.clienteNome || 'Cliente'}</span>
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${tipoKey === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'}`}>
               {tipoKey === 'delivery' ? 'Delivery' : 'Asporto'}
             </span>
-            <span className={`text-xs ${theme ? theme.text + '/60' : 'text-ink-navy/35'}`}>{ora}</span>
           </div>
-          {!isDone && (
-            <button onClick={() => segnaAppCompletato(a.id)}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors shrink-0">
-              Pronto
-            </button>
-          )}
-          {isDone && (
-            <button onClick={() => eliminaAppuntamento(a.id)}
-              className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors shrink-0">
-              Elimina
-            </button>
-          )}
+          {/* Orario ritiro/consegna in evidenza */}
+          <p className={`mt-1 text-sm font-bold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy'}`}>
+            {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ora}
+          </p>
+          {/* Riga 2: azione */}
+          <div className="flex items-center gap-2 mt-2">
+            {!isDone && (
+              <button onClick={() => segnaAppCompletato(a.id)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
+                Pronto
+              </button>
+            )}
+            {isDone && (
+              <button onClick={() => eliminaAppuntamento(a.id)}
+                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors">
+                Elimina
+              </button>
+            )}
+          </div>
         </div>
         {nota && (
           <div className={`px-4 py-3 ${isDone ? 'opacity-60' : ''}`}>
