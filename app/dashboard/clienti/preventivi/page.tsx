@@ -61,14 +61,18 @@ function SintesiRichiesta({ items, note }: { items: ItemExt[]; note?: string }) 
           <span className="text-sm font-bold text-ink-navy">{coperti} {coperti === 1 ? 'persona' : 'persone'}</span>
         </div>
       )}
-      {/* Data + ora — bold */}
+      {/* Data — bold */}
       {dataFmt && (
         <div className="flex gap-3 py-2.5">
           <span className="text-xs text-ink-navy/40 w-20 shrink-0 pt-0.5">Data</span>
-          <span className="text-sm font-bold text-ink-navy capitalize">
-            {dataFmt}
-            {oraMatch && <span className="ml-2 text-electric-blue">{oraMatch[1]}</span>}
-          </span>
+          <span className="text-sm font-bold text-ink-navy capitalize">{dataFmt}</span>
+        </div>
+      )}
+      {/* Orario — voce separata, in nero */}
+      {oraMatch && (
+        <div className="flex gap-3 py-2.5">
+          <span className="text-xs text-ink-navy/40 w-20 shrink-0 pt-0.5">Orario</span>
+          <span className="text-sm font-bold text-ink-navy">{oraMatch[1]}</span>
         </div>
       )}
       {/* Allergie */}
@@ -886,8 +890,9 @@ function Richieste() {
                   <thead className="bg-electric-blue/5 border-b border-electric-blue/15">
                     <tr>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Cliente</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Dettagli</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Data richiesta</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Data</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Orario</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Coperti</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-electric-blue/10">
@@ -902,17 +907,18 @@ function Richieste() {
                             {r.clienteEmail && <p className="text-xs text-ink-navy/40">{r.clienteEmail}</p>}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              {dataRes && (
-                                <span className="flex items-baseline gap-1.5">
-                                  <span className="text-base font-bold text-ink-navy capitalize">{new Date(dataRes+'T12:00:00Z').toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})}</span>
-                                  {oraM && <span className="text-base font-bold text-electric-blue">{oraM[1]}</span>}
-                                </span>
-                              )}
-                              {copertiM && <span className="text-base font-bold text-ink-navy">{copertiM[1]} <span className="text-xs font-normal text-ink-navy/50">coperti</span></span>}
-                            </div>
+                            {dataRes
+                              ? <span className="text-base font-bold text-ink-navy capitalize">{new Date(dataRes+'T12:00:00Z').toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})}</span>
+                              : <span className="text-ink-navy/40">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-xs text-ink-navy/40">{new Date(r.createdAt).toLocaleDateString('it-IT')}</td>
+                          <td className="px-4 py-3">
+                            {oraM ? <span className="text-base font-bold text-ink-navy">{oraM[1]}</span> : <span className="text-ink-navy/40">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            {copertiM
+                              ? <span className="text-base font-bold text-ink-navy">{copertiM[1]} <span className="text-xs font-normal text-ink-navy/50">coperti</span></span>
+                              : <span className="text-ink-navy/40">—</span>}
+                          </td>
                         </tr>
                       )
                     })}
@@ -1078,11 +1084,8 @@ function Richieste() {
                   </div>
                 )}
 
-                {/* Stato */}
+                {/* Azioni stato */}
                 <div className="px-6 pb-5">
-                  <p className="text-xs font-semibold text-ink-navy/30 uppercase tracking-wider mb-3">
-                    {isConcluso(selected.status) ? 'Esito' : 'Stato'}
-                  </p>
                   {isConcluso(selected.status) ? (
                     <div className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-center ${STATUS_COLORS[selected.status] ?? 'bg-mist text-ink-navy/60'}`}>
                       {STATUS_LABELS[selected.status] ?? selected.status}
@@ -1132,9 +1135,9 @@ function Richieste() {
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="px-6 py-4 border-t border-ink-navy/8 space-y-2">
-                {selected.tipo === 'tavolo' && selected.status === 'accettato' && (
+              {/* Footer — solo "Assegna tavolo" quando pertinente */}
+              {selected.tipo === 'tavolo' && selected.status === 'accettato' && (
+                <div className="px-6 py-4 border-t border-ink-navy/8">
                   <button onClick={() => { setSelected(null); setConfermaApp(selected) }}
                     className="w-full text-sm font-medium text-ink-navy py-2.5 rounded-lg border border-ink-navy/12 hover:bg-mist transition-colors flex items-center justify-center gap-2">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -1143,24 +1146,8 @@ function Richieste() {
                     </svg>
                     Assegna tavolo
                   </button>
-                )}
-                <div className="flex gap-2">
-                  <button onClick={() => { setEditingRichiesta(selected); setSelected(null); setShowModal(true) }}
-                    className="flex-1 text-sm font-medium text-ink-navy py-2 rounded-lg border border-ink-navy/12 hover:bg-mist transition-colors">
-                    Modifica
-                  </button>
-                  {selected.leadId && selected.status !== 'cliente_eliminato' && (
-                    <button onClick={() => handleCancellaCliente(selected)}
-                      className="flex-1 text-sm font-medium text-red-500 py-2 rounded-lg border border-red-100 hover:bg-red-50 transition-colors">
-                      Cancella cliente
-                    </button>
-                  )}
-                  <button onClick={() => handleDelete(selected.id)}
-                    className="text-sm font-medium text-ink-navy/30 py-2 px-3 rounded-lg hover:text-red-500 hover:bg-red-50 transition-colors" title="Elimina richiesta">
-                    Elimina
-                  </button>
                 </div>
-              </div>
+              )}
 
             </div>
           </div>

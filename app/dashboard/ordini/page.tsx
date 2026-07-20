@@ -74,6 +74,7 @@ export default function OrdiniPage() {
   const [cambioTavolo, setCambioTavolo] = useState<string | null>(null)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [storicoAperto, setStoricoAperto] = useState(false)
+  const [filtroStorico, setFiltroStorico] = useState<'tutti' | 'tavolo' | 'asporto' | 'delivery'>('tutti')
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [savingBlocco, setSavingBlocco] = useState(false)
@@ -180,6 +181,14 @@ export default function OrdiniPage() {
   const totaleAttivi = ordiniAttivi.length + appAttivi.length
   const totaleStorico = ordiniStorico.length + appStorico.length
 
+  // filtro tipo applicato SOLO agli ordini conclusi (storico)
+  const tipoDiOrdine = (o: Ordine): 'tavolo' | 'asporto' | 'delivery' =>
+    (o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null) ? 'tavolo' : o.tipo === 'delivery' ? 'delivery' : 'asporto'
+  const ordiniStoricoFiltrati = filtroStorico === 'tutti' ? ordiniStorico : ordiniStorico.filter(o => tipoDiOrdine(o) === filtroStorico)
+  const appStoricoFiltrati = filtroStorico === 'tavolo' ? []
+    : filtroStorico === 'tutti' ? appStorico
+    : appStorico.filter(a => (inferTipoOrdine(a.servizio) ?? 'asporto') === filtroStorico)
+
   function OrdineCard({ o }: { o: Ordine }) {
     const isDone = isDoneOrdine(o)
     const isTavolo = o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
@@ -199,24 +208,25 @@ export default function OrdiniPage() {
       <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${theme ? theme.border : 'border-ink-navy/10'}`}>
         {/* Header */}
         <div className={`px-4 py-3 border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
-          {/* Riga 1: tavolo/nome + (tavolo: ora ordine · asporto/delivery: tipo a destra) */}
-          <div className="flex items-center justify-between gap-2">
-            <span className={`text-sm font-bold truncate ${theme ? theme.text : 'text-ink-navy/50'}`}>{label}</span>
-            {isTavolo ? (
-              <span className={`text-xs shrink-0 ${theme ? theme.text + '/60' : 'text-ink-navy/35'}`}>{ora}</span>
-            ) : (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${tipoKey === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'}`}>
-                {tipoKey === 'delivery' ? 'Delivery' : 'Asporto'}
+          {/* Riga 1: label a sinistra + badge tipo (con orario per i tavoli) a destra */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <span className={`block text-sm font-bold truncate ${theme ? theme.text : 'text-ink-navy/50'}`}>{label}</span>
+              {/* asporto/delivery: orario ritiro/consegna in evidenza sotto il nome */}
+              {!isTavolo && ci.ora && (
+                <p className={`mt-0.5 text-sm font-bold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy'}`}>
+                  {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ci.ora}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isTavolo ? 'bg-amber-200/60 text-amber-700' : tipoKey === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'}`}>
+                {isTavolo ? 'Tavolo' : tipoKey === 'delivery' ? 'Delivery' : 'Asporto'}
               </span>
-            )}
+              {/* tavolo: orario di arrivo ordine sotto il badge */}
+              {isTavolo && <span className={`text-xs ${theme ? theme.text + '/60' : 'text-ink-navy/35'}`}>{ora}</span>}
+            </div>
           </div>
-
-          {/* Orario ritiro/consegna in evidenza (asporto/delivery) */}
-          {!isTavolo && ci.ora && (
-            <p className={`mt-1 text-sm font-bold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy'}`}>
-              {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ci.ora}
-            </p>
-          )}
 
           {/* Riga 2: prezzo + azione */}
           <div className="flex items-center gap-2 flex-wrap mt-2">
@@ -425,9 +435,24 @@ export default function OrdiniPage() {
                 <div className="h-px flex-1 bg-ink-navy/8" />
               </button>
               {storicoAperto && (
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {ordiniStorico.map(o => <OrdineCard key={o.id} o={o} />)}
-                  {appStorico.map(a => <AppCard key={a.id} a={a} />)}
+                <div className="mt-3 space-y-3">
+                  {/* Selettore tipo — solo per gli ordini conclusi */}
+                  <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
+                    {(['tutti', 'tavolo', 'asporto', 'delivery'] as const).map(t => (
+                      <button key={t} onClick={() => setFiltroStorico(t)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${filtroStorico === t ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                        {t === 'tutti' ? 'Tutti' : t}
+                      </button>
+                    ))}
+                  </div>
+                  {ordiniStoricoFiltrati.length + appStoricoFiltrati.length === 0 ? (
+                    <p className="text-sm text-ink-navy/30 py-3">Nessun ordine concluso di questo tipo</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {ordiniStoricoFiltrati.map(o => <OrdineCard key={o.id} o={o} />)}
+                      {appStoricoFiltrati.map(a => <AppCard key={a.id} a={a} />)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

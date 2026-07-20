@@ -411,7 +411,7 @@ export default function Calendario() {
                 <>
                   {totalCoperti > 0 && (
                     <div className="mb-3">
-                      <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2.5 py-1 rounded-full">
+                      <span className="text-xs bg-electric-blue/10 text-electric-blue font-semibold px-2.5 py-1 rounded-full">
                         {totalCoperti} coperti confermati
                       </span>
                     </div>
@@ -622,31 +622,24 @@ export default function Calendario() {
       {selected && (() => {
         const tavoliAssegnati = getTavoliIds(selected)
         const tipo = inferTipo(selected.servizio)
-        const ts = TIPO_STYLE[tipo]
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
               <div className="px-5 py-4 border-b border-ink-navy/8 flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ts.badge}`}>{ts.label}</span>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[selected.status]?.bg ?? 'bg-mist'} ${STATUS_COLORS[selected.status]?.text ?? 'text-ink-navy/60'}`}>
-                      {selected.status === 'no_show' ? 'No-show' : selected.status}
-                    </span>
-                  </div>
-                  <h2 className="text-base font-bold text-ink-navy mt-1">{selected.clienteNome || 'Appuntamento'}</h2>
+                  <h2 className="text-base font-bold text-ink-navy">{selected.clienteNome || 'Appuntamento'}</h2>
                   {selected.clienteEmail && <p className="text-xs text-ink-navy/35">{selected.clienteEmail}</p>}
                 </div>
                 <button onClick={() => { setSelected(null); setSelectedTavoliIds([]) }} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl mt-1">✕</button>
               </div>
 
               <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
-                <div className={`${ts.bg} border rounded-xl px-4 py-3 space-y-1.5`} style={{ borderColor: ts.barColor + '40' }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: ts.barColor }}>Prenotazione</p>
-                  <p className="text-sm font-semibold text-ink-navy">
+                <div className="bg-electric-blue/5 border border-electric-blue/25 rounded-xl px-4 py-3 space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-electric-blue">Prenotazione</p>
+                  <p className="text-sm text-ink-navy">
                     {GIORNI_FULL[new Date(selected.data).getDay()]}{' '}
-                    {new Date(selected.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}{' '}
-                    alle {new Date(selected.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(selected.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {' '}alle <span className="font-bold text-base">{new Date(selected.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
                   </p>
                   {selected.servizio && <p className="text-sm text-ink-navy/60">{selected.servizio} · {selected.durata} min</p>}
                   {(selected.coperti ?? 1) > 0 && <p className="text-sm text-ink-navy/60">{selected.coperti ?? 1} {(selected.coperti ?? 1) === 1 ? 'persona' : 'persone'}</p>}

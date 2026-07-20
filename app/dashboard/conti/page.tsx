@@ -6,7 +6,7 @@ interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: numbe
 interface Ordine {
   id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null
   totale: number; note: string | null; status: string; createdAt: string
-  tipo: string; righe: RigaOrdine[]
+  tipo: string; righe: RigaOrdine[]; clienteInfo?: string | null
 }
 interface Piatto { id: string; nome: string; prezzo: number; descrizione?: string | null }
 interface Categoria { id: string; nome: string; piatti: Piatto[] }
@@ -369,12 +369,16 @@ export default function ContiPage() {
 
     // etichetta tipo (solo asporto/delivery; i tavoli mostrano già il nome tavolo)
     const badge = isTavolo(o) ? null : o.tipo === 'delivery' ? 'Delivery' : 'Asporto'
+    // per asporto/delivery mostra il nome cliente dell'ordine invece di "Asporto"/"Delivery"
+    const label = isTavolo(o)
+      ? o.tavolo
+      : (() => { try { return JSON.parse(o.clienteInfo ?? '{}').nome || o.tavolo } catch { return o.tavolo } })()
 
     return (
       <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden shadow-sm">
         <div className={`px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b border-ink-navy/8 ${aperto ? 'bg-white' : 'bg-mist'}`}>
           <div className="flex items-center gap-2">
-            <span className={`text-sm font-bold ${aperto ? 'text-ink-navy' : 'text-ink-navy/50'}`}>{o.tavolo}</span>
+            <span className={`text-sm font-bold ${aperto ? 'text-ink-navy' : 'text-ink-navy/50'}`}>{label}</span>
             {badge && aperto && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-ink-navy/10 text-ink-navy/60">
                 {badge}
