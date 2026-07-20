@@ -860,12 +860,6 @@ function Richieste() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-ink-navy">Prenotazioni tavoli</h1>
-          <p className="text-ink-navy/50 mt-0.5 text-sm">
-            {daVerificare.length > 0
-              ? <span className="text-amber-600 font-medium">{daVerificare.length} da verificare</span>
-              : 'Nessuna richiesta in attesa'}
-            {accettate.length > 0 && <> · {accettate.length} accettate</>}
-          </p>
         </div>
         <button onClick={() => setShowModal(true)}
           className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90 transition-colors">
@@ -881,36 +875,41 @@ function Richieste() {
           {/* ── DA VERIFICARE ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-sm font-semibold text-amber-700 uppercase tracking-wider">Da verificare</span>
-              {daVerificare.length > 0 && <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{daVerificare.length}</span>}
+              <span className="text-sm font-semibold text-electric-blue uppercase tracking-wider">Da verificare</span>
+              {daVerificare.length > 0 && <span className="bg-electric-blue/10 text-electric-blue text-xs font-bold px-2 py-0.5 rounded-full">{daVerificare.length}</span>}
             </div>
             {daVerificare.length === 0 ? (
               <p className="text-sm text-ink-navy/30 py-3">Nessuna richiesta da verificare</p>
             ) : (
-              <div className="bg-white border-2 border-amber-200 rounded-xl overflow-hidden">
+              <div className="bg-white border-2 border-electric-blue/25 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-amber-50 border-b border-amber-200">
+                  <thead className="bg-electric-blue/5 border-b border-electric-blue/15">
                     <tr>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-amber-600 uppercase tracking-wider">Cliente</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-amber-600 uppercase tracking-wider">Dettagli</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-amber-600 uppercase tracking-wider">Data richiesta</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Cliente</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Dettagli</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Data richiesta</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-amber-100">
+                  <tbody className="divide-y divide-electric-blue/10">
                     {daVerificare.map(r => {
                       const dataRes = getDataRichiesta(r)
                       const oraM = r.note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? r.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
                       const copertiM = r.note?.match(/Coperti:\s*(\d+)/)
                       return (
-                        <tr key={r.id} onClick={() => setSelected(r)} className="hover:bg-amber-50 cursor-pointer transition-colors">
+                        <tr key={r.id} onClick={() => setSelected(r)} className="hover:bg-electric-blue/5 cursor-pointer transition-colors">
                           <td className="px-4 py-3">
                             <p className="font-semibold text-ink-navy">{r.clienteName}</p>
                             {r.clienteEmail && <p className="text-xs text-ink-navy/40">{r.clienteEmail}</p>}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {dataRes && <span className="text-xs font-semibold text-ink-navy bg-mist px-2 py-0.5 rounded-full">{new Date(dataRes+'T12:00:00Z').toLocaleDateString('it-IT',{day:'numeric',month:'short'})}{oraM ? ` · ${oraM[1]}` : ''}</span>}
-                              {copertiM && <span className="text-xs text-ink-navy/50">{copertiM[1]} pers.</span>}
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {dataRes && (
+                                <span className="flex items-baseline gap-1.5">
+                                  <span className="text-base font-bold text-ink-navy capitalize">{new Date(dataRes+'T12:00:00Z').toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})}</span>
+                                  {oraM && <span className="text-base font-bold text-electric-blue">{oraM[1]}</span>}
+                                </span>
+                              )}
+                              {copertiM && <span className="text-base font-bold text-ink-navy">{copertiM[1]} <span className="text-xs font-normal text-ink-navy/50">coperti</span></span>}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs text-ink-navy/40">{new Date(r.createdAt).toLocaleDateString('it-IT')}</td>
@@ -992,8 +991,8 @@ function Richieste() {
                                   <p className="font-semibold text-ink-navy">{r.clienteName}</p>
                                   {r.clienteEmail && <p className="text-xs text-ink-navy/40">{r.clienteEmail}</p>}
                                 </td>
-                                <td className="px-4 py-3 text-ink-navy/70">{oraM?.[1] ?? '—'}</td>
-                                <td className="px-4 py-3 text-ink-navy/70">{copertiM ? `${copertiM[1]} pers.` : '—'}</td>
+                                <td className="px-4 py-3"><span className="text-base font-bold text-ink-navy">{oraM?.[1] ?? '—'}</span></td>
+                                <td className="px-4 py-3">{copertiM ? <span className="text-base font-bold text-ink-navy">{copertiM[1]} <span className="text-xs font-normal text-ink-navy/50">pers.</span></span> : <span className="text-ink-navy/40">—</span>}</td>
                                 <td className="px-4 py-3 text-center">
                                   <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLORS[r.status] ?? 'bg-mist text-ink-navy/60'}`}>
                                     {STATUS_LABELS[r.status] ?? r.status}

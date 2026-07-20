@@ -277,7 +277,9 @@ export default function Calendario() {
         alert(err.conflitto ? 'Uno dei tavoli è già occupato in questo orario.' : 'Errore nel salvataggio. Riprova.')
       } else {
         await fetchAll()
-        setSelected(prev => prev ? { ...prev, tavoliIds: JSON.stringify(ids), tavoloId: ids.length === 1 ? ids[0] : null } : null)
+        // chiude il box in automatico dopo aver assegnato e salvato
+        setSelected(null)
+        setSelectedTavoliIds([])
       }
     } finally { setAssegnaLoading(false) }
   }
@@ -561,6 +563,8 @@ export default function Calendario() {
                 const isT = isSameDay(day, today)
                 const isPast = day < today && !isT
                 const confermati = dayApps.filter(a => a.status === 'confermato')
+                const noShowN = dayApps.filter(a => a.status === 'no_show').length
+                const cancellatiN = dayApps.filter(a => a.status === 'cancellato').length
                 const totalCoperti = confermati.reduce((s, a) => s + (a.coperti ?? 1), 0)
 
                 return (
@@ -583,30 +587,24 @@ export default function Calendario() {
                         </span>
                       )}
                     </div>
-                    {/* Prenotazioni */}
-                    <div className="flex flex-col gap-0.5 p-1.5 flex-1">
+                    {/* Riepilogo conteggi per stato — clicca per i dettagli */}
+                    <div className="flex flex-wrap items-start gap-1 p-1.5 flex-1 content-start">
                       {dayApps.length === 0
-                        ? <p className={`text-[10px] text-center mt-1 ${isT ? 'text-white/30' : 'text-ink-navy/15'}`}>—</p>
-                        : <>
-                            {dayApps.slice(0, 3).map(a => {
-                              const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-                              const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
-                              return (
-                                <div key={a.id}
-                                  className={`rounded px-1 py-0.5 border-l-2 ${isT ? 'bg-white/20' : sc.bg}`}
-                                  style={{ borderLeftColor: isT ? 'rgba(255,255,255,0.6)' : TIPO_STYLE.tavolo.barColor }}>
-                                  <p className={`text-[10px] font-semibold truncate leading-tight ${isT ? 'text-white' : 'text-ink-navy'}`}>
-                                    {ora} {a.clienteNome?.split(' ')[0] || '—'}
-                                  </p>
-                                </div>
-                              )
-                            })}
-                            {dayApps.length > 3 && (
-                              <p className={`text-[10px] font-semibold px-1 ${isT ? 'text-white/60' : 'text-ink-navy/35'}`}>
-                                +{dayApps.length - 3} altri
-                              </p>
-                            )}
-                          </>
+                        ? <p className={`w-full text-[10px] text-center mt-1 ${isT ? 'text-white/30' : 'text-ink-navy/15'}`}>—</p>
+                        : ([
+                            ['confermato', confermati.length] as const,
+                            ['no_show', noShowN] as const,
+                            ['cancellato', cancellatiN] as const,
+                          ]).filter(([, n]) => n > 0).map(([st, n]) => {
+                            const sc = STATUS_COLORS[st] ?? STATUS_COLORS.confermato
+                            return (
+                              <span key={st}
+                                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-bold ${isT ? 'bg-white/20 text-white' : `${sc.bg} ${sc.text}`}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isT ? 'bg-white/70' : sc.dot}`} />
+                                {n}
+                              </span>
+                            )
+                          })
                       }
                     </div>
                   </button>

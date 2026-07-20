@@ -367,26 +367,20 @@ export default function ContiPage() {
     const aperto = !isDone(o)
     const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 
-    // colori header per tipo
-    const headerTheme = isTavolo(o)
-      ? { border: 'border-amber-300', bg: 'bg-amber-50', text: 'text-amber-800', badge: null }
-      : o.tipo === 'delivery'
-        ? { border: 'border-teal-300', bg: 'bg-teal-50', text: 'text-teal-800', badge: 'Delivery' }
-        : { border: 'border-ink-navy/20', bg: 'bg-ink-navy/5', text: 'text-ink-navy/70', badge: 'Asporto' }
-
-    const cardBorder = aperto ? headerTheme.border : 'border-ink-navy/10'
+    // etichetta tipo (solo asporto/delivery; i tavoli mostrano già il nome tavolo)
+    const badge = isTavolo(o) ? null : o.tipo === 'delivery' ? 'Delivery' : 'Asporto'
 
     return (
-      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${cardBorder}`}>
-        <div className={`px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b ${aperto ? `${headerTheme.bg} ${headerTheme.border}` : 'bg-mist border-ink-navy/10'}`}>
+      <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden shadow-sm">
+        <div className={`px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b border-ink-navy/8 ${aperto ? 'bg-white' : 'bg-mist'}`}>
           <div className="flex items-center gap-2">
-            <span className={`text-sm font-bold ${aperto ? headerTheme.text : 'text-ink-navy/50'}`}>{o.tavolo}</span>
-            {headerTheme.badge && aperto && (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${o.tipo === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-ink-navy/10 text-ink-navy/60'}`}>
-                {headerTheme.badge}
+            <span className={`text-sm font-bold ${aperto ? 'text-ink-navy' : 'text-ink-navy/50'}`}>{o.tavolo}</span>
+            {badge && aperto && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-ink-navy/10 text-ink-navy/60">
+                {badge}
               </span>
             )}
-            <span className={`text-xs font-semibold ${aperto ? headerTheme.text + '/60' : 'text-ink-navy/35'}`}>{ora}</span>
+            <span className={`text-xs font-semibold ${aperto ? 'text-ink-navy/50' : 'text-ink-navy/35'}`}>{ora}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <span className={`text-sm ${aperto ? 'text-ink-navy/70' : 'text-ink-navy/40'}`}>{fmt(o.totale)}</span>
@@ -508,7 +502,6 @@ export default function ContiPage() {
           <div className="flex items-center gap-3 mb-3">
             <h2 className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider">
               In corso
-              {aperti.length > 0 && <span className="ml-1.5 bg-electric-blue text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{aperti.length}</span>}
             </h2>
             {totaleAperti > 0 && <span className="text-xs text-ink-navy/40">{fmt(totaleAperti)} in sospeso</span>}
           </div>

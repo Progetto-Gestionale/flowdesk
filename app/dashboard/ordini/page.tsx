@@ -184,7 +184,7 @@ export default function OrdiniPage() {
     const isDone = isDoneOrdine(o)
     const isTavolo = o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
     const tipoKey: keyof typeof TIPO_THEME = isTavolo ? 'tavolo' : o.tipo === 'delivery' ? 'delivery' : 'asporto'
-    const theme = isDone ? null : TIPO_THEME[tipoKey]
+    const theme = TIPO_THEME[tipoKey] // colore per tipo anche sugli ordini conclusi
     const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 
     const tavoloAssegnato = tavoli.find(t => t.id === o.tavoloId)
@@ -283,7 +283,7 @@ export default function OrdiniPage() {
   function AppCard({ a }: { a: AppuntamentoOrdine }) {
     const isDone = isDoneApp(a)
     const tipoKey: keyof typeof TIPO_THEME = inferTipoOrdine(a.servizio) === 'delivery' ? 'delivery' : 'asporto'
-    const theme = isDone ? null : TIPO_THEME[tipoKey]
+    const theme = TIPO_THEME[tipoKey] // colore per tipo anche sugli ordini conclusi
     const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
     const [desc] = (a.note ?? '').split('\n')
     const nota = (desc ?? '').replace(/^Da richiesta #\d+$/, '').trim()
