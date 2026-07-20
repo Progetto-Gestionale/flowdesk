@@ -265,7 +265,7 @@ export default function OrdiniPage() {
           {o.righe.map(r => (
             <div key={r.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs font-bold text-ink-navy w-5 shrink-0 text-center">{r.quantita}×</span>
+                <span className="text-sm font-extrabold text-ink-navy shrink-0">{r.quantita}×</span>
                 <span className="text-sm font-bold text-ink-navy truncate">{r.nome}</span>
                 {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
               </div>
@@ -386,7 +386,7 @@ export default function OrdiniPage() {
                 In corso
                 <span className="bg-electric-blue text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{totaleAttivi}</span>
               </h2>
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {ordiniAttivi.map(o => <OrdineCard key={o.id} o={o} />)}
                 {appAttivi.map(a => <AppCard key={a.id} a={a} />)}
               </div>
@@ -407,7 +407,7 @@ export default function OrdiniPage() {
                 <div className="h-px flex-1 bg-ink-navy/8" />
               </button>
               {storicoAperto && (
-                <div className="mt-3 space-y-3">
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                   {ordiniStorico.map(o => <OrdineCard key={o.id} o={o} />)}
                   {appStorico.map(a => <AppCard key={a.id} a={a} />)}
                 </div>

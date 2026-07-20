@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { IconClipboard } from '../../../components/icons'
 
 interface Item {
   descrizione: string
@@ -543,8 +542,7 @@ function Richieste() {
   const [selected, setSelected] = useState<Richiesta | null>(null)
   const [confermaApp, setConfermaApp] = useState<Richiesta | null>(null)
   const [proposta, setProposta] = useState<Richiesta | null>(null)
-  const [accettateAperte, setAccettateAperte] = useState(true)
-  const [concluseAperte, setConcluse] = useState(false)
+  const [prenotazioniAperte, setPrenotazioniAperte] = useState(true)
   const [dataFiltroAcc, setDataFiltroAcc] = useState(() => new Date().toISOString().slice(0, 10))
   const [calOpenAcc, setCalOpenAcc] = useState(false)
   const [clienteStorico, setClienteStorico] = useState<StoricoProfilo | null>(null)
@@ -852,8 +850,8 @@ function Richieste() {
 
   const daVerificare = richieste.filter(r => r.status === 'da_verificare')
   const accettate = richieste.filter(r => r.status === 'accettato')
-  const accettateDelGiorno = accettate.filter(r => getDataRichiesta(r) === dataFiltroAcc)
-  const richiesteConcluse = richieste.filter(r => isConcluso(r.status))
+  const tutteNonDaVerificare = richieste.filter(r => r.status !== 'da_verificare')
+  const tutteDelGiorno = tutteNonDaVerificare.filter(r => getDataRichiesta(r) === dataFiltroAcc)
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -887,11 +885,7 @@ function Richieste() {
               {daVerificare.length > 0 && <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{daVerificare.length}</span>}
             </div>
             {daVerificare.length === 0 ? (
-              <div className="bg-white border border-dashed border-ink-navy/15 rounded-xl p-8 text-center text-ink-navy/30 text-sm">
-                <IconClipboard />
-                <p className="mt-3 font-medium">Nessuna richiesta da verificare</p>
-                <p className="text-xs mt-1">Le nuove prenotazioni arriveranno qui</p>
-              </div>
+              <p className="text-sm text-ink-navy/30 py-3">Nessuna richiesta da verificare</p>
             ) : (
               <div className="bg-white border-2 border-amber-200 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
@@ -929,133 +923,89 @@ function Richieste() {
             )}
           </div>
 
-          {/* ── ACCETTATE (collassabile con navigazione data) ── */}
-          <div>
-            <button onClick={() => setAccettateAperte(v => !v)} className="w-full flex items-center gap-3 py-2 text-left group">
-              <div className="h-px flex-1 bg-ink-navy/8" />
-              <span className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider group-hover:text-ink-navy/60 transition-colors flex items-center gap-1.5">
-                Accettate
-                {accettate.length > 0 && <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{accettate.length}</span>}
-                <span className="text-ink-navy/30">{accettateAperte ? '▲' : '▼'}</span>
-              </span>
-              <div className="h-px flex-1 bg-ink-navy/8" />
-            </button>
-
-            {accettateAperte && (
-              <div className="mt-3 space-y-3">
-                {/* Navigazione data */}
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setDataFiltroAcc(prevDay(dataFiltroAcc))}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/15 text-ink-navy/50 hover:bg-mist transition-colors text-sm">‹</button>
-                  <div className="flex-1 flex justify-center relative">
-                    <button onClick={() => setCalOpenAcc(v => !v)}
-                      className="text-sm font-semibold text-ink-navy py-1 px-3 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors select-none whitespace-nowrap">
-                      {fmtGiorno(dataFiltroAcc)}
-                      <span className="ml-1.5 text-ink-navy/30 text-xs">▾</span>
-                    </button>
-                    {calOpenAcc && (
-                      <MiniCalPrev
-                        value={dataFiltroAcc}
-                        max={new Date(Date.now() + 180*24*3600*1000).toISOString().slice(0,10)}
-                        onChange={d => setDataFiltroAcc(d)}
-                        onClose={() => setCalOpenAcc(false)}
-                      />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dataFiltroAcc !== today && (
-                      <button onClick={() => setDataFiltroAcc(today)}
-                        className="text-xs text-electric-blue font-semibold px-2.5 py-1.5 rounded-lg border border-electric-blue/25 hover:bg-electric-blue/10 transition-colors">
-                        Oggi
-                      </button>
-                    )}
-                    <button onClick={() => setDataFiltroAcc(nextDay(dataFiltroAcc))}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/15 text-ink-navy/50 hover:bg-mist transition-colors text-sm">›</button>
-                  </div>
-                </div>
-
-                {accettateDelGiorno.length === 0 ? (
-                  <div className="bg-white border border-dashed border-ink-navy/15 rounded-xl p-8 text-center text-ink-navy/30 text-sm">
-                    Nessuna prenotazione accettata per {fmtGiorno(dataFiltroAcc).toLowerCase()}
-                  </div>
-                ) : (
-                  <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-mist border-b border-ink-navy/10">
-                        <tr>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Cliente</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Ora</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Coperti</th>
-                          <th className="text-center px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Stato</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {accettateDelGiorno.map(r => {
-                          const oraM = r.note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? r.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
-                          const copertiM = r.note?.match(/Coperti:\s*(\d+)/)
-                          return (
-                            <tr key={r.id} onClick={() => setSelected(r)} className="hover:bg-mist cursor-pointer transition-colors">
-                              <td className="px-4 py-3">
-                                <p className="font-semibold text-ink-navy">{r.clienteName}</p>
-                                {r.clienteEmail && <p className="text-xs text-ink-navy/40">{r.clienteEmail}</p>}
-                              </td>
-                              <td className="px-4 py-3 text-ink-navy/70">{oraM?.[1] ?? '—'}</td>
-                              <td className="px-4 py-3 text-ink-navy/70">{copertiM ? `${copertiM[1]} pers.` : '—'}</td>
-                              <td className="px-4 py-3 text-center">
-                                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLORS[r.status] ?? 'bg-mist text-ink-navy/60'}`}>
-                                  {STATUS_LABELS[r.status] ?? r.status}
-                                </span>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── CONCLUSE (collassabile) ── */}
-          {richiesteConcluse.length > 0 && (
+          {/* ── TUTTE LE PRENOTAZIONI (accettate + concluse) ── */}
+          {tutteNonDaVerificare.length > 0 && (
             <div>
-              <button onClick={() => setConcluse(v => !v)} className="w-full flex items-center gap-3 py-2 text-left group">
+              <button onClick={() => setPrenotazioniAperte(v => !v)} className="w-full flex items-center gap-3 py-2 text-left group">
                 <div className="h-px flex-1 bg-ink-navy/8" />
                 <span className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider group-hover:text-ink-navy/60 transition-colors flex items-center gap-1.5">
-                  Concluse
-                  <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{richiesteConcluse.length}</span>
-                  <span className="text-ink-navy/30">{concluseAperte ? '▲' : '▼'}</span>
+                  Prenotazioni
+                  <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{tutteNonDaVerificare.length}</span>
+                  <span className="text-ink-navy/30">{prenotazioniAperte ? '▲' : '▼'}</span>
                 </span>
                 <div className="h-px flex-1 bg-ink-navy/8" />
               </button>
-              {concluseAperte && (
-                <div className="mt-3 bg-white border border-ink-navy/10 rounded-xl overflow-hidden opacity-75">
-                  <table className="w-full text-sm">
-                    <thead className="bg-mist border-b border-ink-navy/10">
-                      <tr>
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Cliente</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Data prenotazione</th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Esito</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {richiesteConcluse.map(r => {
-                        const dataRes = getDataRichiesta(r)
-                        return (
-                          <tr key={r.id} onClick={() => setSelected(r)} className="hover:bg-mist cursor-pointer transition-colors">
-                            <td className="px-4 py-3 font-medium text-ink-navy/70">{r.clienteName}</td>
-                            <td className="px-4 py-3 text-ink-navy/50">{dataRes ? new Date(dataRes+'T12:00:00Z').toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'}) : new Date(r.createdAt).toLocaleDateString('it-IT')}</td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLORS[r.status] ?? 'bg-mist text-ink-navy/60'}`}>
-                                {STATUS_LABELS[r.status] ?? r.status}
-                              </span>
-                            </td>
+
+              {prenotazioniAperte && (
+                <div className="mt-3 space-y-3">
+                  {/* Navigazione data */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setDataFiltroAcc(prevDay(dataFiltroAcc))}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/15 text-ink-navy/50 hover:bg-mist transition-colors text-sm">‹</button>
+                    <div className="flex-1 flex justify-center relative">
+                      <button onClick={() => setCalOpenAcc(v => !v)}
+                        className="text-sm font-semibold text-ink-navy py-1 px-3 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors select-none whitespace-nowrap">
+                        {fmtGiorno(dataFiltroAcc)}
+                        <span className="ml-1.5 text-ink-navy/30 text-xs">▾</span>
+                      </button>
+                      {calOpenAcc && (
+                        <MiniCalPrev
+                          value={dataFiltroAcc}
+                          max={new Date(Date.now() + 180*24*3600*1000).toISOString().slice(0,10)}
+                          onChange={d => setDataFiltroAcc(d)}
+                          onClose={() => setCalOpenAcc(false)}
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {dataFiltroAcc !== today && (
+                        <button onClick={() => setDataFiltroAcc(today)}
+                          className="text-xs text-electric-blue font-semibold px-2.5 py-1.5 rounded-lg border border-electric-blue/25 hover:bg-electric-blue/10 transition-colors">
+                          Oggi
+                        </button>
+                      )}
+                      <button onClick={() => setDataFiltroAcc(nextDay(dataFiltroAcc))}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/15 text-ink-navy/50 hover:bg-mist transition-colors text-sm">›</button>
+                    </div>
+                  </div>
+
+                  {tutteDelGiorno.length === 0 ? (
+                    <p className="text-sm text-ink-navy/30 text-center py-4">Nessuna prenotazione per {fmtGiorno(dataFiltroAcc).toLowerCase()}</p>
+                  ) : (
+                    <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-mist border-b border-ink-navy/10">
+                          <tr>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Cliente</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Ora</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Coperti</th>
+                            <th className="text-center px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Stato</th>
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {tutteDelGiorno.map(r => {
+                            const oraM = r.note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? r.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
+                            const copertiM = r.note?.match(/Coperti:\s*(\d+)/)
+                            return (
+                              <tr key={r.id} onClick={() => setSelected(r)} className="hover:bg-mist cursor-pointer transition-colors">
+                                <td className="px-4 py-3">
+                                  <p className="font-semibold text-ink-navy">{r.clienteName}</p>
+                                  {r.clienteEmail && <p className="text-xs text-ink-navy/40">{r.clienteEmail}</p>}
+                                </td>
+                                <td className="px-4 py-3 text-ink-navy/70">{oraM?.[1] ?? '—'}</td>
+                                <td className="px-4 py-3 text-ink-navy/70">{copertiM ? `${copertiM[1]} pers.` : '—'}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLORS[r.status] ?? 'bg-mist text-ink-navy/60'}`}>
+                                    {STATUS_LABELS[r.status] ?? r.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

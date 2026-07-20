@@ -13,15 +13,13 @@ function parseOrariRange(orariApertura: Record<string, string>): { start: number
   let minH = 24, maxH = 0
   Object.values(orariApertura).forEach(v => {
     if (!v) return
-    // Supporta formati: "12:00-23:00", "12:00 - 23:00", "12:00–23:00"
     const parts = v.split(/[-–]/).map(s => s.trim())
     if (parts.length < 2) return
     const openH = parseInt(parts[0])
     let closeH = parseInt(parts[1])
     if (isNaN(openH) || isNaN(closeH)) return
-    // 00:00 e 24:00 sono entrambi mezzanotte = fine giornata
     if (closeH === 0 || closeH === 24) closeH = 24
-    if (openH === 0 && closeH === 0) return // giorno chiuso scritto male
+    if (openH === 0 && closeH === 0) return
     if (openH < minH) minH = openH
     if (closeH > maxH) maxH = closeH
   })
@@ -77,13 +75,6 @@ interface Tavolo {
 function addDays(date: Date, days: number) {
   const d = new Date(date); d.setDate(d.getDate() + days); return d
 }
-function getMonday(date: Date) {
-  const d = new Date(date)
-  const day = d.getDay()
-  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
-  d.setHours(0, 0, 0, 0)
-  return d
-}
 function isSameDay(a: Date, b: Date) {
   return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()
 }
@@ -110,12 +101,12 @@ function layoutApps(apps: Appuntamento[]) {
     return { a, col, total }
   })
 }
-
 function getTavoliIds(a: Appuntamento): string[] {
   try { return a.tavoliIds ? JSON.parse(a.tavoliIds) : (a.tavoloId ? [a.tavoloId] : []) }
   catch { return a.tavoloId ? [a.tavoloId] : [] }
 }
 
+// ── Mini calendar dropdown ─────────────────────────────────────────────────
 function MiniCalDropdown({ selectedDay, onSelect, onClose }: {
   selectedDay: Date; onSelect: (d: Date) => void; onClose: () => void
 }) {
@@ -173,17 +164,23 @@ function MiniCalDropdown({ selectedDay, onSelect, onClose }: {
   )
 }
 
+// ── Pagina ────────────────────────────────────────────────────────────────
 export default function Calendario() {
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Appuntamento | null>(null)
   const [showNuovo, setShowNuovo] = useState(false)
-  const [vistaMessile, setVistaMensile] = useState(false)
-  const [viewDay, setViewDay] = useState<Date | null>(null)
+  const [vista, setVista] = useState<'giorno' | 'mese'>('giorno')
+
+  // Giorno view
+  const [currentDay, setCurrentDay] = useState<Date>(() => new Date())
   const [calDropOpen, setCalDropOpen] = useState(false)
 
-  const [miniMonth, setMiniMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d })
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
+  // Mese view
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => {
+    const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d
+  })
+
   const [tavoli, setTavoli] = useState<Tavolo[]>([])
   const [formApp, setFormApp] = useState({ clienteNome: '', clienteEmail: '', servizio: '', data: '', ora: '20:00', durata: 120, note: '', coperti: 2, allergie: '', occasione: '', tavoloId: '' })
   const [selectedTavoliIds, setSelectedTavoliIds] = useState<string[]>([])
@@ -192,7 +189,6 @@ export default function Calendario() {
   const [hourEnd, setHourEnd] = useState(24)
 
   const today = new Date()
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
   async function fetchAll() {
     const [resApp, resTavoli, resSettings] = await Promise.all([
@@ -224,22 +220,8 @@ export default function Calendario() {
       .filter(a => isSameDay(new Date(a.data), day))
       .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
   }
-  function hasApp(day: Date) {
-    return appuntamenti.some(a => isSameDay(new Date(a.data), day) && a.status !== 'cancellato')
-  }
-  function getMiniMonthGrid() {
-    const year = miniMonth.getFullYear(), m = miniMonth.getMonth()
-    const firstDay = new Date(year, m, 1)
-    const lastDay = new Date(year, m + 1, 0)
-    const startOffset = (firstDay.getDay() + 6) % 7
-    const cells: (Date | null)[] = []
-    for (let i = 0; i < startOffset; i++) cells.push(null)
-    for (let d = 1; d <= lastDay.getDate(); d++) cells.push(new Date(year, m, d))
-    while (cells.length % 7 !== 0) cells.push(null)
-    return cells
-  }
-  function jumpToDay(day: Date) {
-    setWeekStart(getMonday(day))
+  function appForDayFiltered(day: Date) {
+    return appForDay(day).filter(a => inferTipo(a.servizio) === 'tavolo')
   }
 
   async function handleSaveApp() {
@@ -252,7 +234,6 @@ export default function Calendario() {
     } catch { tavoloIdForPost = formApp.tavoloId }
 
     const payload = { ...formApp, tavoloId: tavoloIdForPost || null, data: new Date(`${formApp.data}T${formApp.ora}`).toISOString() }
-
     const res = await fetch('/api/appuntamenti', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -274,7 +255,6 @@ export default function Calendario() {
   }
 
   async function handleStatusApp(id: string, status: string) {
-    const app = appuntamenti.find(a => a.id === id)
     await fetch(`/api/appuntamenti/${id}`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -314,25 +294,13 @@ export default function Calendario() {
     setShowNuovo(true)
   }
 
-  const miniGrid = getMiniMonthGrid()
-  const weekLabel = (() => {
-    const fine = addDays(weekStart, 6)
-    if (weekStart.getMonth() === fine.getMonth())
-      return `${weekStart.getDate()}–${fine.getDate()} ${MESI[weekStart.getMonth()]} ${weekStart.getFullYear()}`
-    return `${weekStart.getDate()} ${MESI[weekStart.getMonth()]} – ${fine.getDate()} ${MESI[fine.getMonth()]} ${fine.getFullYear()}`
-  })()
-  function appForDayFiltered(day: Date) {
-    return appForDay(day).filter(a => inferTipo(a.servizio) === 'tavolo')
-  }
-
-  // ── Day view columns ──────────────────────────────────────
+  // ── Day view columns ──────────────────────────────────────────────────────
   const buildColumns = (day: Date) => {
     const dayApps = appForDayFiltered(day)
     if (tavoli.length > 0) {
       const tavoloOrdinato = [...tavoli].sort((a, b) => a.numero - b.numero)
       const tavoloIds = new Set(tavoloOrdinato.map(t => t.id))
       const senzaTavolo: Appuntamento[] = []
-
       const cols = tavoloOrdinato.map(t => {
         const primaryApps: Appuntamento[] = []
         const ghostApps: (Appuntamento & { ghost: true; primaryTavolo: string })[] = []
@@ -345,18 +313,12 @@ export default function Calendario() {
         })
         return { id: t.id, label: `T${t.numero}`, sublabel: `${t.posti} posti${t.note ? ` · ${t.note}` : ''}`, apps: primaryApps, ghostApps }
       })
-
-      // Raccogli appuntamenti senza tavolo o con tavoli eliminati
       dayApps.forEach(a => {
         const ids = getTavoliIds(a)
-        if (ids.length === 0 || !ids.some(id => tavoloIds.has(id))) {
-          senzaTavolo.push(a)
-        }
+        if (ids.length === 0 || !ids.some(id => tavoloIds.has(id))) senzaTavolo.push(a)
       })
-      if (senzaTavolo.length > 0) {
+      if (senzaTavolo.length > 0)
         cols.unshift({ id: '__nessun_tavolo__', label: 'Non assegnati', sublabel: 'da assegnare', apps: senzaTavolo, ghostApps: [] })
-      }
-
       return cols
     }
     return [{ id: 'all', label: 'Tavoli', sublabel: '', apps: dayApps }]
@@ -365,100 +327,130 @@ export default function Calendario() {
   const hoursGrid = Array.from({ length: hourEnd - hourStart + 1 }, (_, i) => hourStart + i)
   const fmtHour = (h: number) => h >= 24 ? '00:00' : `${String(h).padStart(2, '0')}:00`
 
+  // ── Month grid ────────────────────────────────────────────────────────────
+  const monthCells = (() => {
+    const anno = currentMonth.getFullYear(), mese = currentMonth.getMonth()
+    const primoGiorno = new Date(anno, mese, 1)
+    const ultimoGiorno = new Date(anno, mese + 1, 0)
+    const startOffset = (primoGiorno.getDay() + 6) % 7
+    const cells: (Date | null)[] = []
+    for (let i = 0; i < startOffset; i++) cells.push(null)
+    for (let d = 1; d <= ultimoGiorno.getDate(); d++) cells.push(new Date(anno, mese, d))
+    while (cells.length % 7 !== 0) cells.push(null)
+    return cells
+  })()
+
+  const dayLabel = `${GIORNI_FULL[currentDay.getDay()]} ${currentDay.getDate()} ${MESI[currentDay.getMonth()]} ${currentDay.getFullYear()}`
+  const isCurrentDayToday = isSameDay(currentDay, today)
+
   return (
-    <div className="max-w-6xl mx-auto">
+    <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-ink-navy">Calendario tavoli</h1>
-        <button onClick={() => openNuovoConData(today)}
-          className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90">
-          + Prenota tavolo
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Selettore vista */}
+          <div className="flex gap-1 bg-mist rounded-xl p-1">
+            {(['giorno', 'mese'] as const).map(v => (
+              <button key={v} onClick={() => setVista(v)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${vista === v ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                {v.charAt(0).toUpperCase() + v.slice(1)}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => openNuovoConData(currentDay)}
+            className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90">
+            + Prenota tavolo
+          </button>
+        </div>
       </div>
 
       {loading ? <div className="text-center text-ink-navy/35 py-12">Caricamento...</div> : (
-        <div>
 
-          {/* ── VISTA PRINCIPALE ── */}
-          <div className="min-w-0">
+        vista === 'giorno' ? (
+          /* ── VISTA GIORNO ──────────────────────────────────── */
+          <div>
+            {/* Nav giorno */}
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={() => setCurrentDay(d => addDays(d, -1))}
+                className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">‹</button>
+              <div className="flex-1 flex items-center justify-center gap-2">
+                <div className="relative">
+                  <button onClick={() => setCalDropOpen(v => !v)}
+                    className="text-sm font-semibold text-ink-navy/70 px-3 py-1.5 border border-ink-navy/10 rounded-lg hover:bg-mist transition-colors whitespace-nowrap capitalize">
+                    {dayLabel}
+                  </button>
+                  {calDropOpen && (
+                    <MiniCalDropdown
+                      selectedDay={currentDay}
+                      onSelect={d => setCurrentDay(d)}
+                      onClose={() => setCalDropOpen(false)}
+                    />
+                  )}
+                </div>
+                {!isCurrentDayToday && (
+                  <button onClick={() => setCurrentDay(new Date())}
+                    className="text-xs text-electric-blue hover:text-ink-navy font-medium py-1 px-2 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
+                    Oggi
+                  </button>
+                )}
+              </div>
+              <button onClick={() => setCurrentDay(d => addDays(d, 1))}
+                className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">›</button>
+            </div>
 
-            {viewDay ? (
-              /* ── DAY VIEW ── */
-              (() => {
-                const cols = buildColumns(viewDay)
-                const dayLabel = `${GIORNI_FULL[viewDay.getDay()]} ${viewDay.getDate()} ${MESI[viewDay.getMonth()]} ${viewDay.getFullYear()}`
-                const appsConfermati = appForDayFiltered(viewDay).filter(a => a.status === 'confermato')
-                const totalCoperti = appsConfermati.reduce((s, a) => s + (a.coperti ?? 1), 0)
-                const badgeCount = totalCoperti
-                const badgeLabel = 'coperti'
+            {/* Griglia tavoli */}
+            {(() => {
+              const cols = buildColumns(currentDay)
+              const appsConfermati = appForDayFiltered(currentDay).filter(a => a.status === 'confermato')
+              const totalCoperti = appsConfermati.reduce((s, a) => s + (a.coperti ?? 1), 0)
 
-                return (
-                  <div>
-                    {/* Nav giorno */}
-                    <div className="flex items-center gap-3 mb-4">
-                      <button onClick={() => setViewDay(null)}
-                        className="text-sm text-ink-navy/50 hover:text-ink-navy px-3 py-1.5 border border-ink-navy/10 rounded-lg hover:bg-mist transition-colors">
-                        ← Settimana
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setViewDay(d => addDays(d!, -1))} className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">‹</button>
-                        <span className="text-sm font-semibold text-ink-navy/70 capitalize">{dayLabel}</span>
-                        <button onClick={() => setViewDay(d => addDays(d!, 1))} className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">›</button>
-                      </div>
-                      {badgeCount > 0 && (
-                        <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">{badgeCount} {badgeLabel}</span>
-                      )}
+              return (
+                <>
+                  {totalCoperti > 0 && (
+                    <div className="mb-3">
+                      <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2.5 py-1 rounded-full">
+                        {totalCoperti} coperti confermati
+                      </span>
                     </div>
-
-                    {/* Timeline grid — unico contenitore scroll (x+y) con sticky header e sticky ore */}
-                    <div className="bg-white border border-ink-navy/10 rounded-xl overflow-auto"
-                      style={{ maxHeight: 'calc(100vh - 280px)', minWidth: 0 }}>
-                      <div style={{ minWidth: 56 + cols.length * 140 }}>
-
-                        {/* Header sticky in alto */}
-                        <div className="flex sticky top-0 z-20 border-b border-ink-navy/10">
-                          {/* Angolo fisso top-left */}
-                          <div className="w-14 shrink-0 sticky left-0 z-30 bg-mist border-r border-ink-navy/10" />
-                          {cols.map(col => (
-                            <div key={col.id} style={{ minWidth: 140 }}
-                              className="flex-1 px-3 py-2 bg-mist border-r border-ink-navy/10 last:border-r-0">
-                              <p className="text-xs font-bold text-ink-navy/70">{col.label}</p>
-                              {col.sublabel && <p className="text-[10px] text-ink-navy/35">{col.sublabel}</p>}
-                              {col.apps.length > 0 && (
-                                <p className="text-[10px] text-electric-blue font-semibold mt-0.5">{col.apps.length} prenotaz.</p>
-                              )}
+                  )}
+                  <div className="bg-white border border-ink-navy/10 rounded-xl overflow-auto"
+                    style={{ height: 'calc(100vh - 220px)', minWidth: 0 }}>
+                    <div style={{ minWidth: 56 + cols.length * 140 }}>
+                      {/* Header colonne */}
+                      <div className="flex sticky top-0 z-20 border-b border-ink-navy/10">
+                        <div className="w-14 shrink-0 sticky left-0 z-30 bg-mist border-r border-ink-navy/10" />
+                        {cols.map(col => (
+                          <div key={col.id} style={{ minWidth: 140 }}
+                            className="flex-1 px-3 py-2 bg-mist border-r border-ink-navy/10 last:border-r-0">
+                            <p className="text-xs font-bold text-ink-navy/70">{col.label}</p>
+                            {col.sublabel && <p className="text-[10px] text-ink-navy/35">{col.sublabel}</p>}
+                            {col.apps.length > 0 && (
+                              <p className="text-[10px] text-electric-blue font-semibold mt-0.5">{col.apps.length} prenotaz.</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {/* Body */}
+                      <div className="flex">
+                        <div className="w-14 shrink-0 sticky left-0 z-20 bg-white border-r border-ink-navy/10 relative"
+                          style={{ height: (hourEnd - hourStart) * PX_PER_HOUR }}>
+                          {hoursGrid.map(h => (
+                            <div key={h} className="absolute left-0 right-0 flex items-start justify-end pr-2"
+                              style={{ top: (h - hourStart) * PX_PER_HOUR }}>
+                              <span className="text-[10px] font-semibold text-ink-navy/30 -mt-2">{fmtHour(h)}</span>
                             </div>
                           ))}
                         </div>
-
-                        {/* Body */}
-                        <div className="flex">
-                          {/* Colonna ore sticky a sinistra */}
-                          <div className="w-14 shrink-0 sticky left-0 z-20 bg-white border-r border-ink-navy/10 relative"
-                            style={{ height: (hourEnd - hourStart) * PX_PER_HOUR }}>
-                            {hoursGrid.map(h => (
-                              <div key={h} className="absolute left-0 right-0 flex items-start justify-end pr-2"
-                                style={{ top: (h - hourStart) * PX_PER_HOUR }}>
-                                <span className="text-[10px] font-semibold text-ink-navy/30 -mt-2">{fmtHour(h)}</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Colonne appuntamenti */}
-                          {cols.map(col => (
-                            <div key={col.id} className="relative flex-1 border-r border-ink-navy/10 last:border-r-0"
-                              style={{ minWidth: 140, height: (hourEnd - hourStart) * PX_PER_HOUR }}>
-                            {/* Linee orarie */}
+                        {cols.map(col => (
+                          <div key={col.id} className="relative flex-1 border-r border-ink-navy/10 last:border-r-0"
+                            style={{ minWidth: 140, height: (hourEnd - hourStart) * PX_PER_HOUR }}>
                             {hoursGrid.map(h => (
                               <div key={h}>
-                                <div className="absolute left-0 right-0 border-t border-ink-navy/8"
-                                  style={{ top: (h - hourStart) * PX_PER_HOUR }} />
-                                <div className="absolute left-0 right-0 border-t border-dashed border-ink-navy/5"
-                                  style={{ top: (h - hourStart) * PX_PER_HOUR + PX_PER_HOUR / 2 }} />
+                                <div className="absolute left-0 right-0 border-t border-ink-navy/8" style={{ top: (h - hourStart) * PX_PER_HOUR }} />
+                                <div className="absolute left-0 right-0 border-t border-dashed border-ink-navy/5" style={{ top: (h - hourStart) * PX_PER_HOUR + PX_PER_HOUR / 2 }} />
                               </div>
                             ))}
-
-                            {/* Prenotazioni primarie */}
                             {layoutApps(col.apps).map(({ a, col: subCol, total }) => {
                               const tipo = inferTipo(a.servizio)
                               const ts = TIPO_STYLE[tipo]
@@ -504,8 +496,6 @@ export default function Calendario() {
                                 </div>
                               )
                             })}
-
-                            {/* Ghost: tavoli secondari di una prenotazione multi-tavolo */}
                             {('ghostApps' in col ? col.ghostApps as (Appuntamento & { ghost: true; primaryTavolo: string })[] : []).map(a => {
                               const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
                               const dt = new Date(a.data)
@@ -514,174 +504,118 @@ export default function Calendario() {
                               const height = Math.max((a.durata / 60) * PX_PER_HOUR, 28)
                               return (
                                 <div key={`ghost-${a.id}`}
-                                  style={{
-                                    position: 'absolute', top, height,
-                                    left: `calc(2px)`, width: `calc(100% - 4px)`,
-                                    borderLeftWidth: 3, borderLeftColor: '#94a3b8',
-                                  }}
+                                  style={{ position: 'absolute', top, height, left: '2px', width: 'calc(100% - 4px)', borderLeftWidth: 3, borderLeftColor: '#94a3b8' }}
                                   onClick={() => setSelected(a)}
                                   className={`${sc.bg} opacity-40 rounded-r-lg px-1.5 py-1 cursor-pointer hover:opacity-60 transition-all overflow-hidden z-10`}>
-                                  {height <= 36 ? (
-                                    <p className="text-[10px] font-bold text-ink-navy/60 truncate">↑ {a.primaryTavolo}</p>
-                                  ) : (
-                                    <>
-                                      <p className="text-[10px] font-bold text-ink-navy/60">↑ {a.primaryTavolo}</p>
-                                      <p className="text-[10px] text-ink-navy/40 truncate">{a.clienteNome || 'Cliente'}</p>
-                                    </>
-                                  )}
+                                  {height <= 36
+                                    ? <p className="text-[10px] font-bold text-ink-navy/60 truncate">↑ {a.primaryTavolo}</p>
+                                    : <><p className="text-[10px] font-bold text-ink-navy/60">↑ {a.primaryTavolo}</p><p className="text-[10px] text-ink-navy/40 truncate">{a.clienteNome || 'Cliente'}</p></>
+                                  }
                                 </div>
                               )
                             })}
                           </div>
                         ))}
-                        </div>{/* fine Body */}
-                      </div>{/* fine min-width wrapper */}
+                      </div>
                     </div>
                   </div>
-                )
-              })()
-            ) : (
-              /* ── WEEK VIEW ── */
-              <div>
-                <div className="flex items-center mb-3 gap-2">
-                  <button onClick={() => setWeekStart(d => addDays(d, -7))}
-                    className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">‹</button>
-                  <div className="flex-1 flex items-center justify-center gap-2">
-                    <div className="relative">
-                      <button onClick={() => setCalDropOpen(v => !v)}
-                        className="text-sm font-semibold text-ink-navy/70 px-3 py-1.5 border border-ink-navy/10 rounded-lg hover:bg-mist transition-colors whitespace-nowrap">
-                        {weekLabel}
-                      </button>
-                      {calDropOpen && (
-                        <MiniCalDropdown
-                          selectedDay={viewDay ?? weekStart}
-                          onSelect={d => { jumpToDay(d); setViewDay(d) }}
-                          onClose={() => setCalDropOpen(false)}
-                        />
+                </>
+              )
+            })()}
+          </div>
+
+        ) : (
+          /* ── VISTA MESE ──────────────────────────────────────── */
+          <div className="max-w-5xl">
+            {/* Nav mese */}
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={() => setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth()-1, 1))}
+                className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">‹</button>
+              <div className="flex-1 flex items-center justify-center gap-2">
+                <span className="text-sm font-semibold text-ink-navy/70">
+                  {MESI[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+                </span>
+                {!(currentMonth.getMonth() === today.getMonth() && currentMonth.getFullYear() === today.getFullYear()) && (
+                  <button onClick={() => setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1))}
+                    className="text-xs text-electric-blue hover:text-ink-navy font-medium py-1 px-2 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
+                    Oggi
+                  </button>
+                )}
+              </div>
+              <button onClick={() => setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth()+1, 1))}
+                className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">›</button>
+            </div>
+
+            {/* Intestazione giorni */}
+            <div className="grid grid-cols-7 mb-2">
+              {GIORNI_SHORT.map(g => (
+                <div key={g} className="text-center text-xs font-semibold text-ink-navy/35 py-1">{g}</div>
+              ))}
+            </div>
+
+            {/* Celle del mese */}
+            <div className="grid grid-cols-7 gap-1.5">
+              {monthCells.map((day, i) => {
+                if (!day) return <div key={i} />
+                const dayApps = appForDayFiltered(day)
+                const isT = isSameDay(day, today)
+                const isPast = day < today && !isT
+                const confermati = dayApps.filter(a => a.status === 'confermato')
+                const totalCoperti = confermati.reduce((s, a) => s + (a.coperti ?? 1), 0)
+
+                return (
+                  <button key={i}
+                    onClick={() => { setCurrentDay(day); setVista('giorno') }}
+                    className={`min-h-24 rounded-xl text-left transition-colors border flex flex-col overflow-hidden ${
+                      isT ? 'bg-electric-blue border-electric-blue' :
+                      isPast ? 'bg-mist/60 border-ink-navy/8' :
+                      dayApps.length > 0 ? 'bg-white border-electric-blue/20 hover:border-electric-blue/50 hover:bg-electric-blue/5' :
+                      'bg-white border-ink-navy/8 hover:bg-mist'
+                    }`}>
+                    {/* Header cella */}
+                    <div className={`px-2 pt-2 pb-1 flex items-baseline justify-between border-b ${isT ? 'border-white/20' : 'border-ink-navy/8'}`}>
+                      <p className={`text-sm font-bold leading-tight ${isT ? 'text-white' : isPast ? 'text-ink-navy/30' : 'text-ink-navy'}`}>
+                        {day.getDate()}
+                      </p>
+                      {totalCoperti > 0 && (
+                        <span className={`text-[10px] font-bold ${isT ? 'text-white/70' : 'text-ink-navy/40'}`}>
+                          {totalCoperti}p
+                        </span>
                       )}
                     </div>
-                    {!isSameDay(weekStart, getMonday(today)) && (
-                      <button onClick={() => { setWeekStart(getMonday(today)); setViewDay(null) }}
-                        className="text-xs text-electric-blue hover:text-ink-navy font-medium py-1 px-2 border border-electric-blue/25 rounded-lg hover:bg-electric-blue/10">
-                        Oggi
-                      </button>
-                    )}
-                  </div>
-                  <button onClick={() => setWeekStart(d => addDays(d, 7))}
-                    className="text-ink-navy/35 hover:text-ink-navy/70 px-1.5 py-1 rounded hover:bg-mist">›</button>
-                </div>
-
-                <div className="grid grid-cols-7 gap-2">
-                  {weekDays.map((day, di) => {
-                    const dayApps = appForDayFiltered(day)
-                    const isT = isSameDay(day, today)
-                    const isPast = day < today && !isT
-
-                    const chips: { label: string; color: string }[] = []
-                    if (dayApps.length > 0)
-                      chips.push({ label: `${dayApps.length} tav.`, color: TIPO_STYLE.tavolo.barColor })
-
-                    return (
-                      <div key={di} onClick={() => setViewDay(day)}
-                        className={`min-h-28 rounded-xl cursor-pointer transition-colors border flex flex-col ${
-                          isT ? 'bg-electric-blue border-electric-blue text-white' :
-                          isPast ? 'bg-mist border-ink-navy/8 text-ink-navy/35' :
-                          dayApps.length > 0 ? 'bg-white border-electric-blue/20 hover:border-electric-blue/50 hover:bg-electric-blue/5' :
-                          'bg-white border-ink-navy/8 hover:bg-mist'
-                        }`}>
-                        <div className="px-2 pt-2 pb-1 text-center border-b border-ink-navy/8">
-                          <p className={`text-[10px] font-semibold uppercase tracking-wider ${isT ? 'text-white/70' : 'text-ink-navy/40'}`}>{GIORNI_SHORT[di]}</p>
-                          <p className={`text-lg font-bold leading-tight ${isT ? 'text-white' : 'text-ink-navy'}`}>{day.getDate()}</p>
-                        </div>
-                        <div className="flex flex-col gap-1 p-2 flex-1">
-                          {chips.length === 0
-                            ? <p className={`text-[10px] text-center mt-2 ${isT ? 'text-white/40' : 'text-ink-navy/20'}`}>—</p>
-                            : chips.map(chip => (
-                              <div key={chip.label} className={`rounded px-1.5 py-1 border-l-2 ${isT ? 'bg-white/20' : 'bg-ink-navy/5'}`}
-                                style={{ borderLeftColor: isT ? 'white' : chip.color }}>
-                                <p className={`text-[11px] font-bold ${isT ? 'text-white' : 'text-ink-navy/70'}`}>{chip.label}</p>
-                              </div>
-                            ))
-                          }
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── VISTA MENSILE ── */}
-      {vistaMessile && (() => {
-        const anno = miniMonth.getFullYear(), mese = miniMonth.getMonth()
-        const primoGiorno = new Date(anno, mese, 1)
-        const ultimoGiorno = new Date(anno, mese + 1, 0)
-        const startOffset = (primoGiorno.getDay() + 6) % 7
-        const celle: (Date | null)[] = []
-        for (let i = 0; i < startOffset; i++) celle.push(null)
-        for (let d = 1; d <= ultimoGiorno.getDate(); d++) celle.push(new Date(anno, mese, d))
-        while (celle.length % 7 !== 0) celle.push(null)
-        return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-ink-navy/8">
-                <button onClick={() => setMiniMonth(m => new Date(m.getFullYear(), m.getMonth()-1, 1))} className="text-ink-navy/35 hover:text-ink-navy/70 text-lg px-2">‹</button>
-                <h2 className="text-lg font-bold text-ink-navy">{MESI[mese]} {anno}</h2>
-                <button onClick={() => setMiniMonth(m => new Date(m.getFullYear(), m.getMonth()+1, 1))} className="text-ink-navy/35 hover:text-ink-navy/70 text-lg px-2">›</button>
-                <button onClick={() => setVistaMensile(false)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl ml-4">✕</button>
-              </div>
-              <div className="p-4">
-                <div className="grid grid-cols-7 mb-2">
-                  {GIORNI_SHORT.map(g => <div key={g} className="text-center text-xs font-semibold text-ink-navy/35 py-1">{g}</div>)}
-                </div>
-                <div className="grid grid-cols-7 gap-1">
-                  {celle.map((day, i) => {
-                    if (!day) return <div key={i} />
-                    const dayApps = appForDayFiltered(day)
-                    const isT = isSameDay(day, today)
-                    const isPast = day < today && !isT
-                    return (
-                      <button key={i} onClick={() => { setVistaMensile(false); setViewDay(day); jumpToDay(day) }}
-                        className={`relative rounded-xl p-1.5 min-h-16 text-left transition-colors border ${
-                          isT ? 'bg-electric-blue border-electric-blue text-white' :
-                          isPast ? 'bg-mist border-ink-navy/8 text-ink-navy/35' :
-                          dayApps.length > 0 ? 'bg-white border-electric-blue/15 hover:border-electric-blue/40 hover:bg-electric-blue/10' :
-                          'bg-white border-ink-navy/8 hover:bg-mist'
-                        }`}>
-                        <p className={`text-xs font-bold mb-1 ${isT ? 'text-white' : isPast ? 'text-ink-navy/35' : 'text-ink-navy/70'}`}>{day.getDate()}</p>
-                        {dayApps.length > 0 && (
-                          <div className="space-y-0.5">
-                            {dayApps.slice(0, 2).map(a => {
-                              const tipo = inferTipo(a.servizio)
-                              const ts = TIPO_STYLE[tipo]
-                              const sc2 = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
+                    {/* Prenotazioni */}
+                    <div className="flex flex-col gap-0.5 p-1.5 flex-1">
+                      {dayApps.length === 0
+                        ? <p className={`text-[10px] text-center mt-1 ${isT ? 'text-white/30' : 'text-ink-navy/15'}`}>—</p>
+                        : <>
+                            {dayApps.slice(0, 3).map(a => {
                               const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                              const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
                               return (
-                                <div key={a.id} className={`${isT ? 'bg-white/20' : sc2.bg} rounded px-1 py-0.5 border-l-2`}
-                                  style={{ borderLeftColor: isT ? 'white' : ts.barColor }}>
+                                <div key={a.id}
+                                  className={`rounded px-1 py-0.5 border-l-2 ${isT ? 'bg-white/20' : sc.bg}`}
+                                  style={{ borderLeftColor: isT ? 'rgba(255,255,255,0.6)' : TIPO_STYLE.tavolo.barColor }}>
                                   <p className={`text-[10px] font-semibold truncate leading-tight ${isT ? 'text-white' : 'text-ink-navy'}`}>
-                                    {ora} {a.clienteNome?.split(' ')[0]}
+                                    {ora} {a.clienteNome?.split(' ')[0] || '—'}
                                   </p>
                                 </div>
                               )
                             })}
-                            {dayApps.length > 2 && (
-                              <p className={`text-[10px] font-semibold ${isT ? 'text-white/60' : 'text-ink-navy/35'}`}>+{dayApps.length - 2} altri</p>
+                            {dayApps.length > 3 && (
+                              <p className={`text-[10px] font-semibold px-1 ${isT ? 'text-white/60' : 'text-ink-navy/35'}`}>
+                                +{dayApps.length - 3} altri
+                              </p>
                             )}
-                          </div>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+                          </>
+                      }
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )
-      })()}
+      )}
 
       {/* ── DETTAGLIO APPUNTAMENTO ── */}
       {selected && (() => {
@@ -815,45 +749,6 @@ export default function Calendario() {
       {/* ── NUOVO APPUNTAMENTO ── */}
       {showNuovo && (() => {
         const inp = 'w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue'
-
-        // Campi comuni: cliente + data/ora
-        const campiBase = (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome cliente *</label>
-                <input type="text" placeholder="Mario Rossi" value={formApp.clienteNome}
-                  onChange={e => setFormApp(f => ({ ...f, clienteNome: e.target.value }))} className={inp} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email</label>
-                <input type="email" placeholder="mario@email.com" value={formApp.clienteEmail}
-                  onChange={e => setFormApp(f => ({ ...f, clienteEmail: e.target.value }))} className={inp} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data *</label>
-                <input type="date" value={formApp.data}
-                  onChange={e => setFormApp(f => ({ ...f, data: e.target.value }))} className={inp} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora *</label>
-                <input type="time" value={formApp.ora}
-                  onChange={e => setFormApp(f => ({ ...f, ora: e.target.value }))} className={inp} />
-              </div>
-            </div>
-          </>
-        )
-
-        const campiNote = (
-          <div>
-            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note interne</label>
-            <textarea value={formApp.note} onChange={e => setFormApp(f => ({ ...f, note: e.target.value }))}
-              rows={2} className={`${inp} resize-none`} />
-          </div>
-        )
-
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 my-4">
@@ -861,79 +756,103 @@ export default function Calendario() {
                 <h2 className="text-lg font-bold text-ink-navy">Nuova prenotazione tavolo</h2>
                 <button onClick={() => setShowNuovo(false)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
               </div>
-
               <div className="space-y-3">
-                {campiBase}
-
                 <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">N° persone</label>
-                      <input type="number" min={1} value={formApp.coperti}
-                        onChange={e => setFormApp(f => ({ ...f, coperti: Number(e.target.value) }))} className={inp} />
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome cliente *</label>
+                    <input type="text" placeholder="Mario Rossi" value={formApp.clienteNome}
+                      onChange={e => setFormApp(f => ({ ...f, clienteNome: e.target.value }))} className={inp} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email</label>
+                    <input type="email" placeholder="mario@email.com" value={formApp.clienteEmail}
+                      onChange={e => setFormApp(f => ({ ...f, clienteEmail: e.target.value }))} className={inp} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data *</label>
+                    <input type="date" value={formApp.data}
+                      onChange={e => setFormApp(f => ({ ...f, data: e.target.value }))} className={inp} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora *</label>
+                    <input type="time" value={formApp.ora}
+                      onChange={e => setFormApp(f => ({ ...f, ora: e.target.value }))} className={inp} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">N° persone</label>
+                    <input type="number" min={1} value={formApp.coperti}
+                      onChange={e => setFormApp(f => ({ ...f, coperti: Number(e.target.value) }))} className={inp} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Durata</label>
+                    <select value={formApp.durata} onChange={e => setFormApp(f => ({ ...f, durata: Number(e.target.value) }))} className={inp}>
+                      {[60, 90, 120, 150, 180].map(d => <option key={d} value={d}>{d} min</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Allergie</label>
+                    <input type="text" placeholder="nessuna" value={formApp.allergie}
+                      onChange={e => setFormApp(f => ({ ...f, allergie: e.target.value }))} className={inp} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Occasione</label>
+                    <input type="text" placeholder="compleanno…" value={formApp.occasione}
+                      onChange={e => setFormApp(f => ({ ...f, occasione: e.target.value }))} className={inp} />
+                  </div>
+                </div>
+                {tavoli.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-sm font-medium text-ink-navy/70">Tavoli</label>
+                      {(() => {
+                        const ids: string[] = (() => { try { return formApp.tavoloId ? JSON.parse(formApp.tavoloId) : [] } catch { return formApp.tavoloId ? [formApp.tavoloId] : [] } })()
+                        return ids.length >= 2 ? <span className="text-xs font-bold text-orange-600">T{tavoli.filter(t=>ids.includes(t.id)).sort((a,b)=>a.numero-b.numero).map(t=>t.numero).join('+')} — fusi</span> : null
+                      })()}
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">Durata</label>
-                      <select value={formApp.durata} onChange={e => setFormApp(f => ({ ...f, durata: Number(e.target.value) }))} className={inp}>
-                        {[60, 90, 120, 150, 180].map(d => <option key={d} value={d}>{d} min</option>)}
-                      </select>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      {tavoli.map(t => {
+                        const selIds: string[] = (() => { try { return formApp.tavoloId ? JSON.parse(formApp.tavoloId) : [] } catch { return formApp.tavoloId ? [formApp.tavoloId] : [] } })()
+                        const checked = selIds.includes(t.id)
+                        const selStart = formApp.data && formApp.ora ? new Date(`${formApp.data}T${formApp.ora}`).getTime() : null
+                        const selEnd = selStart ? selStart + formApp.durata * 60000 : null
+                        const occupato = !checked && selStart !== null && selEnd !== null && appuntamenti.some(a => {
+                          if (a.status === 'cancellato') return false
+                          const usa = a.tavoloId === t.id || (() => { try { return (JSON.parse(a.tavoliIds ?? '[]') as string[]).includes(t.id) } catch { return false } })()
+                          if (!usa) return false
+                          const aStart = new Date(a.data).getTime()
+                          return aStart < selEnd! && (aStart + a.durata * 60000) > selStart!
+                        })
+                        return (
+                          <label key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${occupato ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60' : checked ? 'border-electric-blue/40 bg-electric-blue/10 cursor-pointer' : 'border-ink-navy/10 hover:bg-mist cursor-pointer'}`}>
+                            <input type="checkbox" checked={checked} disabled={occupato}
+                              onChange={e => {
+                                const newIds = e.target.checked ? [...selIds, t.id] : selIds.filter(id => id !== t.id)
+                                setFormApp(f => ({ ...f, tavoloId: newIds.length === 0 ? '' : newIds.length === 1 ? newIds[0] : JSON.stringify(newIds) }))
+                              }}
+                              className="accent-electric-blue w-4 h-4 shrink-0" />
+                            <span className="text-sm text-ink-navy/70 flex-1">
+                              <span className="font-semibold">T{t.numero}</span>
+                              <span className="text-ink-navy/35"> · {t.posti}p{t.note ? ` · ${t.note}` : ''}</span>
+                            </span>
+                            {occupato && <span className="text-xs text-red-500">occupato</span>}
+                          </label>
+                        )
+                      })}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">Allergie</label>
-                      <input type="text" placeholder="nessuna" value={formApp.allergie}
-                        onChange={e => setFormApp(f => ({ ...f, allergie: e.target.value }))} className={inp} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">Occasione</label>
-                      <input type="text" placeholder="compleanno…" value={formApp.occasione}
-                        onChange={e => setFormApp(f => ({ ...f, occasione: e.target.value }))} className={inp} />
-                    </div>
-                  </div>
-                  {tavoli.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-sm font-medium text-ink-navy/70">Tavoli</label>
-                        {(() => {
-                          const ids: string[] = (() => { try { return formApp.tavoloId ? JSON.parse(formApp.tavoloId) : [] } catch { return formApp.tavoloId ? [formApp.tavoloId] : [] } })()
-                          return ids.length >= 2 ? <span className="text-xs font-bold text-orange-600">T{tavoli.filter(t=>ids.includes(t.id)).sort((a,b)=>a.numero-b.numero).map(t=>t.numero).join('+')} — fusi</span> : null
-                        })()}
-                      </div>
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                        {tavoli.map(t => {
-                          const selIds: string[] = (() => { try { return formApp.tavoloId ? JSON.parse(formApp.tavoloId) : [] } catch { return formApp.tavoloId ? [formApp.tavoloId] : [] } })()
-                          const checked = selIds.includes(t.id)
-                          const selStart = formApp.data && formApp.ora ? new Date(`${formApp.data}T${formApp.ora}`).getTime() : null
-                          const selEnd = selStart ? selStart + formApp.durata * 60000 : null
-                          const occupato = !checked && selStart !== null && selEnd !== null && appuntamenti.some(a => {
-                            if (a.status === 'cancellato') return false
-                            const usa = a.tavoloId === t.id || (() => { try { return (JSON.parse(a.tavoliIds ?? '[]') as string[]).includes(t.id) } catch { return false } })()
-                            if (!usa) return false
-                            const aStart = new Date(a.data).getTime()
-                            return aStart < selEnd! && (aStart + a.durata * 60000) > selStart!
-                          })
-                          return (
-                            <label key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${occupato ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60' : checked ? 'border-electric-blue/40 bg-electric-blue/10 cursor-pointer' : 'border-ink-navy/10 hover:bg-mist cursor-pointer'}`}>
-                              <input type="checkbox" checked={checked} disabled={occupato}
-                                onChange={e => {
-                                  const newIds = e.target.checked ? [...selIds, t.id] : selIds.filter(id => id !== t.id)
-                                  setFormApp(f => ({ ...f, tavoloId: newIds.length === 0 ? '' : newIds.length === 1 ? newIds[0] : JSON.stringify(newIds) }))
-                                }}
-                                className="accent-electric-blue w-4 h-4 shrink-0" />
-                              <span className="text-sm text-ink-navy/70 flex-1">
-                                <span className="font-semibold">T{t.numero}</span>
-                                <span className="text-ink-navy/35"> · {t.posti}p{t.note ? ` · ${t.note}` : ''}</span>
-                              </span>
-                              {occupato && <span className="text-xs text-red-500">occupato</span>}
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                {campiNote}
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note interne</label>
+                  <textarea value={formApp.note} onChange={e => setFormApp(f => ({ ...f, note: e.target.value }))}
+                    rows={2} className={`${inp} resize-none`} />
+                </div>
               </div>
-
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setShowNuovo(false)}
                   className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">

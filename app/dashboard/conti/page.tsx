@@ -281,7 +281,7 @@ export default function ContiPage() {
   const [loading, setLoading] = useState(true)
   const [chiusiAperti, setChiusiAperti] = useState(false)
   const [dataFiltro, setDataFiltro] = useState(todayKey)
-  const [filtroTipo, setFiltroTipo] = useState<'tutti' | 'tavolo' | 'asporto' | 'delivery'>('tutti')
+  const [filtroTipo, setFiltroTipo] = useState<'tavolo' | 'asporto' | 'delivery'>('tavolo')
   const [calOpen, setCalOpen] = useState(false)
   const [modificando, setModificando] = useState<Ordine | null>(null)
 
@@ -306,13 +306,17 @@ export default function ContiPage() {
   const isTavolo = (o: Ordine) => o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
   const isDone = (o: Ordine) => o.status === 'chiuso' || o.status === 'consegnato'
   const matchesFiltro = (o: Ordine) => {
-    if (filtroTipo === 'tutti') return true
     if (filtroTipo === 'tavolo') return isTavolo(o)
     if (filtroTipo === 'delivery') return o.tipo === 'delivery'
     return !isTavolo(o) && o.tipo !== 'delivery' // asporto
   }
   const aperti = ordini.filter(o => !isDone(o) && matchesFiltro(o))
   const chiusi = ordini.filter(o => isDone(o) && matchesFiltro(o))
+  const countAperti = {
+    tavolo: ordini.filter(o => !isDone(o) && isTavolo(o)).length,
+    asporto: ordini.filter(o => !isDone(o) && !isTavolo(o) && o.tipo !== 'delivery').length,
+    delivery: ordini.filter(o => !isDone(o) && o.tipo === 'delivery').length,
+  }
   const totaleAperti = aperti.reduce((s, o) => s + o.totale, 0)
   const totaleChiusi = chiusi.reduce((s, o) => s + o.totale, 0)
 
@@ -368,7 +372,7 @@ export default function ContiPage() {
       ? { border: 'border-amber-300', bg: 'bg-amber-50', text: 'text-amber-800', badge: null }
       : o.tipo === 'delivery'
         ? { border: 'border-teal-300', bg: 'bg-teal-50', text: 'text-teal-800', badge: 'Delivery' }
-        : { border: 'border-violet-300', bg: 'bg-violet-50', text: 'text-violet-800', badge: 'Asporto' }
+        : { border: 'border-ink-navy/20', bg: 'bg-ink-navy/5', text: 'text-ink-navy/70', badge: 'Asporto' }
 
     const cardBorder = aperto ? headerTheme.border : 'border-ink-navy/10'
 
@@ -378,7 +382,7 @@ export default function ContiPage() {
           <div className="flex items-center gap-2">
             <span className={`text-sm font-bold ${aperto ? headerTheme.text : 'text-ink-navy/50'}`}>{o.tavolo}</span>
             {headerTheme.badge && aperto && (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${o.tipo === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'}`}>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${o.tipo === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-ink-navy/10 text-ink-navy/60'}`}>
                 {headerTheme.badge}
               </span>
             )}
@@ -394,7 +398,7 @@ export default function ContiPage() {
               isTavolo(o) ? (
                 <button onClick={() => { setCopertiModal(o); setCopertiValue(2) }} disabled={chiudendo === o.id}
                   className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
-                  {chiudendo === o.id ? '…' : 'Pronto'}
+                  {chiudendo === o.id ? '…' : 'Chiudi'}
                 </button>
               ) : (
                 <button onClick={() => segnaPronte(o)} disabled={chiudendo === o.id}
@@ -482,12 +486,20 @@ export default function ContiPage() {
 
       {/* Filtro tipo */}
       <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
-        {(['tutti', 'tavolo', 'asporto', 'delivery'] as const).map(t => (
-          <button key={t} onClick={() => setFiltroTipo(t)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${filtroTipo === t ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
-            {t === 'tutti' ? 'Tutti' : t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
+        {(['tavolo', 'asporto', 'delivery'] as const).map(t => {
+          const count = countAperti[t]
+          return (
+            <button key={t} onClick={() => setFiltroTipo(t)}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${filtroTipo === t ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+              {count > 0 && (
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${filtroTipo === t ? 'bg-electric-blue text-white' : 'bg-ink-navy/10 text-ink-navy/50'}`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Aperti */}
