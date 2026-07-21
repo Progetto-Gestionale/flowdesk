@@ -350,7 +350,7 @@ export default function AnalyticsPage() {
   const [riferimentoAdv, setRiferimentoAdv] = useState<Date>(new Date())
   const [calendarioAdvAperto, setCalendarioAdvAperto] = useState(false)
 
-  interface BucketAdv { data: string; incasso: number; ordini: number; coperti: number; asporto: number; delivery: number }
+  interface BucketAdv { data: string; incasso: number; ordini: number; coperti: number; asporto: number; delivery: number; incassoAsporto?: number; incassoDelivery?: number }
   interface DatiTavoliAdv {
     totaleIncasso: number; totaleOrdini: number; copertiConfermati: number
     copertiPrenotazione: number; copertiWalkIn: number
@@ -360,7 +360,10 @@ export default function AnalyticsPage() {
   interface DatiOrdiniAdv {
     totaleIncasso: number; totaleOrdini: number; asportoCount: number; deliveryCount: number
     spesaMedia: number; tassoNonConsegnati: number
-    andamento: BucketAdv[]; fasceOrarie: { ora: string; count: number }[]
+    tempoMedioConsegnaMin: number; consegneMisurate: number
+    andamento: BucketAdv[]
+    fasceAsporto: { ora: string; count: number }[]
+    fasceDelivery: { ora: string; count: number }[]
   }
   interface PiattoAdv { id: string; nome: string; quantita: number; incasso: number; categoria: string }
   interface CategoriaAdv { nome: string; ordine: number; piatti: PiattoAdv[] }
@@ -593,6 +596,38 @@ export default function AnalyticsPage() {
       })
     }
     return weeks.reverse()
+  }
+
+  // Buckets pronti per i grafici a barre: in vista MESE raggruppa per settimana (7 giorni),
+  // cronologico (sx→dx). Altrimenti un bucket per giorno/mese. (task: mensile per settimana)
+  type BucketGrafico = { key: string; label: string; incasso: number; coperti: number; ordini: number; asporto: number; delivery: number; incassoAsporto: number; incassoDelivery: number }
+  function bucketsGrafico(andamento: BucketAdv[]): BucketGrafico[] {
+    if (periodoAdv === 'mese') {
+      const out: BucketGrafico[] = []
+      for (let i = 0; i < andamento.length; i += 7) {
+        const slice = andamento.slice(i, i + 7)
+        if (slice.length === 0) continue
+        const from = new Date(slice[0].data + 'T12:00:00')
+        const to = new Date(slice[slice.length - 1].data + 'T12:00:00')
+        const label = `${from.getDate()}–${to.getDate()} ${to.toLocaleDateString('it-IT', { month: 'short' })}`
+        out.push({
+          key: slice[0].data, label,
+          incasso: slice.reduce((s, b) => s + b.incasso, 0),
+          coperti: slice.reduce((s, b) => s + b.coperti, 0),
+          ordini: slice.reduce((s, b) => s + b.ordini, 0),
+          asporto: slice.reduce((s, b) => s + b.asporto, 0),
+          delivery: slice.reduce((s, b) => s + b.delivery, 0),
+          incassoAsporto: slice.reduce((s, b) => s + (b.incassoAsporto ?? 0), 0),
+          incassoDelivery: slice.reduce((s, b) => s + (b.incassoDelivery ?? 0), 0),
+        })
+      }
+      return out
+    }
+    return andamento.map(b => ({
+      key: b.data, label: fmtDataAdv(b.data),
+      incasso: b.incasso, coperti: b.coperti, ordini: b.ordini, asporto: b.asporto, delivery: b.delivery,
+      incassoAsporto: b.incassoAsporto ?? 0, incassoDelivery: b.incassoDelivery ?? 0,
+    }))
   }
 
   function fmtEur(n: number) {
@@ -936,8 +971,9 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
           {loadingTavoliAdv && !datiTavoliAdv && <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>}
           {datiTavoliAdv && (() => {
             const d = datiTavoliAdv
-            const maxInc = Math.max(...d.andamento.map(b => b.incasso), 1)
-            const maxCop = Math.max(...d.andamento.map(b => b.coperti), 1)
+            const gb = bucketsGrafico(d.andamento)
+            const maxInc = Math.max(...gb.map(b => b.incasso), 1)
+            const maxCop = Math.max(...gb.map(b => b.coperti), 1)
             return (
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -958,19 +994,19 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                   ))}
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento incasso</h2>
-                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento incasso{periodoAdv === 'mese' ? ' (per settimana)' : ''}</h2>
+                  {gb.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
                     <div className="flex items-end gap-1.5" style={{ height: 140 }}>
-                      {d.andamento.map(b => {
+                      {gb.map(b => {
                         const h = Math.round((b.incasso / maxInc) * 120)
                         const barH = Math.max(h, b.incasso > 0 ? 4 : 0)
                         return (
-                          <div key={b.data} className="flex-1 flex flex-col items-center gap-1">
+                          <div key={b.key} className="flex-1 flex flex-col items-center gap-1">
                             <div className="w-full relative" style={{ height: '120px' }}>
                               {b.incasso > 0 && <span className="absolute text-xs text-ink-navy/50 font-medium leading-none left-0 right-0 text-center" style={{ bottom: barH + 4 }}>{fmtEur(b.incasso)}</span>}
                               <div className="absolute bottom-0 left-0 right-0 bg-emerald-500 rounded-t-lg" style={{ height: `${barH}px` }} />
                             </div>
-                            <span className="text-[10px] text-ink-navy/35 leading-none">{fmtDataAdv(b.data)}</span>
+                            <span className="text-[10px] text-ink-navy/35 leading-none text-center">{b.label}</span>
                           </div>
                         )
                       })}
@@ -978,19 +1014,19 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                   )}
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento coperti</h2>
-                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento coperti{periodoAdv === 'mese' ? ' (per settimana)' : ''}</h2>
+                  {gb.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
                     <div className="flex items-end gap-1.5" style={{ height: 140 }}>
-                      {d.andamento.map(b => {
+                      {gb.map(b => {
                         const h = Math.round((b.coperti / maxCop) * 120)
                         const barH = Math.max(h, b.coperti > 0 ? 4 : 0)
                         return (
-                          <div key={b.data} className="flex-1 flex flex-col items-center gap-1">
+                          <div key={b.key} className="flex-1 flex flex-col items-center gap-1">
                             <div className="w-full relative" style={{ height: '120px' }}>
                               {b.coperti > 0 && <span className="absolute text-xs text-ink-navy/50 font-medium leading-none left-0 right-0 text-center" style={{ bottom: barH + 4 }}>{b.coperti}</span>}
                               <div className="absolute bottom-0 left-0 right-0 bg-electric-blue rounded-t-lg" style={{ height: `${barH}px` }} />
                             </div>
-                            <span className="text-[10px] text-ink-navy/35 leading-none">{fmtDataAdv(b.data)}</span>
+                            <span className="text-[10px] text-ink-navy/35 leading-none text-center">{b.label}</span>
                           </div>
                         )
                       })}
@@ -1061,9 +1097,9 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
           {loadingOrdiniAdv && !datiOrdiniAdv && <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>}
           {datiOrdiniAdv && (() => {
             const d = datiOrdiniAdv
-            const maxInc = Math.max(...d.andamento.map(b => b.incasso), 1)
-            const maxOrd = Math.max(...d.andamento.map(b => b.ordini), 1)
-            const maxFascia = Math.max(...d.fasceOrarie.map(f => f.count), 1)
+            const gb = bucketsGrafico(d.andamento)
+            const maxIncTipo = Math.max(...gb.map(b => Math.max(b.incassoAsporto, b.incassoDelivery)), 1)
+            const maxFascia = Math.max(1, ...d.fasceAsporto.map(f => f.count), ...d.fasceDelivery.map(f => f.count))
             return (
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -1072,6 +1108,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                     { label: 'Totale ordini', val: String(d.totaleOrdini), sub: 'asporto + delivery', color: 'text-ink-navy' },
                     { label: 'Asporto', val: String(d.asportoCount), sub: 'ordini da ritirare', color: 'text-electric-blue' },
                     { label: 'Delivery', val: String(d.deliveryCount), sub: 'ordini a domicilio', color: 'text-electric-blue' },
+                    { label: 'Tempo medio consegna', val: fmtMin(d.tempoMedioConsegnaMin), sub: d.consegneMisurate > 0 ? `da pronto a consegnato · ${d.consegneMisurate} consegne` : 'da pronto a consegnato', color: 'text-purple-500' },
                     { label: 'Spesa media/ordine', val: fmtEur(d.spesaMedia), sub: 'incasso ÷ ordini', color: 'text-electric-blue' },
                     { label: 'Non consegnati', val: d.tassoNonConsegnati.toFixed(1) + '%', sub: 'annullati o non ritirati', color: d.tassoNonConsegnati > 10 ? 'text-red-500' : d.tassoNonConsegnati > 5 ? 'text-amber-500' : 'text-green-500' },
                   ].map(k => (
@@ -1083,19 +1120,29 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                   ))}
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-                  <h2 className="text-base font-semibold text-ink-navy mb-4">Andamento incasso</h2>
-                  {d.andamento.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
-                    <div className="flex items-end gap-1.5" style={{ height: 140 }}>
-                      {d.andamento.map(b => {
-                        const h = Math.round((b.incasso / maxInc) * 120)
-                        const barH = Math.max(h, b.incasso > 0 ? 4 : 0)
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <h2 className="text-base font-semibold text-ink-navy">Andamento incasso{periodoAdv === 'mese' ? ' (per settimana)' : ''}</h2>
+                    <div className="flex items-center gap-3 text-xs text-ink-navy/50">
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-electric-blue" />Asporto</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-purple-400" />Delivery</span>
+                    </div>
+                  </div>
+                  {gb.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                    <div className="flex items-end gap-2" style={{ height: 150 }}>
+                      {gb.map(b => {
+                        const hA = Math.max(Math.round((b.incassoAsporto / maxIncTipo) * 120), b.incassoAsporto > 0 ? 4 : 0)
+                        const hD = Math.max(Math.round((b.incassoDelivery / maxIncTipo) * 120), b.incassoDelivery > 0 ? 4 : 0)
                         return (
-                          <div key={b.data} className="flex-1 flex flex-col items-center gap-1">
-                            <div className="w-full relative" style={{ height: '120px' }}>
-                              {b.incasso > 0 && <span className="absolute text-xs text-ink-navy/50 font-medium leading-none left-0 right-0 text-center" style={{ bottom: barH + 4 }}>{fmtEur(b.incasso)}</span>}
-                              <div className="absolute bottom-0 left-0 right-0 bg-emerald-500 rounded-t-lg" style={{ height: `${barH}px` }} />
+                          <div key={b.key} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                            <div className="w-full flex items-end justify-center gap-0.5" style={{ height: '120px' }}>
+                              <div className="relative flex-1 max-w-[16px] h-full flex items-end" title={`Asporto ${fmtEur(b.incassoAsporto)}`}>
+                                <div className="w-full bg-electric-blue rounded-t" style={{ height: `${hA}px` }} />
+                              </div>
+                              <div className="relative flex-1 max-w-[16px] h-full flex items-end" title={`Delivery ${fmtEur(b.incassoDelivery)}`}>
+                                <div className="w-full bg-purple-400 rounded-t" style={{ height: `${hD}px` }} />
+                              </div>
                             </div>
-                            <span className="text-[10px] text-ink-navy/35 leading-none">{fmtDataAdv(b.data)}</span>
+                            <span className="text-[10px] text-ink-navy/35 leading-none text-center truncate w-full">{b.label}</span>
                           </div>
                         )
                       })}
@@ -1141,26 +1188,32 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                       )
                     })()}
                   </div>
-                  <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-                    <h2 className="text-base font-semibold text-ink-navy mb-4">Fasce orarie più richieste</h2>
-                    {d.fasceOrarie.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
-                      <div className="flex items-end gap-1" style={{ height: 120 }}>
-                        {d.fasceOrarie.map(f => {
-                          const h = Math.round((f.count / maxFascia) * 100)
-                          const barH = Math.max(h, f.count > 0 ? 3 : 0)
-                          return (
-                            <div key={f.ora} className="flex-1 flex flex-col items-center gap-1">
-                              <div className="w-full relative" style={{ height: '100px' }}>
-                                {f.count > 0 && <span className="absolute text-xs text-ink-navy/50 font-medium leading-none left-0 right-0 text-center" style={{ bottom: barH + 4 }}>{f.count}</span>}
-                                <div className="absolute bottom-0 left-0 right-0 bg-amber-400 rounded-t-sm" style={{ height: `${barH}px` }} />
+                  {([
+                    { titolo: 'Fasce orarie — Asporto', dati: d.fasceAsporto, barra: 'bg-electric-blue' },
+                    { titolo: 'Fasce orarie — Delivery', dati: d.fasceDelivery, barra: 'bg-purple-400' },
+                  ] as const).map(chart => (
+                    <div key={chart.titolo} className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                      <h2 className="text-base font-semibold text-ink-navy mb-1">{chart.titolo}</h2>
+                      <p className="text-xs text-ink-navy/35 mb-4">Ordini per ora di ritiro/consegna</p>
+                      {chart.dati.every(f => f.count === 0) ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
+                        <div className="flex items-end gap-1" style={{ height: 120 }}>
+                          {chart.dati.map(f => {
+                            const h = Math.round((f.count / maxFascia) * 100)
+                            const barH = Math.max(h, f.count > 0 ? 3 : 0)
+                            return (
+                              <div key={f.ora} className="flex-1 flex flex-col items-center gap-1">
+                                <div className="w-full relative" style={{ height: '100px' }}>
+                                  {f.count > 0 && <span className="absolute text-xs text-ink-navy/50 font-medium leading-none left-0 right-0 text-center" style={{ bottom: barH + 4 }}>{f.count}</span>}
+                                  <div className={`absolute bottom-0 left-0 right-0 ${chart.barra} rounded-t-sm`} style={{ height: `${barH}px` }} />
+                                </div>
+                                <span className="text-[10px] text-ink-navy/35 leading-none">{f.ora.slice(0, 5)}</span>
                               </div>
-                              <span className="text-[10px] text-ink-navy/35 leading-none">{f.ora.slice(0, 5)}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
                   <div className="px-6 py-4 border-b border-ink-navy/8">
