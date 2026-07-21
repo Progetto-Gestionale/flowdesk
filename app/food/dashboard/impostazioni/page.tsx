@@ -879,8 +879,6 @@ export default function Impostazioni() {
                   <button className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90">Passa a Pro</button>
                 </div>
               </div>
-
-              <SwitchVerticale />
             </Section>
           )}
 
@@ -923,46 +921,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       <label className="block text-sm font-medium text-ink-navy/70 mb-1">{label}</label>
       {children}
       {hint && <p className="text-xs text-ink-navy/35 mt-1">{hint}</p>}
-    </div>
-  )
-}
-
-function SwitchVerticale() {
-  const [verticale, setVerticale] = useState<'food' | 'care' | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/utente/me', { credentials: 'include' })
-      .then(r => r.json())
-      .then(u => setVerticale(u.verticale ?? 'food'))
-  }, [])
-
-  async function cambia(v: 'food' | 'care') {
-    setLoading(true)
-    await fetch('/api/utente/setup', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verticale: v }),
-    })
-    window.location.reload()
-  }
-
-  if (!verticale) return null
-  const altra = verticale === 'food' ? 'care' : 'food'
-  const label = altra === 'food' ? 'Flowest Food' : 'Flowest Care'
-
-  return (
-    <div className="border-t border-ink-navy/8 pt-4 mt-2">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-ink-navy/70">Verticale attiva: {verticale === 'food' ? 'Flowest Food' : 'Flowest Care'}</p>
-          <p className="text-xs text-ink-navy/35 mt-0.5">Cambia per accedere all&apos;altra versione del prodotto</p>
-        </div>
-        <button onClick={() => cambia(altra)} disabled={loading}
-          className="text-sm font-semibold px-4 py-2 rounded-lg border border-ink-navy/15 hover:bg-mist disabled:opacity-50 transition-colors">
-          {loading ? 'Cambio...' : `Passa a ${label}`}
-        </button>
-      </div>
     </div>
   )
 }
