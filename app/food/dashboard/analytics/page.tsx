@@ -349,6 +349,7 @@ export default function AnalyticsPage() {
   const [periodoAdv, setPeriodoAdv] = useState<PeriodoAdv>('settimana')
   const [riferimentoAdv, setRiferimentoAdv] = useState<Date>(new Date())
   const [calendarioAdvAperto, setCalendarioAdvAperto] = useState(false)
+  const [kpiAperta, setKpiAperta] = useState<string | null>(null) // tile KPI espansa (dettaglio giornaliero)
 
   interface BucketAdv { data: string; incasso: number; ordini: number; coperti: number; asporto: number; delivery: number; incassoAsporto?: number; incassoDelivery?: number }
   interface DatiTavoliAdv {
@@ -640,6 +641,45 @@ export default function AnalyticsPage() {
     const m = min % 60
     return m > 0 ? `${h}h ${m}min` : `${h}h`
   }
+
+  // Dettaglio giornaliero di una metrica (solo in vista settimanale): per ogni giorno
+  // dell'andamento restituisce { label giorno, valore formattato }.
+  type GiornoKpi = { label: string; value: string }
+  function dettaglioGiornaliero(andamento: BucketAdv[], fn: (b: BucketAdv) => string): GiornoKpi[] | undefined {
+    if (periodoAdv !== 'settimana') return undefined
+    return andamento.map(b => ({
+      label: new Date(b.data + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' }),
+      value: fn(b),
+    }))
+  }
+
+  // Tile KPI: in vista settimanale, se ha un dettaglio giornaliero è cliccabile e si espande.
+  function KpiTile({ label, val, sub, color, daily }: { label: string; val: string; sub: string; color: string; daily?: GiornoKpi[] }) {
+    const espandibile = periodoAdv === 'settimana' && !!daily && daily.length > 0
+    const aperta = kpiAperta === label
+    return (
+      <div
+        onClick={espandibile ? () => setKpiAperta(aperta ? null : label) : undefined}
+        className={`bg-white rounded-2xl border p-5 shadow-sm ${espandibile ? 'cursor-pointer hover:border-electric-blue/40 transition-colors' : 'border-ink-navy/10'} ${aperta ? 'border-electric-blue/50' : 'border-ink-navy/10'}`}>
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-xs text-ink-navy/50 uppercase tracking-wide">{label}</p>
+          {espandibile && <span className={`text-ink-navy/30 text-xs shrink-0 transition-transform ${aperta ? 'rotate-180' : ''}`}>▾</span>}
+        </div>
+        <p className={`text-3xl font-bold mt-1 ${color}`}>{val}</p>
+        <p className="text-xs text-ink-navy/35 mt-1">{sub}</p>
+        {espandibile && aperta && (
+          <div className="mt-3 pt-3 border-t border-ink-navy/8 space-y-1">
+            {daily!.map(g => (
+              <div key={g.label} className="flex items-center justify-between text-xs">
+                <span className="text-ink-navy/45 capitalize">{g.label}</span>
+                <span className="font-semibold text-ink-navy/70">{g.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
   function fmtDataAdv(s: string) {
     if (periodoAdv === 'anno') return new Date(s + '-01T12:00:00').toLocaleDateString('it-IT', { month: 'short' })
     const d = new Date(s + 'T12:00:00')
@@ -797,7 +837,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
 </tbody></table>
 <div style="margin-top:24px;font-size:11px;color:#aaa">Generato il ${new Date().toLocaleDateString('it-IT')}</div>
 </body></html>`
-    const win = window.open('', '_blank'); if (!win) return; win.document.write(html); win.document.close()
+    const win = window.open('', '_blank'); if (!win) return; win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 400)
   }
 
   function scaricaPdfOrdini() {
@@ -847,7 +887,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
 </tbody></table>
 <div style="margin-top:24px;font-size:11px;color:#aaa">Generato il ${new Date().toLocaleDateString('it-IT')}</div>
 </body></html>`
-    const win = window.open('', '_blank'); if (!win) return; win.document.write(html); win.document.close()
+    const win = window.open('', '_blank'); if (!win) return; win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 400)
   }
 
   // ── Dettaglio calcolato client-side ──────────────────────────────────────
@@ -978,19 +1018,16 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                   {[
-                    { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600' },
-                    { label: 'Tavoli serviti', val: String(d.totaleOrdini), sub: 'conti chiusi', color: 'text-ink-navy' },
-                    { label: 'Coperti totali', val: String(d.copertiConfermati), sub: 'da ordini chiusi', color: 'text-ink-navy' },
-                    { label: 'Su prenotazione', val: String(d.copertiPrenotazione), sub: `walk-in: ${d.copertiWalkIn}`, color: 'text-electric-blue' },
-                    { label: 'Spesa media/persona', val: fmtEur(d.spesaMediaPersona), sub: 'incasso ÷ coperti', color: 'text-electric-blue' },
+                    { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600', daily: dettaglioGiornaliero(d.andamento, b => fmtEur(b.incasso)) },
+                    { label: 'Tavoli serviti', val: String(d.totaleOrdini), sub: 'conti chiusi', color: 'text-ink-navy', daily: dettaglioGiornaliero(d.andamento, b => String(b.ordini)) },
+                    { label: 'Coperti totali', val: String(d.copertiConfermati), sub: 'prenotazione + walk-in', color: 'text-ink-navy', daily: dettaglioGiornaliero(d.andamento, b => String(b.coperti)) },
+                    { label: 'Su prenotazione', val: String(d.copertiPrenotazione), sub: 'coperti prenotati', color: 'text-electric-blue' },
+                    { label: 'Walk-in', val: String(d.copertiWalkIn), sub: 'senza prenotazione', color: 'text-electric-blue' },
+                    { label: 'Spesa media/persona', val: fmtEur(d.spesaMediaPersona), sub: 'incasso ÷ coperti', color: 'text-electric-blue', daily: dettaglioGiornaliero(d.andamento, b => b.coperti > 0 ? fmtEur(b.incasso / b.coperti) : '—') },
                     { label: 'No-show', val: String(d.noShow), sub: 'prenotazioni non arrivate', color: d.noShow > 3 ? 'text-red-500' : d.noShow > 0 ? 'text-amber-500' : 'text-green-500' },
                     { label: 'Durata media tavolo', val: fmtMin(d.durataMediaMinuti), sub: "dall'ordine alla chiusura", color: 'text-electric-blue' },
                   ].map(k => (
-                    <div key={k.label} className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-                      <p className="text-xs text-ink-navy/50 uppercase tracking-wide">{k.label}</p>
-                      <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.val}</p>
-                      <p className="text-xs text-ink-navy/35 mt-1">{k.sub}</p>
-                    </div>
+                    <KpiTile key={k.label} {...k} />
                   ))}
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
@@ -1104,19 +1141,15 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                   {[
-                    { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600' },
-                    { label: 'Totale ordini', val: String(d.totaleOrdini), sub: 'asporto + delivery', color: 'text-ink-navy' },
-                    { label: 'Asporto', val: String(d.asportoCount), sub: 'ordini da ritirare', color: 'text-electric-blue' },
-                    { label: 'Delivery', val: String(d.deliveryCount), sub: 'ordini a domicilio', color: 'text-electric-blue' },
+                    { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600', daily: dettaglioGiornaliero(d.andamento, b => fmtEur(b.incasso)) },
+                    { label: 'Totale ordini', val: String(d.totaleOrdini), sub: 'asporto + delivery', color: 'text-ink-navy', daily: dettaglioGiornaliero(d.andamento, b => String(b.ordini)) },
+                    { label: 'Asporto', val: String(d.asportoCount), sub: 'ordini da ritirare', color: 'text-electric-blue', daily: dettaglioGiornaliero(d.andamento, b => String(b.asporto)) },
+                    { label: 'Delivery', val: String(d.deliveryCount), sub: 'ordini a domicilio', color: 'text-electric-blue', daily: dettaglioGiornaliero(d.andamento, b => String(b.delivery)) },
                     { label: 'Tempo medio consegna', val: fmtMin(d.tempoMedioConsegnaMin), sub: d.consegneMisurate > 0 ? `da pronto a consegnato · ${d.consegneMisurate} consegne` : 'da pronto a consegnato', color: 'text-purple-500' },
-                    { label: 'Spesa media/ordine', val: fmtEur(d.spesaMedia), sub: 'incasso ÷ ordini', color: 'text-electric-blue' },
+                    { label: 'Spesa media/ordine', val: fmtEur(d.spesaMedia), sub: 'incasso ÷ ordini', color: 'text-electric-blue', daily: dettaglioGiornaliero(d.andamento, b => b.ordini > 0 ? fmtEur(b.incasso / b.ordini) : '—') },
                     { label: 'Non consegnati', val: d.tassoNonConsegnati.toFixed(1) + '%', sub: 'annullati o non ritirati', color: d.tassoNonConsegnati > 10 ? 'text-red-500' : d.tassoNonConsegnati > 5 ? 'text-amber-500' : 'text-green-500' },
                   ].map(k => (
-                    <div key={k.label} className="bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
-                      <p className="text-xs text-ink-navy/50 uppercase tracking-wide">{k.label}</p>
-                      <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.val}</p>
-                      <p className="text-xs text-ink-navy/35 mt-1">{k.sub}</p>
-                    </div>
+                    <KpiTile key={k.label} {...k} />
                   ))}
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
@@ -1128,17 +1161,19 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                     </div>
                   </div>
                   {gb.length === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
-                    <div className="flex items-end gap-2" style={{ height: 150 }}>
+                    <div className="flex items-end gap-3" style={{ height: 168 }}>
                       {gb.map(b => {
-                        const hA = Math.max(Math.round((b.incassoAsporto / maxIncTipo) * 120), b.incassoAsporto > 0 ? 4 : 0)
-                        const hD = Math.max(Math.round((b.incassoDelivery / maxIncTipo) * 120), b.incassoDelivery > 0 ? 4 : 0)
+                        const hA = Math.max(Math.round((b.incassoAsporto / maxIncTipo) * 100), b.incassoAsporto > 0 ? 4 : 0)
+                        const hD = Math.max(Math.round((b.incassoDelivery / maxIncTipo) * 100), b.incassoDelivery > 0 ? 4 : 0)
                         return (
                           <div key={b.key} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                            <div className="w-full flex items-end justify-center gap-0.5" style={{ height: '120px' }}>
-                              <div className="relative flex-1 max-w-[16px] h-full flex items-end" title={`Asporto ${fmtEur(b.incassoAsporto)}`}>
+                            <div className="w-full flex items-end justify-center gap-2" style={{ height: '128px' }}>
+                              <div className="flex-1 max-w-[36px] h-full flex flex-col items-center justify-end" title={`Asporto ${fmtEur(b.incassoAsporto)}`}>
+                                {b.incassoAsporto > 0 && <span className="text-[9px] font-bold text-electric-blue leading-none mb-0.5 whitespace-nowrap">{fmtEur(b.incassoAsporto)}</span>}
                                 <div className="w-full bg-electric-blue rounded-t" style={{ height: `${hA}px` }} />
                               </div>
-                              <div className="relative flex-1 max-w-[16px] h-full flex items-end" title={`Delivery ${fmtEur(b.incassoDelivery)}`}>
+                              <div className="flex-1 max-w-[36px] h-full flex flex-col items-center justify-end" title={`Delivery ${fmtEur(b.incassoDelivery)}`}>
+                                {b.incassoDelivery > 0 && <span className="text-[9px] font-bold text-purple-500 leading-none mb-0.5 whitespace-nowrap">{fmtEur(b.incassoDelivery)}</span>}
                                 <div className="w-full bg-purple-400 rounded-t" style={{ height: `${hD}px` }} />
                               </div>
                             </div>
