@@ -13,6 +13,22 @@ interface Categoria { id: string; nome: string; piatti: Piatto[] }
 
 const fmt = (n: number) => `€${n.toFixed(2)}`
 
+// Un "conto" = tutti gli Ordini aperti dello stesso tavolo o gruppo di tavoli.
+// Ogni Ordine è un "sottogruppo" (un invio del cliente) pagabile singolarmente.
+const contoKey = (o: Ordine) => o.gruppoId ?? o.tavoloId ?? o.tavolo
+interface Conto { key: string; label: string; tavoloId: string | null; gruppoId: string | null; ordini: Ordine[]; totale: number }
+function raggruppaConti(list: Ordine[]): Conto[] {
+  const map = new Map<string, Conto>()
+  for (const o of list) {
+    const key = contoKey(o)
+    let c = map.get(key)
+    if (!c) { c = { key, label: o.tavolo, tavoloId: o.tavoloId, gruppoId: o.gruppoId, ordini: [], totale: 0 }; map.set(key, c) }
+    c.ordini.push(o)
+    c.totale += o.totale
+  }
+  return [...map.values()]
+}
+
 function getSerataKey(createdAt: string): string {
   const d = new Date(createdAt)
   if (d.getUTCHours() < 4) d.setUTCDate(d.getUTCDate() - 1)
@@ -284,6 +300,9 @@ export default function ContiPage() {
   const [filtroTipo, setFiltroTipo] = useState<'tavolo' | 'asporto' | 'delivery'>('tavolo')
   const [calOpen, setCalOpen] = useState(false)
   const [modificando, setModificando] = useState<Ordine | null>(null)
+  const [selezionati, setSelezionati] = useState<Set<string>>(new Set()) // id sottogruppi spuntati
+  const [modUnione, setModUnione] = useState(false)                      // modalità "unisci conti"
+  const [contiDaUnire, setContiDaUnire] = useState<Set<string>>(new Set())
 
   const isOggi = dataFiltro === todayKey()
 
@@ -304,7 +323,10 @@ export default function ContiPage() {
 
   const ordini = isOggi ? tutti : tutti.filter(o => getSerataKey(o.createdAt) === dataFiltro)
   const isTavolo = (o: Ordine) => o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
-  const isDone = (o: Ordine) => o.status === 'chiuso' || o.status === 'consegnato'
+  // Per i tavoli il conto resta aperto finché non è 'chiuso' (i sottogruppi 'pagato' e
+  // 'consegnato' restano visibili nel conto). Per asporto/delivery 'consegnato' = concluso.
+  const isDone = (o: Ordine) => isTavolo(o) ? o.status === 'chiuso' : (o.status === 'consegnato' || o.status === 'chiuso')
+  const isPagato = (o: Ordine) => o.status === 'pagato'
   const matchesFiltro = (o: Ordine) => {
     if (filtroTipo === 'tavolo') return isTavolo(o)
     if (filtroTipo === 'delivery') return o.tipo === 'delivery'
@@ -313,12 +335,14 @@ export default function ContiPage() {
   const aperti = ordini.filter(o => !isDone(o) && matchesFiltro(o))
   const chiusi = ordini.filter(o => isDone(o) && matchesFiltro(o))
   const countAperti = {
-    tavolo: ordini.filter(o => !isDone(o) && isTavolo(o)).length,
+    tavolo: new Set(ordini.filter(o => !isDone(o) && isTavolo(o)).map(contoKey)).size,
     asporto: ordini.filter(o => !isDone(o) && !isTavolo(o) && o.tipo !== 'delivery').length,
     delivery: ordini.filter(o => !isDone(o) && o.tipo === 'delivery').length,
   }
   const totaleAperti = aperti.reduce((s, o) => s + o.totale, 0)
   const totaleChiusi = chiusi.reduce((s, o) => s + o.totale, 0)
+  // Per i tavoli raggruppo i sottogruppi in conti; asporto/delivery restano card singole
+  const contiAperti = filtroTipo === 'tavolo' ? raggruppaConti(aperti) : []
 
   function aggiorna(updated: Ordine) {
     setTutti(prev => prev.map(x => x.id === updated.id ? updated : x))
@@ -339,6 +363,49 @@ export default function ContiPage() {
       setChiudendo(null)
       fetchOrdini()
     }
+  }
+
+  function toggleSel(id: string) {
+    setSelezionati(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  // Segna i sottogruppi selezionati come "pagati": restano nel conto con badge Pagato,
+  // il conto resta aperto finché non lo si chiude tutto insieme.
+  async function pagaSelezionati(conto: Conto) {
+    const daPagare = conto.ordini.filter(o => selezionati.has(o.id) && !isDone(o) && !isPagato(o))
+    if (daPagare.length === 0) return
+    const ids = daPagare.map(o => o.id)
+    setChiudendo(conto.key)
+    setTutti(prev => prev.map(x => ids.includes(x.id) ? { ...x, status: 'pagato' } : x))
+    setSelezionati(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
+    try {
+      await Promise.all(ids.map(id => fetch(`/api/ordini/${id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'pagato' }),
+      })))
+    } finally {
+      setChiudendo(null)
+      fetchOrdini()
+    }
+  }
+
+  function toggleUnione(key: string) {
+    setContiDaUnire(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  }
+
+  // Unisce i conti selezionati (reciproco: unisce anche i tavoli in un GruppoTavoli)
+  async function unisciConti() {
+    const conti = contiAperti.filter(c => contiDaUnire.has(c.key))
+    const tavoliIds = [...new Set(conti.flatMap(c => c.ordini.map(o => o.tavoloId).filter(Boolean)))] as string[]
+    if (tavoliIds.length < 2) return
+    setModUnione(false); setContiDaUnire(new Set())
+    await fetch('/api/tavoli/unisci-conti', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tavoliIds }),
+    })
+    fetchOrdini()
   }
 
   async function segnaPronte(o: Ordine) {
@@ -437,6 +504,101 @@ export default function ContiPage() {
     )
   }
 
+  // Un sottogruppo dentro un conto (un singolo Ordine), con checkbox di selezione
+  function SottogruppoCard({ o, index, totali }: { o: Ordine; index: number; totali: number }) {
+    const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+    const sel = selezionati.has(o.id)
+    const pagato = isPagato(o)
+    return (
+      <div className={`px-4 py-3 transition-colors ${pagato ? 'opacity-60' : sel ? 'bg-electric-blue/[0.04]' : ''}`}>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <label className={`flex items-center gap-2 select-none min-w-0 ${pagato ? '' : 'cursor-pointer'}`}>
+            {!pagato && (
+              <input type="checkbox" checked={sel} onChange={() => toggleSel(o.id)}
+                className="w-4 h-4 shrink-0 rounded border-ink-navy/30 text-electric-blue focus:ring-electric-blue/40" />
+            )}
+            {totali > 1 && <span className="text-[11px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-full shrink-0">Sottogruppo {index}</span>}
+            {pagato && <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">Pagato</span>}
+            <span className="text-xs text-ink-navy/40 shrink-0">{ora}</span>
+          </label>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-sm text-ink-navy/60">{fmt(o.totale)}</span>
+            {!pagato && (
+              <button onClick={() => setModificando(o)}
+                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors">Modifica</button>
+            )}
+          </div>
+        </div>
+        <div className="divide-y divide-ink-navy/6 pl-6">
+          {o.righe.map(r => (
+            <div key={r.id} className="flex items-center justify-between py-1.5 gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-bold text-ink-navy w-5 shrink-0 text-center">{r.quantita}×</span>
+                <span className="text-sm text-ink-navy truncate">{r.nome}</span>
+                {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+              </div>
+              <span className="text-sm text-ink-navy/50 shrink-0">{fmt(r.prezzo * r.quantita)}</span>
+            </div>
+          ))}
+          {o.righe.length === 0 && <p className="py-1.5 text-sm text-ink-navy/30">Nessuna voce</p>}
+        </div>
+      </div>
+    )
+  }
+
+  // Un conto = intestazione (tavolo/gruppo + totale) con dentro i sottogruppi e le azioni di pagamento
+  function ContoBlock({ conto }: { conto: Conto }) {
+    const n = conto.ordini.length
+    const pagatiN = conto.ordini.filter(isPagato).length
+    const selezionatiConto = conto.ordini.filter(o => selezionati.has(o.id))
+    const selN = selezionatiConto.length
+    const selTot = selezionatiConto.reduce((s, o) => s + o.totale, 0)
+    const inUnione = contiDaUnire.has(conto.key)
+    return (
+      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${inUnione ? 'border-electric-blue ring-1 ring-electric-blue/30' : 'border-ink-navy/10'}`}>
+        {/* Intestazione conto */}
+        <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-ink-navy/8 bg-mist">
+          <label className={`flex items-center gap-2 ${modUnione ? 'cursor-pointer' : ''} select-none`}>
+            {modUnione && (
+              <input type="checkbox" checked={inUnione} onChange={() => toggleUnione(conto.key)}
+                className="w-4 h-4 shrink-0 rounded border-ink-navy/30 text-electric-blue focus:ring-electric-blue/40" />
+            )}
+            <span className="text-sm font-bold text-ink-navy">{conto.label}</span>
+            <span className="text-xs text-ink-navy/40">
+              {n} {n === 1 ? 'sottogruppo' : 'sottogruppi'}
+              {pagatiN > 0 && <span className="text-green-600 font-semibold"> · {pagatiN} pagat{pagatiN === 1 ? 'o' : 'i'}</span>}
+            </span>
+          </label>
+          <span className="text-sm font-bold text-ink-navy">{fmt(conto.totale)}</span>
+        </div>
+
+        {/* Sottogruppi */}
+        <div className="divide-y divide-ink-navy/8">
+          {conto.ordini.map((o, i) => (
+            <SottogruppoCard key={o.id} o={o} index={i + 1} totali={n} />
+          ))}
+        </div>
+
+        {/* Azioni pagamento (nascoste in modalità unione) */}
+        {!modUnione && (
+          <div className="px-4 py-3 border-t border-ink-navy/8 flex items-center justify-end gap-2 flex-wrap">
+            {selN > 0 && (
+              <button onClick={() => pagaSelezionati(conto)} disabled={chiudendo === conto.key}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue text-white hover:bg-electric-blue/90 disabled:opacity-40 transition-colors">
+                {chiudendo === conto.key ? '…' : `Paga selezionati (${selN}) · ${fmt(selTot)}`}
+              </button>
+            )}
+            <button onClick={() => { setCopertiModal(conto.ordini[0]); setCopertiValue(2) }}
+              disabled={chiudendo === conto.ordini[0].id}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
+              Chiudi conto {n > 1 ? '(tutto)' : ''}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (loading) return <div className="p-8 text-ink-navy/40 text-sm text-center">Caricamento…</div>
 
   return (
@@ -500,6 +662,30 @@ export default function ContiPage() {
         })}
       </div>
 
+      {/* Unisci conti (solo tavoli, con 2+ conti aperti) */}
+      {isOggi && filtroTipo === 'tavolo' && contiAperti.length >= 2 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {!modUnione ? (
+            <button onClick={() => setModUnione(true)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/10 transition-colors">
+              Unisci conti
+            </button>
+          ) : (
+            <>
+              <button onClick={unisciConti} disabled={contiDaUnire.size < 2}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue text-white hover:bg-electric-blue/90 disabled:opacity-40 transition-colors">
+                Unisci{contiDaUnire.size >= 2 ? ` ${contiDaUnire.size} conti` : ''}
+              </button>
+              <button onClick={() => { setModUnione(false); setContiDaUnire(new Set()) }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/50 hover:bg-mist transition-colors">
+                Annulla
+              </button>
+              <span className="text-xs text-ink-navy/40">Spunta 2+ conti da unire</span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Aperti */}
       {isOggi && (
         <div>
@@ -513,6 +699,8 @@ export default function ContiPage() {
             <div className="bg-white border border-ink-navy/10 rounded-xl p-6 text-center text-ink-navy/30 text-sm">
               Nessun ordine in corso — arriveranno qui non appena il cliente ordina
             </div>
+          ) : filtroTipo === 'tavolo' ? (
+            <div className="space-y-3">{contiAperti.map(c => <ContoBlock key={c.key} conto={c} />)}</div>
           ) : (
             <div className="space-y-3">{aperti.map(o => <OrdineCard key={o.id} o={o} />)}</div>
           )}
@@ -525,7 +713,7 @@ export default function ContiPage() {
           {isOggi ? (
             <button onClick={() => setChiusiAperti(v => !v)} className="w-full flex items-center gap-3 py-2 text-left">
               <span className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider">
-                Pronti questa serata <span className="font-normal normal-case text-ink-navy/35">({chiusi.length})</span>
+                {filtroTipo === 'tavolo' ? 'Conti chiusi' : 'Pronti questa serata'} <span className="font-normal normal-case text-ink-navy/35">({chiusi.length})</span>
               </span>
               <span className="text-xs text-ink-navy/40">{fmt(totaleChiusi)}</span>
               <span className={`ml-auto text-ink-navy/30 transition-transform ${chiusiAperti ? 'rotate-180' : ''}`}>▾</span>

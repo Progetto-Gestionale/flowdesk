@@ -174,10 +174,11 @@ export default function OrdiniPage() {
     return d >= serviceStart && d < serviceEnd
   })
 
-  // Per la cucina un delivery è "concluso" già quando è pronto (la consegna la gestisce il fattorino)
+  // Per la cucina un delivery è "concluso" già quando è pronto (la consegna la gestisce il fattorino).
+  // 'pagato' = pagato in cassa → concluso anche per la cucina.
   const isDoneOrdine = (o: Ordine) => o.tipo === 'delivery'
     ? ['pronto', 'consegnato', 'chiuso'].includes(o.status)
-    : ['consegnato', 'chiuso'].includes(o.status)
+    : ['consegnato', 'pagato', 'chiuso'].includes(o.status)
   const isDoneApp = (a: AppuntamentoOrdine) => a.status === 'completato'
 
   const ordiniAttivi = ordini.filter(o => !isDoneOrdine(o))

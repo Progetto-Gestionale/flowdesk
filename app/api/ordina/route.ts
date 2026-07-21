@@ -97,32 +97,10 @@ export async function POST(req: Request) {
     }
   }
 
-  // Cerca un conto aperto per questo gruppo o per questo singolo tavolo
-  const ordineAperto = await prisma.ordine.findFirst({
-    where: gruppoId
-      ? { gruppoId, status: { notIn: ['chiuso', 'consegnato'] } }
-      : { tavoloId, status: { notIn: ['chiuso', 'consegnato'] } },
-    orderBy: { createdAt: 'desc' },
-    include: { righe: true },
-  })
-
-  if (ordineAperto) {
-    await prisma.rigaOrdine.createMany({
-      data: righe.map((r: any) => ({
-        ordineId: ordineAperto.id,
-        piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
-        quantita: r.quantita, note: r.note ?? '',
-      })),
-    })
-    const ordineAggiornato = await prisma.ordine.update({
-      where: { id: ordineAperto.id },
-      data: { totale: ordineAperto.totale + totale },
-      include: { righe: true },
-    })
-    return NextResponse.json({ ordine: ordineAggiornato })
-  }
-
-  // Nessun conto aperto: ne apre uno nuovo
+  // Ogni ordine è un SOTTOGRUPPO a sé: creiamo SEMPRE un nuovo Ordine, agganciato
+  // allo stesso tavolo/gruppo. Il "conto" del tavolo = tutti gli Ordini aperti di quel
+  // tavolo/gruppo; ciascun Ordine (ogni invio, es. da telefoni diversi) è un sottogruppo
+  // pagabile singolarmente. Niente più fusione delle righe in un unico Ordine.
   const ordine = await prisma.ordine.create({
     data: {
       userId: user.id,

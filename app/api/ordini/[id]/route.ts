@@ -8,7 +8,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const body = await req.json()
   const data: Record<string, unknown> = {}
-  if ('status' in body) data.status = body.status
+  if ('status' in body) {
+    data.status = body.status
+    if (body.status === 'chiuso' || body.status === 'consegnato') data.closedAt = new Date()
+  }
   if ('tavoloId' in body) data.tavoloId = body.tavoloId
   if ('tavolo' in body) data.tavolo = body.tavolo
   const ordine = await prisma.ordine.update({ where: { id }, data })
