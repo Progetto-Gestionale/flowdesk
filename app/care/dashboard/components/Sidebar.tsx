@@ -4,16 +4,21 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   IconGrid, IconUsers, IconCalendar, IconChartBar, IconSettings,
-  IconStethoscope, IconFolder,
+  IconStethoscope, IconClipboard,
 } from '@/app/components/icons'
 
 const navCare = [
   {
+    section: 'Agenda',
+    items: [
+      { label: 'Calendario', href: '/care/dashboard/calendario', Icon: IconCalendar },
+      { label: 'Richieste', href: '/care/dashboard/richieste', Icon: IconClipboard },
+    ],
+  },
+  {
     section: 'Pazienti',
     items: [
       { label: 'Pazienti', href: '/care/dashboard/pazienti', Icon: IconStethoscope },
-      { label: 'Appuntamenti', href: '/care/dashboard/appuntamenti', Icon: IconCalendar },
-      { label: 'Cartelle cliniche', href: '/care/dashboard/cartelle', Icon: IconFolder },
     ],
   },
   {

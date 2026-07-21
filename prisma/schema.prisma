@@ -57,6 +57,10 @@ model User {
   mapElementi        String?           // JSON: [{id, tipo, label, x, y, w, h, colore}]
   blockAsporto       Boolean           @default(false)
   blockDelivery      Boolean           @default(false)
+  // Flowest Care
+  pazienti           Paziente[]
+  sedute             Seduta[]
+  documentiPazienti  DocumentoPaziente[]
 }
 
 model MenuCategoria {
@@ -158,9 +162,54 @@ model Appuntamento {
   occasione    String?
   tavoloId     String?
   tavoliIds    String?
+  pazienteId   String?  // Flowest Care: collega l'appuntamento a un paziente
   createdAt    DateTime @default(now())
   tavolo       Tavolo?  @relation(fields: [tavoloId], references: [id])
   user         User     @relation(fields: [userId], references: [id])
+  paziente     Paziente? @relation(fields: [pazienteId], references: [id])
+}
+
+// ── Flowest Care ──────────────────────────────────────────────────────────
+model Paziente {
+  id           String              @id @default(cuid())
+  userId       String
+  nome         String
+  email        String?
+  telefono     String?
+  dataNascita  DateTime?
+  note         String?             // anamnesi / note generali
+  status       String              @default("nuovo") // nuovo | in_cura | follow_up | dimesso
+  cancellato   Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id])
+  sedute       Seduta[]
+  documenti    DocumentoPaziente[]
+  appuntamenti Appuntamento[]
+}
+
+model Seduta {
+  id         String   @id @default(cuid())
+  userId     String
+  pazienteId String
+  data       DateTime @default(now())
+  tipo       String?  // es. Valutazione, Terapia manuale, Rieducazione posturale
+  note       String?  // cosa è stato fatto, dolore percepito, esercizi assegnati
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  paziente   Paziente @relation(fields: [pazienteId], references: [id])
+}
+
+model DocumentoPaziente {
+  id         String   @id @default(cuid())
+  userId     String
+  pazienteId String
+  nome       String
+  url        String
+  tipo       String?  // referto | prescrizione | radiografia | altro
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  paziente   Paziente @relation(fields: [pazienteId], references: [id])
 }
 
 model GruppoTavoli {
