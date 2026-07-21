@@ -403,8 +403,8 @@ export default function Calendario() {
 
             {/* Griglia tavoli */}
             {(() => {
-              const cols = buildColumns(currentDay)
-              const appsConfermati = appForDayFiltered(currentDay).filter(a => a.status === 'confermato')
+              const dayApps = appForDayFiltered(currentDay)
+              const appsConfermati = dayApps.filter(a => a.status === 'confermato')
               const totalCoperti = appsConfermati.reduce((s, a) => s + (a.coperti ?? 1), 0)
 
               return (
@@ -418,22 +418,9 @@ export default function Calendario() {
                   )}
                   <div className="bg-white border border-ink-navy/10 rounded-xl overflow-auto"
                     style={{ height: 'calc(100vh - 220px)', minWidth: 0 }}>
-                    <div style={{ minWidth: 56 + cols.length * 140 }}>
-                      {/* Header colonne */}
-                      <div className="flex sticky top-0 z-20 border-b border-ink-navy/10">
-                        <div className="w-14 shrink-0 sticky left-0 z-30 bg-mist border-r border-ink-navy/10" />
-                        {cols.map(col => (
-                          <div key={col.id} style={{ minWidth: 140 }}
-                            className="flex-1 px-3 py-2 bg-mist border-r border-ink-navy/10 last:border-r-0">
-                            <p className="text-xs font-bold text-ink-navy/70">{col.label}</p>
-                            {col.sublabel && <p className="text-[10px] text-ink-navy/35">{col.sublabel}</p>}
-                            {col.apps.length > 0 && (
-                              <p className="text-[10px] text-electric-blue font-semibold mt-0.5">{col.apps.length} prenotaz.</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      {/* Body */}
+                    <div>
+                      {/* Asse orari a sinistra + un'unica lane: le prenotazioni della
+                          stessa fascia oraria vengono affiancate sull'orizzontale */}
                       <div className="flex">
                         <div className="w-14 shrink-0 sticky left-0 z-20 bg-white border-r border-ink-navy/10 relative"
                           style={{ height: (hourEnd - hourStart) * PX_PER_HOUR }}>
@@ -444,80 +431,50 @@ export default function Calendario() {
                             </div>
                           ))}
                         </div>
-                        {cols.map(col => (
-                          <div key={col.id} className="relative flex-1 border-r border-ink-navy/10 last:border-r-0"
-                            style={{ minWidth: 140, height: (hourEnd - hourStart) * PX_PER_HOUR }}>
-                            {hoursGrid.map(h => (
-                              <div key={h}>
-                                <div className="absolute left-0 right-0 border-t border-ink-navy/8" style={{ top: (h - hourStart) * PX_PER_HOUR }} />
-                                <div className="absolute left-0 right-0 border-t border-dashed border-ink-navy/5" style={{ top: (h - hourStart) * PX_PER_HOUR + PX_PER_HOUR / 2 }} />
+                        <div className="relative flex-1"
+                          style={{ height: (hourEnd - hourStart) * PX_PER_HOUR }}>
+                          {hoursGrid.map(h => (
+                            <div key={h}>
+                              <div className="absolute left-0 right-0 border-t border-ink-navy/8" style={{ top: (h - hourStart) * PX_PER_HOUR }} />
+                              <div className="absolute left-0 right-0 border-t border-dashed border-ink-navy/5" style={{ top: (h - hourStart) * PX_PER_HOUR + PX_PER_HOUR / 2 }} />
+                            </div>
+                          ))}
+                          {layoutApps(dayApps).map(({ a, col: subCol, total }) => {
+                            const tipo = inferTipo(a.servizio)
+                            const ts = TIPO_STYLE[tipo]
+                            const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
+                            const dt = new Date(a.data)
+                            const startH = dt.getHours() + dt.getMinutes() / 60
+                            const top = Math.max(0, (startH - hourStart) * PX_PER_HOUR)
+                            const ora = dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                            const pct = 100 / total
+                            const GAP = 3
+                            const MIN_H = 32
+                            const height = Math.max((a.durata / 60) * PX_PER_HOUR, MIN_H) - 2
+                            return (
+                              <div key={a.id}
+                                style={{
+                                  position: 'absolute', top, height,
+                                  left: `calc(${subCol * pct}% + ${GAP}px)`,
+                                  width: `calc(${pct}% - ${GAP * 2}px)`,
+                                  borderLeftWidth: 3, borderLeftColor: ts.barColor,
+                                }}
+                                onClick={() => setSelected(a)}
+                                className={`${sc.bg} rounded-r-lg px-2 py-1 cursor-pointer hover:brightness-95 transition-all overflow-hidden z-10`}>
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="text-[10px] font-bold text-ink-navy/40 shrink-0">{ora}</span>
+                                  <p className="text-[11px] font-bold leading-tight truncate text-ink-navy">{a.clienteNome || 'Cliente'}</p>
+                                </div>
+                                {height > 44 && a.coperti && a.coperti > 1 && (
+                                  <p className="text-[10px] opacity-55 mt-0.5">{a.coperti} coperti</p>
+                                )}
+                                {height > 62 && a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
+                                  <p className="text-[10px] text-red-500 truncate">{a.allergie}</p>
+                                )}
                               </div>
-                            ))}
-                            {layoutApps(col.apps).map(({ a, col: subCol, total }) => {
-                              const tipo = inferTipo(a.servizio)
-                              const ts = TIPO_STYLE[tipo]
-                              const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
-                              const dt = new Date(a.data)
-                              const startH = dt.getHours() + dt.getMinutes() / 60
-                              const top = Math.max(0, (startH - hourStart) * PX_PER_HOUR)
-                              const height = Math.max((a.durata / 60) * PX_PER_HOUR, 28)
-                              const ora = dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-                              const pct = 100 / total
-                              const GAP = 2
-                              const MIN_H = 32
-                              const linkedTavoli = tavoli.filter(t => getTavoliIds(a).includes(t.id)).sort((x,y) => x.numero - y.numero)
-                              return (
-                                <div key={a.id}
-                                  style={{
-                                    position: 'absolute', top,
-                                    height: Math.max((a.durata / 60) * PX_PER_HOUR, MIN_H) - 2,
-                                    left: `calc(${subCol * pct}% + ${GAP}px)`,
-                                    width: `calc(${pct}% - ${GAP * 2}px)`,
-                                    borderLeftWidth: 3, borderLeftColor: ts.barColor,
-                                  }}
-                                  onClick={() => setSelected(a)}
-                                  className={`${sc.bg} rounded-r-lg px-1.5 py-1 cursor-pointer hover:brightness-95 transition-all overflow-hidden z-10`}>
-                                  {height <= MIN_H + 4 ? (
-                                    <div className="flex items-center gap-1 min-w-0">
-                                      <span className="text-[10px] font-bold text-ink-navy/40 shrink-0">{ora}</span>
-                                      <p className="text-[10px] font-bold leading-tight truncate text-ink-navy">{a.clienteNome || 'Cliente'}</p>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <span className="text-[10px] font-bold text-ink-navy/40">{ora}</span>
-                                      <p className="text-[11px] font-bold leading-tight truncate text-ink-navy">{a.clienteNome || 'Cliente'}</p>
-                                      {height > 58 && <p className="text-[10px] opacity-55 truncate mt-0.5">
-                                        {linkedTavoli.length > 1 ? linkedTavoli.map(t=>`T${t.numero}`).join('+') : ts.label}
-                                        {a.coperti && a.coperti > 1 ? ` · ${a.coperti}p` : ''}
-                                      </p>}
-                                      {height > 76 && a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
-                                        <p className="text-[10px] text-red-500 truncate">{a.allergie}</p>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              )
-                            })}
-                            {('ghostApps' in col ? col.ghostApps as (Appuntamento & { ghost: true; primaryTavolo: string })[] : []).map(a => {
-                              const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
-                              const dt = new Date(a.data)
-                              const startH = dt.getHours() + dt.getMinutes() / 60
-                              const top = Math.max(0, (startH - hourStart) * PX_PER_HOUR)
-                              const height = Math.max((a.durata / 60) * PX_PER_HOUR, 28)
-                              return (
-                                <div key={`ghost-${a.id}`}
-                                  style={{ position: 'absolute', top, height, left: '2px', width: 'calc(100% - 4px)', borderLeftWidth: 3, borderLeftColor: '#94a3b8' }}
-                                  onClick={() => setSelected(a)}
-                                  className={`${sc.bg} opacity-40 rounded-r-lg px-1.5 py-1 cursor-pointer hover:opacity-60 transition-all overflow-hidden z-10`}>
-                                  {height <= 36
-                                    ? <p className="text-[10px] font-bold text-ink-navy/60 truncate">↑ {a.primaryTavolo}</p>
-                                    : <><p className="text-[10px] font-bold text-ink-navy/60">↑ {a.primaryTavolo}</p><p className="text-[10px] text-ink-navy/40 truncate">{a.clienteNome || 'Cliente'}</p></>
-                                  }
-                                </div>
-                              )
-                            })}
-                          </div>
-                        ))}
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>

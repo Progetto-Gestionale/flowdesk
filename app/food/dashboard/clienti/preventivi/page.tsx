@@ -717,11 +717,12 @@ function Richieste() {
           return
         }
 
-        // Tavolo con data già nota → pre-crea l'appuntamento senza tavolo
-        // così appare subito in calendario (colonna "Non assegnati")
-        if (isTavolo && dataMatch?.[1]) {
+        // Prenotazione tavolo accettata → aggiunta al calendario SENZA tavolo.
+        // Il titolare gestisce i tavoli in autonomia: nessun modale di assegnazione.
+        if (isTavolo) {
           const items = (() => { try { return JSON.parse(corrente.items) } catch { return [] } })()
           const ora = oraMatch?.[1] ?? '20:00'
+          const dataStr = dataMatch?.[1] ?? getDataRichiesta(corrente) ?? new Date().toISOString().slice(0, 10)
           const copertiMatch = corrente.note?.match(/Coperti:\s*(\d+)/)
           await fetch('/api/appuntamenti', {
             method: 'POST', credentials: 'include',
@@ -730,19 +731,15 @@ function Richieste() {
               clienteNome: corrente.clienteName,
               clienteEmail: corrente.clienteEmail,
               servizio: 'Prenotazione tavolo',
-              data: new Date(`${dataMatch[1]}T${ora}`).toISOString(),
+              data: new Date(`${dataStr}T${ora}`).toISOString(),
               durata: items[0]?.durata ?? 90,
               coperti: items[0]?.coperti ?? (copertiMatch ? Number(copertiMatch[1]) : 1),
               note: `Da richiesta #${String(corrente.numero).padStart(3, '0')}`,
             }),
           })
-          const updated = await fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json())
-          setAppuntamenti(updated.appuntamenti ?? [])
         }
 
-        // Apri modal per (eventuale) assegnazione tavolo
         setSelected(null)
-        setConfermaApp(corrente)
         await fetchRichieste()
         window.dispatchEvent(new Event('refresh-richieste-count'))
         return
@@ -1024,10 +1021,6 @@ function Richieste() {
           onClose={() => { setShowModal(false); setEditingRichiesta(null) }}
           onSave={handleSave}
           initial={editingRichiesta}
-          onAssegnaTavolo={editingRichiesta?.tipo === 'tavolo' ? () => {
-            setShowModal(false)
-            setConfermaApp(editingRichiesta)
-          } : undefined}
         />
       )}
 
@@ -1155,15 +1148,6 @@ function Richieste() {
       })()}
 
       {proposta && <PropostaModificaModal richiesta={proposta} onClose={() => setProposta(null)} onInvia={handleInviaProposta} />}
-
-      {confermaApp && (
-        <ConfermaAppuntamentoModal
-          richiesta={confermaApp}
-          onClose={() => setConfermaApp(null)}
-          onConferma={(d, o, s, dur, cop, all, occ, tids) => handleConfermaAppuntamento(d, o, s, dur, cop, all, occ, tids)}
-          initialTavoliIds={(() => { try { return JSON.parse(confermaApp.tavoliIds ?? '[]') as string[] } catch { return [] } })()}
-        />
-      )}
     </div>
   )
 }
