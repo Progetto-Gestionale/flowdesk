@@ -74,7 +74,7 @@ export default function OrdiniPage() {
   const [cambioTavolo, setCambioTavolo] = useState<string | null>(null)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [storicoAperto, setStoricoAperto] = useState(false)
-  const [filtroStorico, setFiltroStorico] = useState<'tutti' | 'tavolo' | 'asporto' | 'delivery'>('tutti')
+  const [filtroStorico, setFiltroStorico] = useState<'tavolo' | 'asporto' | 'delivery'>('tavolo')
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [savingBlocco, setSavingBlocco] = useState(false)
@@ -192,9 +192,8 @@ export default function OrdiniPage() {
   // filtro tipo applicato SOLO agli ordini conclusi (storico)
   const tipoDiOrdine = (o: Ordine): 'tavolo' | 'asporto' | 'delivery' =>
     (o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null) ? 'tavolo' : o.tipo === 'delivery' ? 'delivery' : 'asporto'
-  const ordiniStoricoFiltrati = filtroStorico === 'tutti' ? ordiniStorico : ordiniStorico.filter(o => tipoDiOrdine(o) === filtroStorico)
+  const ordiniStoricoFiltrati = ordiniStorico.filter(o => tipoDiOrdine(o) === filtroStorico)
   const appStoricoFiltrati = filtroStorico === 'tavolo' ? []
-    : filtroStorico === 'tutti' ? appStorico
     : appStorico.filter(a => (inferTipoOrdine(a.servizio) ?? 'asporto') === filtroStorico)
 
   function OrdineCard({ o }: { o: Ordine }) {
@@ -446,10 +445,10 @@ export default function OrdiniPage() {
                 <div className="mt-3 space-y-3">
                   {/* Selettore tipo — solo per gli ordini conclusi */}
                   <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
-                    {(['tutti', 'tavolo', 'asporto', 'delivery'] as const).map(t => (
+                    {(['tavolo', 'asporto', 'delivery'] as const).map(t => (
                       <button key={t} onClick={() => setFiltroStorico(t)}
                         className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${filtroStorico === t ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
-                        {t === 'tutti' ? 'Tutti' : t}
+                        {t}
                       </button>
                     ))}
                   </div>

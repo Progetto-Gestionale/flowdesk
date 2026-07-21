@@ -932,7 +932,7 @@ function Richieste() {
                 <div className="h-px flex-1 bg-ink-navy/8" />
                 <span className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider group-hover:text-ink-navy/60 transition-colors flex items-center gap-1.5">
                   Prenotazioni
-                  <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{tutteNonDaVerificare.length}</span>
+                  <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{tutteDelGiorno.length}</span>
                   <span className="text-ink-navy/30">{prenotazioniAperte ? '▲' : '▼'}</span>
                 </span>
                 <div className="h-px flex-1 bg-ink-navy/8" />

@@ -48,7 +48,14 @@ export async function POST(req: Request) {
         data: { status: 'confermato' },
       })
     }
-    await prisma.gruppoTavoli.deleteMany({ where: { id: gruppoId, userId: user.id } })
+    // NON eliminiamo il gruppo: mantiene raggruppati i sottogruppi del conto anche da chiuso.
+    // Liberiamo però i tavoli (li stacchiamo dal gruppo) così tornano disponibili sulla mappa
+    // e i nuovi ordini non si riagganciano a questo conto già chiuso.
+    // Gli ordini chiusi conservano il loro gruppoId → restano uniti nello storico.
+    await prisma.gruppoTavoli.update({
+      where: { id: gruppoId },
+      data: { tavoli: { set: [] } },
+    })
   }
 
   return NextResponse.json({ ok: true })

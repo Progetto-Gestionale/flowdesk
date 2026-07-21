@@ -343,6 +343,8 @@ export default function ContiPage() {
   const totaleChiusi = chiusi.reduce((s, o) => s + o.totale, 0)
   // Per i tavoli raggruppo i sottogruppi in conti; asporto/delivery restano card singole
   const contiAperti = filtroTipo === 'tavolo' ? raggruppaConti(aperti) : []
+  // Anche i conti chiusi restano raggruppati: i sottogruppi devono stare dentro lo stesso conto, non separati
+  const contiChiusi = filtroTipo === 'tavolo' ? raggruppaConti(chiusi) : []
 
   function aggiorna(updated: Ordine) {
     setTutti(prev => prev.map(x => x.id === updated.id ? updated : x))
@@ -406,6 +408,21 @@ export default function ContiPage() {
       body: JSON.stringify({ tavoliIds }),
     })
     fetchOrdini()
+  }
+
+  // Scioglie un conto già unito: i tavoli tornano separati, gli ordini restano aperti
+  async function sciogliConto(gruppoId: string) {
+    setChiudendo(gruppoId)
+    try {
+      await fetch('/api/tavoli/sciogli-conto', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gruppoId }),
+      })
+    } finally {
+      setChiudendo(null)
+      fetchOrdini()
+    }
   }
 
   async function segnaPronte(o: Ordine) {
@@ -504,29 +521,44 @@ export default function ContiPage() {
     )
   }
 
-  // Un sottogruppo dentro un conto (un singolo Ordine), con checkbox di selezione
-  function SottogruppoCard({ o, index, totali }: { o: Ordine; index: number; totali: number }) {
+  // Un sottogruppo dentro un conto (un singolo Ordine), con checkbox di selezione.
+  // In un conto chiuso: niente checkbox/pagamento, solo Modifica/Elimina in stile storico.
+  function SottogruppoCard({ o, index, totali, chiuso }: { o: Ordine; index: number; totali: number; chiuso?: boolean }) {
     const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
     const sel = selezionati.has(o.id)
     const pagato = isPagato(o)
     return (
-      <div className={`px-4 py-3 transition-colors ${pagato ? 'opacity-60' : sel ? 'bg-electric-blue/[0.04]' : ''}`}>
+      <div className={`px-4 py-3 transition-colors ${chiuso || pagato ? 'opacity-60' : sel ? 'bg-electric-blue/[0.04]' : ''}`}>
         <div className="flex items-center justify-between gap-2 mb-2">
-          <label className={`flex items-center gap-2 select-none min-w-0 ${pagato ? '' : 'cursor-pointer'}`}>
-            {!pagato && (
+          <label className={`flex items-center gap-2 select-none min-w-0 ${chiuso || pagato || modUnione ? '' : 'cursor-pointer'}`}>
+            {!chiuso && !pagato && !modUnione && (
               <input type="checkbox" checked={sel} onChange={() => toggleSel(o.id)}
                 className="w-4 h-4 shrink-0 rounded border-ink-navy/30 text-electric-blue focus:ring-electric-blue/40" />
             )}
             {totali > 1 && <span className="text-[11px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-full shrink-0">Sottogruppo {index}</span>}
-            {pagato && <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">Pagato</span>}
+            {pagato && !chiuso && <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">Pagato</span>}
             <span className="text-xs text-ink-navy/40 shrink-0">{ora}</span>
           </label>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-sm text-ink-navy/60">{fmt(o.totale)}</span>
-            {!pagato && (
+            {chiuso ? (
+              confermaElimina === o.id ? (
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => setConfermaElimina(null)} className="text-xs px-2 py-1 rounded-lg border border-ink-navy/15 text-ink-navy/50">No</button>
+                  <button onClick={() => eliminaOrdine(o)} className="text-xs px-2 py-1 rounded-lg bg-red-500 text-white font-semibold">Sì</button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setModificando(o)}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors">Modifica</button>
+                  <button onClick={() => setConfermaElimina(o.id)}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors">Elimina</button>
+                </>
+              )
+            ) : (!pagato && !modUnione && (
               <button onClick={() => setModificando(o)}
                 className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors">Modifica</button>
-            )}
+            ))}
           </div>
         </div>
         <div className="divide-y divide-ink-navy/6 pl-6">
@@ -546,8 +578,9 @@ export default function ContiPage() {
     )
   }
 
-  // Un conto = intestazione (tavolo/gruppo + totale) con dentro i sottogruppi e le azioni di pagamento
-  function ContoBlock({ conto }: { conto: Conto }) {
+  // Un conto = intestazione (tavolo/gruppo + totale) con dentro i sottogruppi e le azioni di pagamento.
+  // chiuso=true → conto già chiuso: stessa struttura raggruppata ma smorzata e senza azioni di pagamento/unione.
+  function ContoBlock({ conto, chiuso }: { conto: Conto; chiuso?: boolean }) {
     const n = conto.ordini.length
     const pagatiN = conto.ordini.filter(isPagato).length
     const selezionatiConto = conto.ordini.filter(o => selezionati.has(o.id))
@@ -558,30 +591,36 @@ export default function ContiPage() {
       <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${inUnione ? 'border-electric-blue ring-1 ring-electric-blue/30' : 'border-ink-navy/10'}`}>
         {/* Intestazione conto */}
         <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-ink-navy/8 bg-mist">
-          <label className={`flex items-center gap-2 ${modUnione ? 'cursor-pointer' : ''} select-none`}>
-            {modUnione && (
+          <label className={`flex items-center gap-2 ${!chiuso && modUnione ? 'cursor-pointer' : ''} select-none`}>
+            {!chiuso && modUnione && (
               <input type="checkbox" checked={inUnione} onChange={() => toggleUnione(conto.key)}
                 className="w-4 h-4 shrink-0 rounded border-ink-navy/30 text-electric-blue focus:ring-electric-blue/40" />
             )}
-            <span className="text-sm font-bold text-ink-navy">{conto.label}</span>
+            <span className={`text-sm font-bold ${chiuso ? 'text-ink-navy/50' : 'text-ink-navy'}`}>{conto.label}</span>
             <span className="text-xs text-ink-navy/40">
               {n} {n === 1 ? 'sottogruppo' : 'sottogruppi'}
               {pagatiN > 0 && <span className="text-green-600 font-semibold"> · {pagatiN} pagat{pagatiN === 1 ? 'o' : 'i'}</span>}
             </span>
           </label>
-          <span className="text-sm font-bold text-ink-navy">{fmt(conto.totale)}</span>
+          <span className={`text-sm font-bold ${chiuso ? 'text-ink-navy/50' : 'text-ink-navy'}`}>{fmt(conto.totale)}</span>
         </div>
 
         {/* Sottogruppi */}
         <div className="divide-y divide-ink-navy/8">
           {conto.ordini.map((o, i) => (
-            <SottogruppoCard key={o.id} o={o} index={i + 1} totali={n} />
+            <SottogruppoCard key={o.id} o={o} index={i + 1} totali={n} chiuso={chiuso} />
           ))}
         </div>
 
-        {/* Azioni pagamento (nascoste in modalità unione) */}
-        {!modUnione && (
+        {/* Azioni pagamento (nascoste se conto chiuso o in modalità unione) */}
+        {!chiuso && !modUnione && (
           <div className="px-4 py-3 border-t border-ink-navy/8 flex items-center justify-end gap-2 flex-wrap">
+            {conto.gruppoId && (
+              <button onClick={() => sciogliConto(conto.gruppoId!)} disabled={chiudendo === conto.key}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist disabled:opacity-40 transition-colors mr-auto">
+                {chiudendo === conto.key ? '…' : 'Sciogli conto'}
+              </button>
+            )}
             {selN > 0 && (
               <button onClick={() => pagaSelezionati(conto)} disabled={chiudendo === conto.key}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue text-white hover:bg-electric-blue/90 disabled:opacity-40 transition-colors">
@@ -727,7 +766,9 @@ export default function ContiPage() {
             </div>
           )}
           {(!isOggi || chiusiAperti) && (
-            <div className="space-y-3 mt-2">{chiusi.map(o => <OrdineCard key={o.id} o={o} />)}</div>
+            filtroTipo === 'tavolo'
+              ? <div className="space-y-3 mt-2">{contiChiusi.map(c => <ContoBlock key={c.key} conto={c} chiuso />)}</div>
+              : <div className="space-y-3 mt-2">{chiusi.map(o => <OrdineCard key={o.id} o={o} />)}</div>
           )}
         </div>
       )}

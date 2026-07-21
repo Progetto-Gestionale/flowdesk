@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
-  IconGrid, IconUsers, IconChat, IconClipboard, IconCalendar,
+  IconGrid, IconUsers, IconClipboard, IconCalendar,
   IconFork, IconReceipt, IconTable, IconChartBar, IconSettings,
   IconClock, IconCash, IconDelivery,
 } from '@/app/components/icons'
@@ -14,17 +14,11 @@ const navFood = [
     section: 'Servizio',
     items: [
       { label: 'Tavoli & QR', href: '/food/dashboard/tavoli', Icon: IconTable },
-      { label: 'Conti', href: '/food/dashboard/conti', Icon: IconCash },
       { label: 'Ordini', href: '/food/dashboard/ordini', Icon: IconReceipt },
-      { label: 'Delivery', href: '/food/dashboard/delivery', Icon: IconDelivery },
+      { label: 'Conti', href: '/food/dashboard/conti', Icon: IconCash },
       { label: 'Prenotazioni tavoli', href: '/food/dashboard/clienti/preventivi', Icon: IconClipboard },
       { label: 'Calendario', href: '/food/dashboard/clienti/calendario', Icon: IconCalendar },
-    ],
-  },
-  {
-    section: 'Clienti',
-    items: [
-      { label: 'Messaggi', href: '/food/dashboard/clienti/inbox', Icon: IconChat },
+      { label: 'Delivery', href: '/food/dashboard/delivery', Icon: IconDelivery },
     ],
   },
   {

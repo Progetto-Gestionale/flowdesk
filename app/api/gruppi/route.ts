@@ -14,6 +14,9 @@ export async function GET(req: Request) {
     where.data = data
     where.turnoId = turnoId ?? null
   }
+  // Solo gruppi con almeno un tavolo: quelli "orfani" (rimasti dopo la chiusura di un conto unito,
+  // conservati per tenere raggruppati i sottogruppi nello storico) non riguardano la mappa.
+  where.tavoli = { some: {} }
 
   const gruppi = await prisma.gruppoTavoli.findMany({
     where,

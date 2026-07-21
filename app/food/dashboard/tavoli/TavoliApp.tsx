@@ -299,7 +299,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
   onTavoloClick?: (tavoloId: string, gruppoId: string | null, label: string) => void
   tavoliOccupati?: Set<string>   // tavoli con conto aperto → bordo attivo
   tavoliPronti?: Set<string>     // tavoli con un ordine pronto non ancora visto → triangolino
-}>(function VistaMappa({ tavoli, gruppi, salaAttiva, elementi, onSaveElementi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap, onTavoloClick, tavoliOccupati, tavoliPronti }, ref) {
+  canEdit?: boolean              // true solo in gestione → mostra il toggle "Modifica" mappa
+}>(function VistaMappa({ tavoli, gruppi, salaAttiva, elementi, onSaveElementi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap, onTavoloClick, tavoliOccupati, tavoliPronti, canEdit }, ref) {
   const [editMode, setEditMode] = useState(false)
   const [hoveredTavoloId, setHoveredTavoloId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(() => {
@@ -492,11 +493,13 @@ const VistaMappa = forwardRef<VistaMappHandle, {
           <button onClick={() => setZoomSync(Math.min(3, +(zoomRef.current + 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">+</button>
           <button onClick={handleReset} className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1">Reset</button>
         </div>
-        <button onClick={toggleEditMode}
-          className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl border transition-colors ${editMode ? 'bg-electric-blue text-white border-electric-blue' : 'bg-white text-ink-navy/60 border-ink-navy/15 hover:bg-mist'}`}>
-          {editMode ? 'Modifica attiva' : 'Modifica'}
-        </button>
-        {editMode && (
+        {canEdit && (
+          <button onClick={toggleEditMode}
+            className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl border transition-colors ${editMode ? 'bg-electric-blue text-white border-electric-blue' : 'bg-white text-ink-navy/60 border-ink-navy/15 hover:bg-mist'}`}>
+            {editMode ? 'Modifica attiva' : 'Modifica'}
+          </button>
+        )}
+        {canEdit && editMode && (
           <>
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs text-ink-navy/35">Aggiungi:</span>
@@ -512,7 +515,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
           </>
         )}
         <p className="text-xs text-ink-navy/35 ml-auto hidden lg:block">
-          {selectMode ? 'Clicca i tavoli per selezionarli' : editMode ? 'Trascina tavoli per spostarli' : 'Solo visualizzazione — clicca Modifica per editare'}
+          {selectMode ? 'Clicca i tavoli per selezionarli' : editMode ? 'Trascina tavoli per spostarli' : canEdit ? 'Solo visualizzazione — clicca Modifica per editare' : 'Mappa live'}
         </p>
       </div>
 
@@ -962,7 +965,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
               onModifica={apriModifica} onElimina={eliminaTavolo}
               selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
               onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap}
-              tavoliOccupati={tavoliOccupati} tavoliPronti={tavoliPronti}
+              tavoliOccupati={tavoliOccupati} tavoliPronti={tavoliPronti} canEdit={gestione}
               onTavoloClick={(tid, gid, lbl) => {
                 // aprendo il tavolo, segna come visti i suoi ordini pronti → il triangolino sparisce
                 const daVedere = ordiniAperti

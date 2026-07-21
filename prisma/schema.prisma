@@ -99,6 +99,7 @@ model Ordine {
   coperti     Int?
   note        String?
   createdAt   DateTime      @default(now())
+  prontoAt    DateTime?     // quando l'ordine è marcato "pronto" in cucina (per tempo medio consegna)
   closedAt    DateTime?
   user        User          @relation(fields: [userId], references: [id])
   tavoloRel   Tavolo?       @relation(fields: [tavoloId], references: [id])
