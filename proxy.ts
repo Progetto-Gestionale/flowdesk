@@ -17,6 +17,7 @@ const isPublic = createRouteMatcher([
   '/ordina(.*)',
   '/api/ordina(.*)',
   '/prenota(.*)',
+  '/care/prenota(.*)',
   '/dipendente(.*)',
   '/api/dipendente/(.*)',
   '/api/qr-timbratura/scan(.*)',

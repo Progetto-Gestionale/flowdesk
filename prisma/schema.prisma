@@ -57,6 +57,12 @@ model User {
   mapElementi        String?           // JSON: [{id, tipo, label, x, y, w, h, colore}]
   blockAsporto       Boolean           @default(false)
   blockDelivery      Boolean           @default(false)
+  // Flowest Care
+  pazienti           Paziente[]
+  sedute             Seduta[]
+  documentiPazienti  DocumentoPaziente[]
+  tipiSeduta         TipoSeduta[]
+  disponibilitaOverride DisponibilitaOverride[]
 }
 
 model MenuCategoria {
@@ -159,9 +165,81 @@ model Appuntamento {
   occasione    String?
   tavoloId     String?
   tavoliIds    String?
-  createdAt    DateTime @default(now())
-  tavolo       Tavolo?  @relation(fields: [tavoloId], references: [id])
-  user         User     @relation(fields: [userId], references: [id])
+  pazienteId   String?      // Flowest Care: collega l'appuntamento a un paziente
+  tipoSedutaId String?      // Flowest Care: collega l'appuntamento a un tipo di seduta
+  createdAt    DateTime     @default(now())
+  tavolo       Tavolo?      @relation(fields: [tavoloId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  paziente     Paziente?    @relation(fields: [pazienteId], references: [id])
+  tipoSeduta   TipoSeduta?  @relation(fields: [tipoSedutaId], references: [id])
+}
+
+// ── Flowest Care ──────────────────────────────────────────────────────────
+model Paziente {
+  id           String              @id @default(cuid())
+  userId       String
+  nome         String
+  email        String?
+  telefono     String?
+  dataNascita  DateTime?
+  note         String?             // anamnesi / note generali
+  cancellato   Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id])
+  sedute       Seduta[]
+  documenti    DocumentoPaziente[]
+  appuntamenti Appuntamento[]
+}
+
+model TipoSeduta {
+  id           String         @id @default(cuid())
+  userId       String
+  nome         String
+  descrizione  String?
+  prezzo       Float          @default(0)
+  durata       Int            @default(45) // minuti
+  attivo       Boolean        @default(true)
+  ordine       Int            @default(0)
+  createdAt    DateTime       @default(now())
+  user         User           @relation(fields: [userId], references: [id])
+  appuntamenti Appuntamento[]
+}
+
+model DisponibilitaOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  data      DateTime // giorno specifico (solo la data conta)
+  slots     String   // JSON: ["08:00-14:00","16:00-18:00"] — [] = chiuso quel giorno
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, data])
+}
+
+model Seduta {
+  id         String   @id @default(cuid())
+  userId     String
+  pazienteId String
+  data       DateTime @default(now())
+  tipo       String?  // es. Valutazione, Terapia manuale, Rieducazione posturale
+  note       String?  // cosa è stato fatto, dolore percepito, esercizi assegnati
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  paziente   Paziente @relation(fields: [pazienteId], references: [id])
+}
+
+model DocumentoPaziente {
+  id         String   @id @default(cuid())
+  userId     String
+  pazienteId String
+  nome       String
+  url        String
+  tipo       String?  // referto | prescrizione | radiografia | altro
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  paziente   Paziente @relation(fields: [pazienteId], references: [id])
 }
 
 model GruppoTavoli {

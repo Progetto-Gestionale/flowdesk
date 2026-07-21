@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const userId = await getAuthUserId()
   if (!userId) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const user = await getOrCreateUser(userId)
-  const { clienteNome, clienteEmail, servizio, data, durata, note, coperti, allergie, occasione, tavoloId } = await req.json()
+  const { clienteNome, clienteEmail, servizio, data, durata, note, coperti, allergie, occasione, tavoloId, pazienteId } = await req.json()
   const dataObj = new Date(data)
   const durataMin = durata ?? 60
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   const appuntamento = await prisma.appuntamento.create({
-    data: { userId: user.id, clienteNome, clienteEmail, servizio, data: dataObj, durata: durataMin, note, coperti: coperti ?? 1, allergie: allergie || null, occasione: occasione || null, tavoloId: tavoloId || null },
+    data: { userId: user.id, clienteNome, clienteEmail, servizio, data: dataObj, durata: durataMin, note, coperti: coperti ?? 1, allergie: allergie || null, occasione: occasione || null, tavoloId: tavoloId || null, pazienteId: pazienteId || null },
   })
   return NextResponse.json({ appuntamento })
 }
