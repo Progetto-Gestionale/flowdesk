@@ -7,6 +7,7 @@ import {
   IconFork, IconCard, IconInfo, IconHelp, IconUser, IconCheck,
   IconChat, IconCamera, IconPin,
 } from '@/app/components/icons'
+import { comprimiImmagine } from '@/lib/comprimiImmagine'
 
 const SETTORI = [
   'Ristorazione', 'Biomedica', 'Consulenza', 'E-commerce',
@@ -381,6 +382,23 @@ export default function Impostazioni() {
   const [fabbisogno, setFabbisogno] = useState<FabbisognoFascia[]>([])
   const [grafica, setGrafica] = useState({ menuLogoUrl: '', menuColoreP: '#4f46e5', menuColoreS: '#ffffff' })
   const [graficaStatus, setGraficaStatus] = useState<SezioneStatus>(initStatus())
+  const [caricandoLogo, setCaricandoLogo] = useState(false)
+
+  // Carica il logo dal dispositivo: compressione lato client → data URL in menuLogoUrl
+  async function onSelezionaLogo(file: File | null) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { alert('Seleziona un file immagine (JPG, PNG…).'); return }
+    setCaricandoLogo(true)
+    try {
+      const dataUrl = await comprimiImmagine(file, 400, 0.8) // logo piccolo: lato max 400px
+      setGrafica(g => ({ ...g, menuLogoUrl: dataUrl }))
+      setGraficaStatus(s => ({ ...s, dirty: true, saved: false }))
+    } catch {
+      alert('Non è stato possibile elaborare l\'immagine. Riprova con un\'altra foto.')
+    } finally {
+      setCaricandoLogo(false)
+    }
+  }
 
   // Marca la sezione come dirty quando l'utente modifica qualcosa
   const dirty = useCallback((id: string) => {
@@ -706,13 +724,27 @@ export default function Impostazioni() {
                 </div>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">URL logo</label>
-                    <input value={grafica.menuLogoUrl}
-                      onChange={e => { setGrafica(g => ({ ...g, menuLogoUrl: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
-                      placeholder="https://esempio.com/logo.png" className={cls} />
-                    {grafica.menuLogoUrl && (
-                      <img src={grafica.menuLogoUrl} alt="preview logo" className="mt-2 h-14 w-14 rounded-xl object-cover border border-ink-navy/10" />
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Logo</label>
+                    {grafica.menuLogoUrl ? (
+                      <div className="flex items-center gap-3">
+                        <img src={grafica.menuLogoUrl} alt="preview logo" className="h-14 w-14 rounded-xl object-cover border border-ink-navy/10" />
+                        <button type="button" onClick={() => { setGrafica(g => ({ ...g, menuLogoUrl: '' })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
+                          className="text-xs font-semibold text-red-500 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50">Rimuovi</button>
+                      </div>
+                    ) : (
+                      <label className={`flex flex-col items-center justify-center gap-1 border-2 border-dashed border-ink-navy/15 rounded-xl py-5 transition-colors ${caricandoLogo ? 'opacity-60' : 'cursor-pointer hover:bg-mist hover:border-electric-blue/40'}`}>
+                        <span className="text-sm font-semibold text-electric-blue">{caricandoLogo ? 'Caricamento…' : '📷 Carica logo'}</span>
+                        <span className="text-xs text-ink-navy/35">JPG o PNG dal tuo dispositivo</span>
+                        <input type="file" accept="image/*" className="hidden" disabled={caricandoLogo}
+                          onChange={e => { onSelezionaLogo(e.target.files?.[0] ?? null); e.target.value = '' }} />
+                      </label>
                     )}
+                    <details className="mt-2">
+                      <summary className="text-xs text-ink-navy/40 cursor-pointer select-none">oppure incolla un URL</summary>
+                      <input value={grafica.menuLogoUrl.startsWith('data:') ? '' : grafica.menuLogoUrl}
+                        onChange={e => { setGrafica(g => ({ ...g, menuLogoUrl: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
+                        placeholder="https://esempio.com/logo.png" className={`mt-1.5 ${cls}`} />
+                    </details>
                   </div>
                   <div className="flex gap-6 flex-wrap">
                     <div className="space-y-1">
