@@ -54,8 +54,19 @@ export async function PATCH(req: Request) {
       update.publicId = null
     }
 
-    // Auto-genera publicId dal nomeLocale se non esiste ancora
-    if (!user.publicId && !update.publicId && update.nomeLocale) {
+    // publicId impostato manualmente: garantisce l'unicità tra gli utenti Flowest
+    // (se già preso da un altro locale, aggiunge un suffisso -1, -2, … invece di andare in errore)
+    if (typeof update.publicId === 'string' && update.publicId) {
+      const base = update.publicId
+      let slug = base
+      let n = 1
+      while (await prisma.user.findFirst({ where: { publicId: slug, NOT: { id: user.id } } })) {
+        slug = `${base}-${n++}`
+      }
+      update.publicId = slug
+    }
+    // Auto-genera publicId dal nomeLocale se non esiste ancora e non è stato impostato a mano
+    else if (!user.publicId && !update.publicId && update.nomeLocale) {
       const base = (update.nomeLocale as string)
         .toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')

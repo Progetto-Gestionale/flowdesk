@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   IconHome, IconClock, IconRefresh, IconUsers, IconSettings, IconCalendar,
-  IconFork, IconCard, IconInfo, IconHelp, IconBot, IconUser, IconCheck,
+  IconFork, IconCard, IconInfo, IconHelp, IconUser, IconCheck,
   IconChat, IconCamera, IconPin,
 } from '@/app/components/icons'
 
@@ -30,7 +30,7 @@ const SEZIONI = [
   { id: 'prenotazioni', label: 'Prenotazioni', Icon: IconCalendar },
   { id: 'menu', label: 'Menu & Offerta', Icon: IconFork },
   { id: 'pagamenti', label: 'Pagamenti', Icon: IconCard },
-  { id: 'bot', label: 'Bot', Icon: IconBot },
+  { id: 'bot', label: 'ID pubblico', Icon: IconInfo },
   { id: 'account', label: 'Account', Icon: IconUser },
 ]
 
@@ -376,7 +376,6 @@ export default function Impostazioni() {
   const [pagamenti, setPagamenti] = useState<Pagamenti>([])
   const [info, setInfo] = useState<InfoPratiche>({ parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' })
   const [faq, setFaq] = useState<Faq[]>([])
-  const [descrizioneBot, setDescrizioneBot] = useState('')
   const [publicId, setPublicId] = useState('')
   const [turniServizio, setTurniServizio] = useState<TurnoServizio[]>([])
   const [fabbisogno, setFabbisogno] = useState<FabbisognoFascia[]>([])
@@ -406,7 +405,6 @@ export default function Impostazioni() {
       setPagamenti(jp(s.pagamenti, []))
       setInfo(jp(s.infoPratiche, { parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' }))
       setFaq(jp(s.faq, []))
-      setDescrizioneBot(s.descrizioneBot ?? '')
       setPublicId(s.publicId ?? '')
       setGrafica({ menuLogoUrl: s.menuLogoUrl ?? '', menuColoreP: s.menuColoreP ?? '#4f46e5', menuColoreS: s.menuColoreS ?? '#ffffff' })
       const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
@@ -427,7 +425,7 @@ export default function Impostazioni() {
         faq: { saving: false, saved: !!s.faq, dirty: false },
         turni: { saving: false, saved: !!s.turniServizio, dirty: false },
         staff: { saving: false, saved: !!s.fabbisognoStaff, dirty: false },
-        bot: { saving: false, saved: !!s.descrizioneBot, dirty: false },
+        bot: { saving: false, saved: !!s.publicId, dirty: false },
         account: { saving: false, saved: !!(profile.user?.name), dirty: false },
       }))
     }).finally(() => setLoading(false))
@@ -443,6 +441,8 @@ export default function Impostazioni() {
       })
       const json = await res.json()
       if (!res.ok) { console.error('[saveSezione]', res.status, json); throw new Error(json.error || `Errore ${res.status}`) }
+      // Il server può aver reso univoco il publicId (suffisso anti-conflitto): rifletti il valore salvato
+      if (typeof json.publicId === 'string' && json.publicId !== publicId) setPublicId(json.publicId)
       setStatus(prev => ({ ...prev, [id]: { saving: false, saved: true, dirty: false } }))
     } catch (e) {
       console.error('[saveSezione] catch:', e)
@@ -464,7 +464,6 @@ export default function Impostazioni() {
     }
   }
 
-  const widgetUrl = publicId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/chat/${publicId}` : null
 
   if (loading) return <div className="text-ink-navy/35 text-sm p-6">Caricamento...</div>
 
@@ -474,7 +473,7 @@ export default function Impostazioni() {
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-ink-navy">Impostazioni</h1>
-        <p className="text-ink-navy/50 mt-0.5">Più informazioni fornisci, più il bot sarà preciso con i tuoi clienti.</p>
+        <p className="text-ink-navy/50 mt-0.5">Più informazioni inserisci, più le pagine pubbliche del tuo locale saranno complete.</p>
       </div>
 
       <div className="flex gap-6">
@@ -500,7 +499,7 @@ export default function Impostazioni() {
         <div className="flex-1 min-w-0">
 
           {sezioneAttiva === 'generale' && (
-            <Section title="Il locale" subtitle="Informazioni di base che il bot usa per presentarsi ai clienti."
+            <Section title="Il locale" subtitle="Informazioni di base del tuo locale, mostrate ai clienti sulle pagine pubbliche."
               onSave={() => saveSezione('generale', { nomeLocale, indirizzo, telefono, sitoWeb })}
               status={st('generale')}>
               <Field label="Nome del locale *">
@@ -600,7 +599,7 @@ export default function Impostazioni() {
           {sezioneAttiva === 'prenotazioni' && (
             <>
             {publicId && <PrenotazioniStrumenti publicId={publicId} />}
-            <Section title="Prenotazione tavoli" subtitle="Regole per la pagina pubblica di prenotazione e per il bot."
+            <Section title="Prenotazione tavoli" subtitle="Regole per la pagina pubblica di prenotazione."
               onSave={() => saveSezione('prenotazioni', { regolePrenotazione: JSON.stringify(regole) })}
               status={st('prenotazioni')}>
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
@@ -668,7 +667,7 @@ export default function Impostazioni() {
                 </Field>
               </div>
 
-              <Field label="Note per il bot">
+              <Field label="Note aggiuntive">
                 <textarea value={regole.noteAggiuntive} onChange={e => { setRegole(r => ({ ...r, noteAggiuntive: e.target.value })); dirty('prenotazioni') }}
                   rows={3} placeholder="es. Per gruppi superiori a 8 persone è richiesto un menu fisso." className={`${cls} resize-none`} />
               </Field>
@@ -773,63 +772,37 @@ export default function Impostazioni() {
           )}
 
 
-          {sezioneAttiva === 'bot' && (<>
-            {/* Stato chatbot */}
-            {!publicId ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                <p className="text-sm font-semibold text-amber-700 mb-1">ID pubblico non configurato</p>
-                <p className="text-sm text-amber-600">Imposta un ID pubblico qui sotto per attivare il chatbot.</p>
-              </div>
-            ) : (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-5 py-4 flex items-center gap-4">
-                <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center p-2 text-green-600 shrink-0"><IconBot /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-green-800">Chatbot attivo</p>
-                  <p className="text-xs text-green-600 mt-0.5 truncate">{widgetUrl}</p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => navigator.clipboard.writeText(widgetUrl ?? '')}
-                    className="text-xs bg-white border border-green-300 text-green-700 font-semibold px-3 py-1.5 rounded-lg hover:bg-green-50">Copia link</button>
-                  <a href={`/chat/${publicId}`} target="_blank" rel="noopener noreferrer"
-                    className="text-xs bg-green-600 text-white font-semibold px-3 py-1.5 rounded-lg hover:bg-green-700">Apri ↗</a>
-                </div>
-              </div>
-            )}
-
-            {/* Script embed */}
-            {publicId && (() => {
-              const origin = typeof window !== 'undefined' ? window.location.origin : ''
-              const scriptTag = `<!-- Incolla prima di </body> -->\n<script>\n  window.FlowestId = "${publicId}";\n</script>\n<script src="${origin}/widget.js" async></script>`
-              return (
-                <div className="bg-white border border-ink-navy/10 rounded-xl p-5 space-y-2">
-                  <p className="text-sm font-semibold text-ink-navy">Integra sul tuo sito</p>
-                  <div className="relative">
-                    <pre className="bg-gray-900 text-green-400 text-xs rounded-lg p-4 overflow-x-auto font-mono leading-relaxed">{scriptTag}</pre>
-                    <button onClick={() => navigator.clipboard.writeText(scriptTag)}
-                      className="absolute top-2 right-2 text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded hover:bg-gray-600">Copia</button>
-                  </div>
-                  <p className="text-xs text-ink-navy/35">Funziona su WordPress, Wix, Squarespace e qualsiasi sito web.</p>
-                </div>
-              )
-            })()}
-
-            <Section title="Configurazione bot" subtitle="Istruzioni comportamentali e link pubblico del chatbot."
-              onSave={() => saveSezione('bot', { descrizioneBot, publicId: publicId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null })}
+          {sezioneAttiva === 'bot' && (() => {
+            const origin = typeof window !== 'undefined' ? window.location.origin : ''
+            const loginDip = publicId ? `${origin}/dipendente/login/${publicId}` : ''
+            return (
+            <Section title="ID pubblico del locale" subtitle="Identificativo unico del tuo locale, usato per l'area dipendenti e per i link pubblici (menu e prenotazioni)."
+              onSave={() => saveSezione('bot', { publicId: publicId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null })}
               status={st('bot')}>
-              <Field label="Istruzioni personalizzate per il bot" hint="Scrivi qui le regole specifiche che il bot deve seguire: tono di voce, vincoli particolari, come gestire certi tipi di richieste, cosa dire o non dire. Queste istruzioni hanno la priorità su tutto il resto.">
-                <textarea value={descrizioneBot} onChange={e => { setDescrizioneBot(e.target.value); dirty('bot') }} rows={8}
-                  placeholder={"Esempi:\n- Rispondi sempre in modo formale usando 'Lei'\n- Non accettare prenotazioni per meno di 2 persone\n- Se chiedono del menu, di' che lo trovano sul sito\n- Per eventi aziendali chiedi sempre anche il numero di telefono"} className={`${cls} resize-none`} />
+              <Field label="ID pubblico" hint="Solo lettere minuscole, numeri e trattini. Deve essere unico tra tutti i locali Flowest: se quello scelto è già in uso, al salvataggio viene aggiunto automaticamente un suffisso (es. -1) per evitare conflitti.">
+                <input type="text" value={publicId} onChange={e => { setPublicId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); dirty('bot') }}
+                  placeholder="ristorante-mario" className={cls} />
               </Field>
-              <Field label="ID pubblico del chatbot">
-                <div className="flex gap-2 items-center">
-                  <span className="text-sm text-ink-navy/35 shrink-0">/chat/</span>
-                  <input type="text" value={publicId} onChange={e => { setPublicId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); dirty('bot') }}
-                    placeholder="ristorante-mario" className={cls} />
+              {publicId ? (
+                <div className="bg-mist border border-ink-navy/10 rounded-xl p-4 space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide mb-1.5">Area dipendenti — link di accesso</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm text-ink-navy bg-white border border-ink-navy/10 rounded-lg px-3 py-1.5 flex-1 truncate">{loginDip}</code>
+                      <button onClick={() => navigator.clipboard.writeText(loginDip)}
+                        className="text-xs bg-white border border-ink-navy/15 text-ink-navy/70 font-semibold px-3 py-1.5 rounded-lg hover:bg-mist shrink-0">Copia</button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-ink-navy/40">Lo stesso ID è usato anche nei link pubblici <code className="text-ink-navy/60">/menu/{publicId}</code> e <code className="text-ink-navy/60">/prenota/{publicId}</code>.</p>
                 </div>
-                <p className="text-xs text-ink-navy/35 mt-1">Link pubblico del chatbot — condividilo sul sito o sui social.</p>
-              </Field>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-sm text-amber-700">Imposta un ID pubblico per generare il link di accesso dell'area dipendenti.</p>
+                </div>
+              )}
             </Section>
-          </>)}
+            )
+          })()}
 
           {sezioneAttiva === 'account' && (
             <Section title="Profilo account" subtitle="Il tuo nome e settore di appartenenza."
