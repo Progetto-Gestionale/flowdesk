@@ -30,6 +30,7 @@ const SEZIONI = [
   { id: 'turni', label: 'Turni', Icon: IconRefresh },
   { id: 'prenotazioni', label: 'Prenotazioni', Icon: IconCalendar },
   { id: 'menu', label: 'Menu & Offerta', Icon: IconFork },
+  { id: 'camerieri', label: 'Camerieri', Icon: IconUsers },
   { id: 'pagamenti', label: 'Pagamenti', Icon: IconCard },
   { id: 'bot', label: 'ID pubblico', Icon: IconInfo },
   { id: 'account', label: 'Account', Icon: IconUser },
@@ -187,6 +188,124 @@ function MenuStrumenti({ publicId }: { publicId: string }) {
           className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
           {copiato === 'embed' ? '✓ Copiato' : 'Copia codice'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Strumenti camerieri ───────────────────────────────────────────────────────
+function CamerieriStrumenti({ publicId }: { publicId: string }) {
+  const [copiato, setCopiato] = useState<string | null>(null)
+  const [pinAttivo, setPinAttivo] = useState<boolean | null>(null)
+  const [nuovoPin, setNuovoPin] = useState('')
+  const [salvandoPin, setSalvandoPin] = useState(false)
+  const [msgPin, setMsgPin] = useState('')
+
+  useEffect(() => {
+    fetch('/api/cameriere/pin', { credentials: 'include' })
+      .then(r => r.json()).then(d => setPinAttivo(!!d.pinAttivo)).catch(() => setPinAttivo(false))
+  }, [])
+
+  function copia(key: string, value: string) {
+    navigator.clipboard.writeText(value).catch(() => {})
+    setCopiato(key)
+    setTimeout(() => setCopiato(null), 2000)
+  }
+
+  async function salvaPin(pin: string) {
+    setSalvandoPin(true); setMsgPin('')
+    try {
+      const res = await fetch('/api/cameriere/pin', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setMsgPin(d.error ?? 'Errore'); return }
+      setPinAttivo(!!d.pinAttivo); setNuovoPin('')
+      setMsgPin(d.pinAttivo ? '✓ PIN aggiornato' : '✓ PIN rimosso')
+      setTimeout(() => setMsgPin(''), 2500)
+    } finally { setSalvandoPin(false) }
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const camUrl = publicId ? `${origin}/cameriere/${publicId}` : null
+  const qrUrl = camUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(camUrl)}&size=300x300` : null
+
+  if (!publicId) return (
+    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mt-4">
+      <p className="text-sm font-semibold text-amber-800 mb-1">ID pubblico non configurato</p>
+      <p className="text-sm text-amber-700">Vai in <strong>Impostazioni → Locale</strong> e imposta un ID pubblico. Sarà parte del link della pagina camerieri.</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4 mt-4">
+      <h3 className="font-semibold text-ink-navy text-sm">Pagina camerieri</h3>
+      <p className="text-xs text-ink-navy/50 -mt-2">Da questa pagina i camerieri scelgono uno o più tavoli (i conti si uniscono in automatico) e prendono gli ordini con lo stesso menu del cliente. Aprila sul tablet/telefono del locale.</p>
+
+      {/* Link */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">Link pagina camerieri</p>
+        <div className="flex gap-2">
+          <input readOnly value={camUrl!}
+            className="flex-1 bg-mist border border-ink-navy/10 rounded-xl px-3 py-2 text-xs text-ink-navy/70 font-mono" />
+          <button onClick={() => copia('link', camUrl!)}
+            className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 shrink-0">
+            {copiato === 'link' ? '✓' : 'Copia'}
+          </button>
+        </div>
+        <a href={camUrl!} target="_blank" rel="noopener noreferrer"
+          className="inline-block text-xs text-electric-blue hover:underline">Apri anteprima →</a>
+      </div>
+
+      {/* QR */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <p className="font-medium text-ink-navy text-sm">QR Code</p>
+        <p className="text-xs text-ink-navy/50">Stampalo e tienilo in cassa: i camerieri lo scansionano per accedere.</p>
+        <div className="flex gap-5 items-start">
+          <img src={qrUrl!} alt="QR camerieri" className="w-28 h-28 rounded-xl border border-ink-navy/10" />
+          <div className="space-y-2 flex-1">
+            <a href={qrUrl!} download="camerieri-qr.png" target="_blank" rel="noopener noreferrer"
+              className="block w-full text-center px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
+              Scarica PNG
+            </a>
+            <button onClick={() => copia('qr', qrUrl!)}
+              className="block w-full text-center px-4 py-2 rounded-xl border border-ink-navy/15 text-ink-navy/70 text-sm font-medium hover:bg-mist">
+              {copiato === 'qr' ? '✓ Copiato' : 'Copia URL'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* PIN */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-ink-navy text-sm">PIN di accesso</p>
+          {pinAttivo !== null && (
+            <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${pinAttivo ? 'bg-green-100 text-green-700' : 'bg-ink-navy/10 text-ink-navy/50'}`}>
+              {pinAttivo ? 'Attivo' : 'Nessun PIN'}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-ink-navy/50">Chi apre la pagina inserisce il PIN una sola volta: resta memorizzato sul dispositivo anche dopo il blocco schermo. Lascia vuoto e rimuovi per accesso libero.</p>
+        <div className="flex gap-2">
+          <input type="text" inputMode="numeric" value={nuovoPin}
+            onChange={e => setNuovoPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            placeholder={pinAttivo ? 'Nuovo PIN (4–8 cifre)' : 'Imposta un PIN (4–8 cifre)'}
+            className="flex-1 bg-mist border border-ink-navy/10 rounded-xl px-3 py-2 text-sm text-ink-navy tracking-widest" />
+          <button onClick={() => salvaPin(nuovoPin)} disabled={salvandoPin || nuovoPin.length < 4}
+            className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 shrink-0 disabled:opacity-40">
+            {salvandoPin ? '...' : 'Salva'}
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          {pinAttivo && (
+            <button onClick={() => salvaPin('')} disabled={salvandoPin}
+              className="text-xs text-red-500 hover:underline">Rimuovi PIN (accesso libero)</button>
+          )}
+          {msgPin && <span className="text-xs text-green-600 font-medium">{msgPin}</span>}
+        </div>
       </div>
     </div>
   )
@@ -582,13 +701,13 @@ export default function Impostazioni() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-ink-navy/60 mb-1">Inizio</label>
-                        <input type="time" value={t.oraInizio}
+                        <input type="time" step={900} value={t.oraInizio}
                           onChange={e => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraInizio: e.target.value } : x)); dirty('turni') }}
                           className={cls} />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-ink-navy/60 mb-1">Fine</label>
-                        <input type="time" value={t.oraFine}
+                        <input type="time" step={900} value={t.oraFine}
                           onChange={e => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraFine: e.target.value } : x)); dirty('turni') }}
                           className={cls} />
                       </div>
@@ -785,6 +904,14 @@ export default function Impostazioni() {
             </>
           )}
 
+          {sezioneAttiva === 'camerieri' && (
+            <div>
+              <h2 className="font-semibold text-ink-navy text-lg">Camerieri</h2>
+              <p className="text-xs text-ink-navy/40 mt-0.5">Pagina pubblica per prendere gli ordini al tavolo dal telefono/tablet del locale.</p>
+              <CamerieriStrumenti publicId={publicId} />
+            </div>
+          )}
+
           {sezioneAttiva === 'pagamenti' && (
             <Section title="Metodi di pagamento" subtitle="Il bot informerà i clienti su come possono pagare."
               onSave={() => saveSezione('pagamenti', { pagamenti: JSON.stringify(pagamenti) })}
@@ -811,6 +938,16 @@ export default function Impostazioni() {
             <Section title="ID pubblico del locale" subtitle="Identificativo unico del tuo locale, usato per l'area dipendenti e per i link pubblici (menu e prenotazioni)."
               onSave={() => saveSezione('bot', { publicId: publicId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || null })}
               status={st('bot')}>
+              {publicId && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
+                  <span className="text-lg leading-none">⚠️</span>
+                  <div className="text-sm text-amber-800 space-y-1">
+                    <p className="font-semibold">Cambiare l'ID rompe i link già condivisi</p>
+                    <p className="text-amber-700">Se modifichi l'ID pubblico, tutti i link e QR <strong>già stampati o condivisi</strong> (area dipendenti, camerieri, menu, prenotazioni, QR sui tavoli) smetteranno di funzionare.</p>
+                    <p className="text-amber-700">I link e i QR mostrati qui nel gestionale si aggiornano automaticamente col nuovo ID: dovrai solo <strong>riscaricarli, ristamparli e ricondividerli</strong>. Nessun dato viene perso e i dipendenti restano collegati.</p>
+                  </div>
+                </div>
+              )}
               <Field label="ID pubblico" hint="Solo lettere minuscole, numeri e trattini. Deve essere unico tra tutti i locali Flowest: se è già in uso da un altro locale, il salvataggio viene bloccato e dovrai sceglierne un altro. Cambiandolo cambia anche il link dell'area dipendenti, quindi modificalo solo se necessario.">
                 <input type="text" value={publicId} onChange={e => { setPublicId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); dirty('bot') }}
                   placeholder="ristorante-mario" className={cls} />
@@ -825,7 +962,7 @@ export default function Impostazioni() {
                         className="text-xs bg-white border border-ink-navy/15 text-ink-navy/70 font-semibold px-3 py-1.5 rounded-lg hover:bg-mist shrink-0">Copia</button>
                     </div>
                   </div>
-                  <p className="text-xs text-ink-navy/40">Lo stesso ID è usato anche nei link pubblici <code className="text-ink-navy/60">/menu/{publicId}</code> e <code className="text-ink-navy/60">/prenota/{publicId}</code>.</p>
+                  <p className="text-xs text-ink-navy/40">Lo stesso ID è usato anche nei link pubblici <code className="text-ink-navy/60">/menu/{publicId}</code>, <code className="text-ink-navy/60">/prenota/{publicId}</code> e <code className="text-ink-navy/60">/cameriere/{publicId}</code>.</p>
                 </div>
               ) : (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">

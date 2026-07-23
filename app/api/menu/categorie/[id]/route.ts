@@ -15,7 +15,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
-  await prisma.menuPiatto.deleteMany({ where: { categoriaId: id } })
-  await prisma.menuCategoria.delete({ where: { id } })
-  return NextResponse.json({ ok: true })
+  try {
+    await prisma.menuPiatto.deleteMany({ where: { categoriaId: id } })
+    await prisma.menuCategoria.delete({ where: { id } })
+    return NextResponse.json({ ok: true })
+  } catch (e) {
+    console.error('[MENU/CATEGORIE] errore delete:', e)
+    return NextResponse.json({ error: 'Impossibile eliminare la categoria. Riprova.' }, { status: 500 })
+  }
 }

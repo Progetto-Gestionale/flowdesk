@@ -430,13 +430,13 @@ export default function StaffAreaPage() {
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="block text-xs text-gray-500 mb-1">Dalle</label>
-                              <input type="time" value={g.oraInizio}
+                              <input type="time" step={900} value={g.oraInizio}
                                 onChange={e => aggiornaGiorno(g.data, 'oraInizio', e.target.value)}
                                 className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-500 mb-1">Alle</label>
-                              <input type="time" value={g.oraFine}
+                              <input type="time" step={900} value={g.oraFine}
                                 onChange={e => aggiornaGiorno(g.data, 'oraFine', e.target.value)}
                                 className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
                             </div>
@@ -546,12 +546,12 @@ export default function StaffAreaPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Dalle</label>
-                      <input type="time" value={form.oraInizio} onChange={e => setForm(f => ({ ...f, oraInizio: e.target.value }))}
+                      <input type="time" step={900} value={form.oraInizio} onChange={e => setForm(f => ({ ...f, oraInizio: e.target.value }))}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Alle</label>
-                      <input type="time" value={form.oraFine} onChange={e => setForm(f => ({ ...f, oraFine: e.target.value }))}
+                      <input type="time" step={900} value={form.oraFine} onChange={e => setForm(f => ({ ...f, oraFine: e.target.value }))}
                         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                   </div>

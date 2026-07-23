@@ -97,7 +97,8 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
 
   async function eliminaCategoria(id: string) {
     setConferma({ msg: 'Eliminare questa categoria e tutti i suoi piatti?', onConfirm: async () => {
-      await fetch(`/api/menu/categorie/${id}`, { method: 'DELETE', credentials: 'include' })
+      const res = await fetch(`/api/menu/categorie/${id}`, { method: 'DELETE', credentials: 'include' })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.error ?? 'Errore durante l\'eliminazione.'); return }
       fetchMenu()
     }})
   }
@@ -132,7 +133,8 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
 
   async function eliminaPiatto(id: string) {
     setConferma({ msg: 'Eliminare questo piatto?', onConfirm: async () => {
-      await fetch(`/api/menu/piatti/${id}`, { method: 'DELETE', credentials: 'include' })
+      const res = await fetch(`/api/menu/piatti/${id}`, { method: 'DELETE', credentials: 'include' })
+      if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.error ?? 'Errore durante l\'eliminazione.'); return }
       fetchMenu()
     }})
   }
@@ -149,12 +151,14 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
       msg: `Copiare tutto il contenuto da "${label}" sovrascrivendo questo menù?`,
       onConfirm: async () => {
         setCopiando(true)
-        await fetch('/api/menu/copia', {
+        const res = await fetch('/api/menu/copia', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ da: sorgente, a: tipo }),
         })
-        setCopiando(false); setCopiato(true)
+        setCopiando(false)
+        if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.error ?? 'Impossibile importare il menù.'); return }
+        setCopiato(true)
         setTimeout(() => setCopiato(false), 3000)
         fetchMenu()
       }

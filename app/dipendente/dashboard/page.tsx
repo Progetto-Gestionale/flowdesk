@@ -948,11 +948,11 @@ export default function DipendenteDashboard() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Dalle</label>
-                    <input type="time" value={g.oraInizio} onChange={e => aggiornaGiorno(giornoOrario, 'oraInizio', e.target.value)} className={inp} />
+                    <input type="time" step={900} value={g.oraInizio} onChange={e => aggiornaGiorno(giornoOrario, 'oraInizio', e.target.value)} className={inp} />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Alle</label>
-                    <input type="time" value={g.oraFine} onChange={e => aggiornaGiorno(giornoOrario, 'oraFine', e.target.value)} className={inp} />
+                    <input type="time" step={900} value={g.oraFine} onChange={e => aggiornaGiorno(giornoOrario, 'oraFine', e.target.value)} className={inp} />
                   </div>
                 </div>
                 <input value={g.note} onChange={e => aggiornaGiorno(giornoOrario, 'note', e.target.value)} placeholder="Note (opzionale)" className={inp} />
@@ -1002,11 +1002,11 @@ export default function DipendenteDashboard() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Dalle</label>
-                      <input type="time" value={form.oraInizio} onChange={e => setForm(f => ({ ...f, oraInizio: e.target.value }))} className={inp} />
+                      <input type="time" step={900} value={form.oraInizio} onChange={e => setForm(f => ({ ...f, oraInizio: e.target.value }))} className={inp} />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Alle</label>
-                      <input type="time" value={form.oraFine} onChange={e => setForm(f => ({ ...f, oraFine: e.target.value }))} className={inp} />
+                      <input type="time" step={900} value={form.oraFine} onChange={e => setForm(f => ({ ...f, oraFine: e.target.value }))} className={inp} />
                     </div>
                   </div>
                 </div>

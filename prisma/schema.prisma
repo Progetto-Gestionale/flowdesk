@@ -57,6 +57,7 @@ model User {
   mapElementi        String?           // JSON: [{id, tipo, label, x, y, w, h, colore}]
   blockAsporto       Boolean           @default(false)
   blockDelivery      Boolean           @default(false)
+  camerierePin       String?           // hash bcrypt del PIN per la pagina pubblica camerieri (null = nessun PIN)
   // Flowest Care
   pazienti           Paziente[]
   sedute             Seduta[]
@@ -116,13 +117,13 @@ model Ordine {
 model RigaOrdine {
   id       String     @id @default(cuid())
   ordineId String
-  piattoId String
+  piattoId String?
   nome     String
   prezzo   Float
   quantita Int
   note     String?
-  ordine   Ordine     @relation(fields: [ordineId], references: [id])
-  piatto   MenuPiatto @relation(fields: [piattoId], references: [id])
+  ordine   Ordine      @relation(fields: [ordineId], references: [id])
+  piatto   MenuPiatto? @relation(fields: [piattoId], references: [id], onDelete: SetNull)
 }
 
 model Lead {

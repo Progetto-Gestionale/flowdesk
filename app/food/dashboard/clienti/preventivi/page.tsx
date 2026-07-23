@@ -387,7 +387,7 @@ function ConfermaAppuntamentoModal({ richiesta, onClose, onConferma, initialTavo
             </div>
             <div>
               <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora *</label>
-              <input type="time" value={ora} onChange={e => setOra(e.target.value)}
+              <input type="time" value={ora} step={900} onChange={e => setOra(e.target.value)}
                 className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
             </div>
           </div>

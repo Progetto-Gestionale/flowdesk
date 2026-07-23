@@ -16,6 +16,8 @@ const isPublic = createRouteMatcher([
   '/menu(.*)',
   '/ordina(.*)',
   '/api/ordina(.*)',
+  '/cameriere(.*)',
+  '/api/cameriere(.*)',
   '/prenota(.*)',
   '/care/prenota(.*)',
   '/dipendente(.*)',

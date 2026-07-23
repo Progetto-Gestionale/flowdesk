@@ -62,8 +62,11 @@ export async function GET(req: Request) {
   // Aggrega per piatto
   const piattoMap: Record<string, { nome: string; quantita: number; incasso: number; categoria: string; categoriaOrdine: number }> = {}
   for (const r of righe) {
-    if (!piattoMap[r.piattoId]) {
-      piattoMap[r.piattoId] = {
+    // Piatti eliminati hanno piattoId null: raggruppa per nome così le vendite
+    // storiche restano distinte e non finiscono tutte in un'unica riga.
+    const key = r.piattoId ?? `nome:${r.nome}`
+    if (!piattoMap[key]) {
+      piattoMap[key] = {
         nome: r.nome,
         quantita: 0,
         incasso: 0,
@@ -71,8 +74,8 @@ export async function GET(req: Request) {
         categoriaOrdine: r.piatto?.categoria?.ordine ?? 999,
       }
     }
-    piattoMap[r.piattoId].quantita += r.quantita
-    piattoMap[r.piattoId].incasso += r.prezzo * r.quantita
+    piattoMap[key].quantita += r.quantita
+    piattoMap[key].incasso += r.prezzo * r.quantita
   }
 
   const piatti = Object.entries(piattoMap)

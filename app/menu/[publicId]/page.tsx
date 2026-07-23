@@ -511,7 +511,7 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Orario *</label>
-              <input type="time" value={dati.ora}
+              <input type="time" value={dati.ora} step={900}
                 onChange={e => setDati(d => ({ ...d, ora: e.target.value }))} className={inpFocus} />
             </div>
           </div>

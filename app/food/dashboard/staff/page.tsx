@@ -1048,13 +1048,13 @@ export default function StaffPage() {
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-ink-navy/60 mb-1">Dalle</label>
-                <input type="time" value={cellModal.oraInizio}
+                <input type="time" step={900} value={cellModal.oraInizio}
                   onChange={e => setCellModal(m => m ? { ...m, oraInizio: e.target.value } : m)}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div className="flex-1">
                 <label className="block text-xs font-medium text-ink-navy/60 mb-1">Alle</label>
-                <input type="time" value={cellModal.oraFine}
+                <input type="time" step={900} value={cellModal.oraFine}
                   onChange={e => setCellModal(m => m ? { ...m, oraFine: e.target.value } : m)}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
@@ -1366,12 +1366,12 @@ export default function StaffPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-ink-navy/70 mb-1">Inizio *</label>
-                  <input type="time" value={formTurno.oraInizio} onChange={e => setFormTurno(f => ({ ...f, oraInizio: e.target.value }))}
+                  <input type="time" step={900} value={formTurno.oraInizio} onChange={e => setFormTurno(f => ({ ...f, oraInizio: e.target.value }))}
                     className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-ink-navy/70 mb-1">Fine *</label>
-                  <input type="time" value={formTurno.oraFine} onChange={e => setFormTurno(f => ({ ...f, oraFine: e.target.value }))}
+                  <input type="time" step={900} value={formTurno.oraFine} onChange={e => setFormTurno(f => ({ ...f, oraFine: e.target.value }))}
                     className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
               </div>
@@ -1450,13 +1450,13 @@ export default function StaffPage() {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Inizio</label>
-                  <input type="time" value={editForm.oraInizio}
+                  <input type="time" step={900} value={editForm.oraInizio}
                     onChange={e => setEditForm(f => ({ ...f, oraInizio: e.target.value }))}
                     className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Fine</label>
-                  <input type="time" value={editForm.oraFine}
+                  <input type="time" step={900} value={editForm.oraFine}
                     onChange={e => setEditForm(f => ({ ...f, oraFine: e.target.value }))}
                     className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
                 </div>
