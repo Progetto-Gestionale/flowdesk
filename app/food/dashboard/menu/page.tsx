@@ -176,10 +176,12 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
             className="bg-electric-blue text-white px-4 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
             + Categoria
           </button>
-          <button onClick={copiaDaAltroTipo} disabled={copiando}
-            className="border border-ink-navy/15 text-ink-navy/70 px-4 py-2 rounded-xl font-medium hover:bg-mist text-sm disabled:opacity-50">
-            {copiato ? '✓ Copiato' : copiando ? 'Copia...' : `↓ Importa da ${altroLabel}`}
-          </button>
+          {tipo === 'asporto' && (
+            <button onClick={copiaDaAltroTipo} disabled={copiando}
+              className="border border-ink-navy/15 text-ink-navy/70 px-4 py-2 rounded-xl font-medium hover:bg-mist text-sm disabled:opacity-50">
+              {copiato ? '✓ Copiato' : copiando ? 'Copia...' : `↓ Importa da ${altroLabel}`}
+            </button>
+          )}
         </div>
       </div>
 
@@ -197,10 +199,12 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
               className="bg-electric-blue text-white px-5 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
               + Aggiungi categoria
             </button>
-            <button onClick={copiaDaAltroTipo}
-              className="border border-ink-navy/15 text-ink-navy/70 px-5 py-2 rounded-xl font-medium hover:bg-mist text-sm">
-              Importa da {altroLabel}
-            </button>
+            {tipo === 'asporto' && (
+              <button onClick={copiaDaAltroTipo}
+                className="border border-ink-navy/15 text-ink-navy/70 px-5 py-2 rounded-xl font-medium hover:bg-mist text-sm">
+                Importa da {altroLabel}
+              </button>
+            )}
           </div>
         </div>
       ) : (

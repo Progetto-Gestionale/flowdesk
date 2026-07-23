@@ -31,7 +31,6 @@ const SEZIONI = [
   { id: 'prenotazioni', label: 'Prenotazioni', Icon: IconCalendar },
   { id: 'menu', label: 'Menu & Offerta', Icon: IconFork },
   { id: 'camerieri', label: 'Camerieri', Icon: IconUsers },
-  { id: 'pagamenti', label: 'Pagamenti', Icon: IconCard },
   { id: 'bot', label: 'ID pubblico', Icon: IconInfo },
   { id: 'account', label: 'Account', Icon: IconUser },
 ]
@@ -50,18 +49,8 @@ const SERVIZI_LISTA = [
   { id: 'degustazione', label: 'Menu degustazione' },
 ]
 
-const PAGAMENTI_LISTA = [
-  { id: 'contanti', label: 'Contanti' },
-  { id: 'carta', label: 'Carta di credito/debito' },
-  { id: 'satispay', label: 'Satispay' },
-  { id: 'paypal', label: 'PayPal' },
-  { id: 'bonifico', label: 'Bonifico bancario' },
-  { id: 'buoni', label: 'Buoni pasto' },
-]
-
 type Orari = Record<string, string>
 type Servizi = Record<string, boolean>
-type Pagamenti = string[]
 interface Regole {
   preavvisoMinMinuti: string
   preavvisoOrdiniMinMinuti: string
@@ -74,6 +63,10 @@ interface Regole {
   bloccoAutoTavoli: boolean
   modalitaOrario: 'libero' | 'turni'
   tempoMinimoArrivoMinuti: string // minuti prima della fine turno entro cui il cliente deve presentarsi
+  capConsegna: string            // CAP serviti per il delivery, separati da virgola (vuoto = nessun filtro CAP)
+  raggioConsegnaKm: string       // raggio massimo di consegna in km dal locale (vuoto = nessun limite di distanza)
+  latLocale?: number             // coordinate del locale (geocodificate dall'indirizzo) per il calcolo distanza
+  lonLocale?: number
 }
 interface Menu { tipoCucina: string; specialita: string; nonDisponibile: string; allergeniGestiti: string }
 interface InfoPratiche { parcheggio: string; accessibile: boolean; animali: boolean; dresscode: string; altro: string }
@@ -491,9 +484,9 @@ export default function Impostazioni() {
   const [sitoWeb, setSitoWeb] = useState('')
   const [orari, setOrari] = useState<Orari>({})
   const [servizi, setServizi] = useState<Servizi>({})
-  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '' })
+  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '', capConsegna: '', raggioConsegnaKm: '' })
+  const [geoZona, setGeoZona] = useState<{ loading: boolean; msg: string; ok: boolean }>({ loading: false, msg: '', ok: false })
   const [menu, setMenu] = useState<Menu>({ tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' })
-  const [pagamenti, setPagamenti] = useState<Pagamenti>([])
   const [info, setInfo] = useState<InfoPratiche>({ parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' })
   const [faq, setFaq] = useState<Faq[]>([])
   const [publicId, setPublicId] = useState('')
@@ -536,10 +529,9 @@ export default function Impostazioni() {
       setSitoWeb(s.sitoWeb ?? '')
       setOrari(jp(s.orariApertura, {}))
       setServizi(jp(s.serviziOfferti, {}))
-      const defaults: Regole = { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '' }
+      const defaults: Regole = { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '', capConsegna: '', raggioConsegnaKm: '' }
       setRegole({ ...defaults, ...jp(s.regolePrenotazione, {}) })
       setMenu(jp(s.menuOfferta, { tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' }))
-      setPagamenti(jp(s.pagamenti, []))
       setInfo(jp(s.infoPratiche, { parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' }))
       setFaq(jp(s.faq, []))
       setPublicId(s.publicId ?? '')
@@ -557,7 +549,6 @@ export default function Impostazioni() {
         servizi: { saving: false, saved: !!s.serviziOfferti, dirty: false },
         prenotazioni: { saving: false, saved: !!s.regolePrenotazione, dirty: false },
         menu: { saving: false, saved: !!s.menuOfferta, dirty: false },
-        pagamenti: { saving: false, saved: !!s.pagamenti, dirty: false },
         info: { saving: false, saved: !!s.infoPratiche, dirty: false },
         faq: { saving: false, saved: !!s.faq, dirty: false },
         turni: { saving: false, saved: !!s.turniServizio, dirty: false },
@@ -601,6 +592,28 @@ export default function Impostazioni() {
     }
   }
 
+
+  // Geocodifica l'indirizzo del locale (Nominatim/OpenStreetMap) e salva lat/lon nelle regole:
+  // servono per calcolare la distanza del cliente nel controllo "raggio di consegna".
+  async function geocodaLocale() {
+    if (!indirizzo.trim()) { setGeoZona({ loading: false, ok: false, msg: 'Imposta prima l\'indirizzo del locale in "Locale".' }); return }
+    setGeoZona({ loading: true, ok: false, msg: '' })
+    try {
+      const q = encodeURIComponent(`${indirizzo}, Italia`)
+      const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it`, {
+        headers: { 'Accept-Language': 'it', 'User-Agent': 'Flowest/1.0' },
+      }).then(r => r.json()).catch(() => [])
+      if (!geo || geo.length === 0) {
+        setGeoZona({ loading: false, ok: false, msg: 'Indirizzo del locale non trovato. Controllalo nella sezione "Locale".' })
+        return
+      }
+      const lat = parseFloat(geo[0].lat), lon = parseFloat(geo[0].lon)
+      setRegole(r => ({ ...r, latLocale: lat, lonLocale: lon })); dirty('prenotazioni')
+      setGeoZona({ loading: false, ok: true, msg: `Posizione trovata: ${geo[0].display_name?.split(',').slice(0, 3).join(',') ?? `${lat.toFixed(4)}, ${lon.toFixed(4)}`}. Ricordati di salvare.` })
+    } catch {
+      setGeoZona({ loading: false, ok: false, msg: 'Errore durante la ricerca della posizione. Riprova.' })
+    }
+  }
 
   if (loading) return <div className="text-ink-navy/35 text-sm p-6">Caricamento...</div>
 
@@ -678,7 +691,7 @@ export default function Impostazioni() {
           )}
 
           {sezioneAttiva === 'turni' && (
-            <Section title="Turni di servizio" subtitle="Definisci i turni della giornata. Vengono usati nella mappa tavoli e come orari consentiti nella pagina pubblica di prenotazione tavoli (hanno priorità sugli orari di apertura)."
+            <Section title="Turni di servizio" subtitle="Definisci le finestre orarie di servizio della giornata (es. Pranzo, Cena). Sono usate come orari consentiti nella pagina pubblica di prenotazione tavoli e hanno priorità sugli orari di apertura."
               onSave={() => saveSezione('turni', { turniServizio: JSON.stringify(turniServizio) })}
               status={st('turni')}>
               <div className="space-y-3">
@@ -770,14 +783,17 @@ export default function Impostazioni() {
                 )}
               </div>
 
-              {/* Blocco automatico */}
+              {/* Blocco automatico al raggiungimento della capienza (coperti) */}
               <Toggle
-                label="Blocca slot quando i tavoli sono esauriti"
-                checked={regole.bloccoAutoTavoli}
+                label="Blocca prenotazioni al raggiungimento della capienza"
+                checked={regole.bloccoAutoTavoli && !!regole.copertiMax}
+                disabled={!regole.copertiMax}
                 onChange={v => { setRegole(r => ({ ...r, bloccoAutoTavoli: v })); dirty('prenotazioni') }}
               />
-              {regole.bloccoAutoTavoli && (
-                <p className="text-xs text-ink-navy/40 -mt-1">Quando tutti i tavoli risultano occupati per un certo orario, quel turno/orario non viene più offerto ai clienti.</p>
+              {!regole.copertiMax ? (
+                <p className="text-xs text-amber-600 -mt-1">Imposta prima la <strong>Capienza massima (coperti)</strong> qui sotto per poter attivare il blocco.</p>
+              ) : regole.bloccoAutoTavoli && (
+                <p className="text-xs text-ink-navy/40 -mt-1">Quando le prenotazioni per un turno/orario raggiungono i coperti della capienza massima, quell'orario non viene più offerto ai clienti.</p>
               )}
 
               {/* Limiti */}
@@ -794,9 +810,9 @@ export default function Impostazioni() {
                   <input type="number" min={1} value={regole.copertiMin} onChange={e => { setRegole(r => ({ ...r, copertiMin: e.target.value })); dirty('prenotazioni') }}
                     placeholder="1" className={cls} />
                 </Field>
-                <Field label="Coperti massimi">
+                <Field label="Capienza massima (coperti)" hint="Coperti totali che il locale può ospitare. Usata per il blocco automatico e come numero massimo di persone per prenotazione.">
                   <input type="number" min={1} value={regole.copertiMax} onChange={e => { setRegole(r => ({ ...r, copertiMax: e.target.value })); dirty('prenotazioni') }}
-                    placeholder="es. 10" className={cls} />
+                    placeholder="es. 40" className={cls} />
                 </Field>
                 <Field label="Durata media tavola (min)">
                   <input type="number" min={0} value={regole.durataMedia} onChange={e => { setRegole(r => ({ ...r, durataMedia: e.target.value })); dirty('prenotazioni') }}
@@ -821,6 +837,38 @@ export default function Impostazioni() {
                 <input type="text" value={regole.fasceOrdini} onChange={e => { setRegole(r => ({ ...r, fasceOrdini: e.target.value })); dirty('prenotazioni') }}
                   placeholder="es. 12:00-14:30, 19:00-23:00" className={cls} />
               </Field>
+
+              {/* Zona di consegna (delivery) */}
+              <div className="pt-2 mt-2 border-t border-ink-navy/8 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink-navy">Zona di consegna</p>
+                  <p className="text-xs text-ink-navy/40 mt-0.5">Il delivery viene accettato solo se l'indirizzo del cliente rispetta <strong>entrambi</strong> i criteri impostati (CAP servito <strong>e</strong> entro il raggio). Lascia vuoto un campo per non usarlo.</p>
+                </div>
+                <Field label="CAP serviti" hint="Elenco dei CAP in cui consegni, separati da virgola. Vuoto = nessun filtro sul CAP.">
+                  <input type="text" value={regole.capConsegna} onChange={e => { setRegole(r => ({ ...r, capConsegna: e.target.value })); dirty('prenotazioni') }}
+                    placeholder="es. 62032, 62100, 62029" className={cls} />
+                </Field>
+                <Field label="Raggio massimo di consegna (km)" hint="Distanza massima in linea d'aria dal locale. Vuoto = nessun limite di distanza. Richiede la posizione del locale qui sotto.">
+                  <input type="number" min={0} step={0.5} value={regole.raggioConsegnaKm} onChange={e => { setRegole(r => ({ ...r, raggioConsegnaKm: e.target.value })); dirty('prenotazioni') }}
+                    placeholder="es. 5" className={cls} />
+                </Field>
+                <div className="bg-mist border border-ink-navy/10 rounded-xl p-4 space-y-2">
+                  <p className="text-xs font-semibold text-ink-navy/60">Posizione del locale (per il raggio)</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" onClick={geocodaLocale} disabled={geoZona.loading}
+                      className="text-xs bg-white border border-ink-navy/15 text-ink-navy/70 font-semibold px-3 py-1.5 rounded-lg hover:bg-mist disabled:opacity-50">
+                      {geoZona.loading ? 'Ricerca...' : '📍 Calcola dalla posizione del locale'}
+                    </button>
+                    {regole.latLocale != null && regole.lonLocale != null && (
+                      <span className="text-xs text-green-600 font-medium">✓ Posizione impostata ({regole.latLocale.toFixed(4)}, {regole.lonLocale.toFixed(4)})</span>
+                    )}
+                  </div>
+                  {geoZona.msg && <p className={`text-xs ${geoZona.ok ? 'text-green-600' : 'text-amber-600'}`}>{geoZona.msg}</p>}
+                  {regole.raggioConsegnaKm && regole.latLocale == null && (
+                    <p className="text-xs text-amber-600">⚠️ Hai impostato un raggio ma non la posizione del locale: il limite di distanza non verrà applicato finché non calcoli la posizione.</p>
+                  )}
+                </div>
+              </div>
             </Section>
             </>
           )}
@@ -834,7 +882,7 @@ export default function Impostazioni() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h2 className="font-semibold text-ink-navy">Aspetto del menu digitale</h2>
-                    <p className="text-sm text-ink-navy/50 mt-0.5">Logo e colori mostrati sul menu digitale e sulla pagina asporto.</p>
+                    <p className="text-sm text-ink-navy/50 mt-0.5">Personalizza logo e colori della pagina che vedono i clienti quando ordinano (menu al tavolo, asporto e delivery). Ogni modifica appare subito nell'anteprima in basso.</p>
                   </div>
                   <button onClick={salvaGrafica} disabled={graficaStatus.saving}
                     className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors ${graficaStatus.saved && !graficaStatus.dirty ? 'bg-emerald-100 text-emerald-700' : 'bg-electric-blue text-white hover:bg-electric-blue/90'} disabled:opacity-50`}>
@@ -868,7 +916,7 @@ export default function Impostazioni() {
                   <div className="flex gap-6 flex-wrap">
                     <div className="space-y-1">
                       <label className="block text-sm font-medium text-ink-navy/70">Colore principale</label>
-                      <p className="text-xs text-ink-navy/35">Bottoni, prezzi, tab categorie</p>
+                      <p className="text-xs text-ink-navy/35">Il colore del tuo brand: bottoni, prezzi e categorie</p>
                       <div className="flex items-center gap-3 mt-1">
                         <input type="color" value={grafica.menuColoreP}
                           onChange={e => { setGrafica(g => ({ ...g, menuColoreP: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
@@ -878,7 +926,7 @@ export default function Impostazioni() {
                     </div>
                     <div className="space-y-1">
                       <label className="block text-sm font-medium text-ink-navy/70">Colore secondario</label>
-                      <p className="text-xs text-ink-navy/35">Testo sui bottoni colorati</p>
+                      <p className="text-xs text-ink-navy/35">Testo sopra i bottoni colorati (di solito bianco)</p>
                       <div className="flex items-center gap-3 mt-1">
                         <input type="color" value={grafica.menuColoreS}
                           onChange={e => { setGrafica(g => ({ ...g, menuColoreS: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
@@ -887,17 +935,44 @@ export default function Impostazioni() {
                       </div>
                     </div>
                   </div>
-                  <div className="p-4 rounded-xl border border-ink-navy/8 bg-mist space-y-2">
-                    <p className="text-xs text-ink-navy/35 mb-3">Anteprima</p>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm" style={{ color: grafica.menuColoreP }}>€12.00</span>
-                      <button className="w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold"
-                        style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>+</button>
+                  <div>
+                    <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wide mb-2">Anteprima — così i clienti vedono il menu</p>
+                    <div className="rounded-2xl border border-ink-navy/10 overflow-hidden max-w-xs bg-gray-50 shadow-sm">
+                      {/* Header con logo + nome locale */}
+                      <div className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-ink-navy/8">
+                        {grafica.menuLogoUrl
+                          ? <img src={grafica.menuLogoUrl} alt="logo" className="h-7 w-7 rounded-lg object-cover" />
+                          : <div className="h-7 w-7 rounded-lg bg-ink-navy/10" />}
+                        <span className="text-sm font-bold text-ink-navy truncate">{nomeLocale || 'Il tuo locale'}</span>
+                      </div>
+                      {/* Tab categorie */}
+                      <div className="flex gap-1.5 px-3 pt-2.5">
+                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full text-white" style={{ backgroundColor: grafica.menuColoreP }}>Primi</span>
+                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-ink-navy/8 text-ink-navy/50">Secondi</span>
+                      </div>
+                      {/* Piatto */}
+                      <div className="p-3">
+                        <div className="flex gap-3 rounded-xl border border-ink-navy/8 bg-white p-2.5">
+                          <div className="w-14 h-14 rounded-lg bg-ink-navy/10 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-ink-navy">Spaghetti al pomodoro</p>
+                            <p className="text-xs text-ink-navy/40 mt-0.5 truncate">Pasta fresca, basilico</p>
+                            <div className="flex items-center justify-between mt-1.5">
+                              <span className="text-sm font-bold" style={{ color: grafica.menuColoreP }}>€12.00</span>
+                              <button className="w-7 h-7 rounded-full flex items-center justify-center text-lg font-bold leading-none"
+                                style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>+</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Barra ordine */}
+                      <div className="px-3 pb-3">
+                        <div className="w-full py-2.5 rounded-xl text-sm font-bold text-center"
+                          style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>
+                          Vedi ordine · €24.00
+                        </div>
+                      </div>
                     </div>
-                    <button className="w-full py-2.5 rounded-xl text-sm font-bold"
-                      style={{ backgroundColor: grafica.menuColoreP, color: grafica.menuColoreS }}>
-                      Vedi ordine · €24.00
-                    </button>
                   </div>
                 </div>
               </div>
@@ -912,23 +987,6 @@ export default function Impostazioni() {
             </div>
           )}
 
-          {sezioneAttiva === 'pagamenti' && (
-            <Section title="Metodi di pagamento" subtitle="Il bot informerà i clienti su come possono pagare."
-              onSave={() => saveSezione('pagamenti', { pagamenti: JSON.stringify(pagamenti) })}
-              status={st('pagamenti')}>
-              <div className="grid grid-cols-2 gap-3">
-                {PAGAMENTI_LISTA.map(p => (
-                  <button key={p.id} onClick={() => { setPagamenti(prev => prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id]); dirty('pagamenti') }}
-                    className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${pagamenti.includes(p.id) ? 'border-electric-blue bg-electric-blue/10' : 'border-ink-navy/10 bg-white hover:border-ink-navy/15'}`}>
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${pagamenti.includes(p.id) ? 'bg-electric-blue border-electric-blue' : 'border-ink-navy/15'}`}>
-                      {pagamenti.includes(p.id) && <span className="w-2.5 h-2.5 text-white"><IconCheck /></span>}
-                    </div>
-                    <span className={`text-sm font-medium ${pagamenti.includes(p.id) ? 'text-electric-blue' : 'text-ink-navy/70'}`}>{p.label}</span>
-                  </button>
-                ))}
-              </div>
-            </Section>
-          )}
 
 
           {sezioneAttiva === 'bot' && (() => {
@@ -1070,12 +1128,12 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-2">
+    <div className={`flex items-center justify-between py-2 ${disabled ? 'opacity-50' : ''}`}>
       <span className="text-sm text-ink-navy/70">{label}</span>
-      <button type="button" onClick={() => onChange(!checked)}
-        className={`relative inline-flex shrink-0 w-11 h-6 rounded-full transition-colors duration-200 ${checked ? 'bg-electric-blue' : 'bg-ink-navy/20'}`}>
+      <button type="button" disabled={disabled} onClick={() => !disabled && onChange(!checked)}
+        className={`relative inline-flex shrink-0 w-11 h-6 rounded-full transition-colors duration-200 ${disabled ? 'cursor-not-allowed' : ''} ${checked ? 'bg-electric-blue' : 'bg-ink-navy/20'}`}>
         <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
     </div>

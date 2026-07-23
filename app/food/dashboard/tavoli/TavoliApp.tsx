@@ -336,6 +336,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     setMapData(d); mdRef.current = d
   }, [tavoli])
 
+  const viewportRef = useRef<HTMLDivElement>(null)
+
   function setZoomSync(nz: number) { zoomRef.current = nz; setZoom(nz); try { localStorage.setItem('mappa-zoom', String(nz)) } catch {} }
 
   function setPanSync(np: { x: number; y: number }) { panRef.current = np; setPan(np); try { localStorage.setItem('mappa-pan', JSON.stringify(np)) } catch {} }
@@ -366,6 +368,37 @@ const VistaMappa = forwardRef<VistaMappHandle, {
       setPanSync({ x: 0, y: 0 })
     }
   }
+
+  // Adatta la vista in modo che TUTTI i tavoli entrino nella mappa, centrati.
+  function fitTutti() {
+    const items = Object.values(mdRef.current)
+    if (items.length === 0) return
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    items.forEach(d => {
+      minX = Math.min(minX, d.x); minY = Math.min(minY, d.y)
+      maxX = Math.max(maxX, d.x + d.w); maxY = Math.max(maxY, d.y + d.h)
+    })
+    const PAD = 70 // margine attorno ai tavoli
+    const VW = viewportRef.current?.clientWidth ?? 680
+    const VH = viewportRef.current?.clientHeight ?? 680
+    const bw = (maxX - minX) + PAD * 2
+    const bh = (maxY - minY) + PAD * 2
+    let z = Math.min(VW / bw, VH / bh, 1.5)
+    z = Math.max(0.2, +z.toFixed(2))
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2
+    setZoomSync(z)
+    setPanSync({ x: VW / 2 - cx * z, y: VH / 2 - cy * z })
+  }
+
+  // Auto-centraggio al primo caricamento se l'utente non ha ancora una vista salvata.
+  const didAutoFit = useRef(false)
+  useEffect(() => {
+    if (didAutoFit.current || tavoli.length === 0) return
+    let hasSaved = false
+    try { hasSaved = !!localStorage.getItem('mappa-pan') } catch {}
+    didAutoFit.current = true
+    if (!hasSaved) requestAnimationFrame(() => fitTutti())
+  }, [tavoli])
 
   function ripulisciMappa() {
     // Rimuove tutti gli elementi decorativi
@@ -516,7 +549,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
       )}
 
       {/* Canvas */}
-      <div className="rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden"
+      <div ref={viewportRef} className="rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden"
         style={{ width: '100%', height: 680, backgroundColor: '#ffffff', cursor: selectMode ? 'default' : 'grab', position: 'relative', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}
         onMouseDown={selectMode ? undefined : startPan}>
         {/* Zoom sovrapposto all'angolo della mappa: compatto, non ruba spazio */}
@@ -525,7 +558,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
           <button onClick={() => setZoomSync(Math.max(0.2, +(zoomRef.current - 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">−</button>
           <span className="text-xs font-semibold text-ink-navy/60 w-10 text-center">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoomSync(Math.min(3, +(zoomRef.current + 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">+</button>
-          <button onClick={handleReset} className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1">Reset</button>
+          <button onClick={fitTutti} title="Fai entrare tutti i tavoli nella mappa" className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1 whitespace-nowrap">⤢ Adatta</button>
+          <button onClick={handleReset} className="text-xs text-electric-blue hover:text-ink-navy font-medium px-1">Reset</button>
         </div>
         <div style={{ position: 'absolute', top: 0, left: 0, transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', width: CANVAS_W, height: CANVAS_H, backgroundColor: '#ffffff', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}>
 
@@ -587,9 +621,14 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                   {!isSelected && tavoliOccupati?.has(t.id) && (
                     <div style={{ position: 'absolute', inset: -4, borderRadius: isC ? '50%' : 13, border: '2.5px solid #22c55e', pointerEvents: 'none', zIndex: 4, opacity: 0.95 }} />
                   )}
-                  {gruppo && !isSelected && (
-                    <div style={{ position: 'absolute', inset: -4, borderRadius: isC ? '50%' : 13, border: '2.5px dashed #f97316', pointerEvents: 'none', zIndex: 4 }} />
-                  )}
+                  {gruppo && !isSelected && (() => {
+                    // Se il tavolo è anche occupato (bordo verde a inset -4), spingo il tratteggio
+                    // arancione dei tavoli legati verso l'esterno così restano visibili entrambi.
+                    const occ = tavoliOccupati?.has(t.id)
+                    const off = occ ? -9 : -4
+                    const rad = isC ? '50%' : (occ ? 16 : 13)
+                    return <div style={{ position: 'absolute', inset: off, borderRadius: rad, border: '2.5px dashed #f97316', pointerEvents: 'none', zIndex: 3 }} />
+                  })()}
                   {/* Segnale "ordine pronto" dentro il riquadro (sparisce una volta aperto il tavolo) */}
                   {tavoliPronti?.has(t.id) && (
                     <div title="Ordine pronto" style={{ position: 'absolute', top: 6, right: 6, zIndex: 6, width: 22, height: 22, borderRadius: '50%', backgroundColor: '#dc2626', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, lineHeight: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.45)', border: '1.5px solid #fff', pointerEvents: 'none' }}>!</div>
@@ -826,10 +865,9 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   }
 
   async function sciogliGruppo(gruppoId: string) {
-    setConferma({ msg: 'Sciogliere questo gruppo di tavoli?', onConfirm: async () => {
-      await fetch(`/api/gruppi/${gruppoId}`, { method: 'DELETE', credentials: 'include' })
-      await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
-    }})
+    // Nessuna conferma: in modalità "Separa tavoli" (o col tasto Sciogli) l'azione è già esplicita.
+    await fetch(`/api/gruppi/${gruppoId}`, { method: 'DELETE', credentials: 'include' })
+    await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
   }
 
   function apriModifica(t: Tavolo) { setEditTavolo(t); setFormEdit({ numero: t.numero.toString(), etichetta: t.etichetta ?? '', posti: t.posti.toString(), note: t.note ?? '' }) }

@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 // Se i tavoli sono più di uno vengono legati in un GruppoTavoli (conti uniti),
 // riusando la stessa logica del dashboard (/api/tavoli/unisci-conti).
 export async function POST(req: Request) {
-  const { publicId, tavoli, righe, note } = await req.json()
+  const { publicId, tavoli, righe, note, coperti } = await req.json()
 
   const user = await prisma.user.findUnique({ where: { publicId } })
   if (!user) return NextResponse.json({ error: 'Locale non trovato' }, { status: 404 })
@@ -87,6 +87,7 @@ export async function POST(req: Request) {
         gruppoId,
         status: 'aperto',
         totale,
+        coperti: Number.isFinite(coperti) && coperti > 0 ? Math.floor(coperti) : null,
         note: note || null,
         righe: {
           create: righe.map((r: any) => ({

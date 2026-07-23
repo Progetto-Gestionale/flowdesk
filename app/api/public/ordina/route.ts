@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(req: Request) {
-  const { publicId, tipo, nome, cognome, email, telefono, data, ora, indirizzo, righe, noteCliente } = await req.json()
+  const { publicId, tipo, nome, cognome, email, telefono, data, ora, indirizzo, cap, righe, noteCliente } = await req.json()
 
   if (!publicId || !email || !nome || !data || !ora || !righe?.length) {
     return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 })
@@ -15,6 +15,14 @@ export async function POST(req: Request) {
 
   if (isDelivery && user.blockDelivery) {
     return NextResponse.json({ error: 'Il servizio delivery non è al momento disponibile.' }, { status: 503 })
+  }
+  // Rete di sicurezza zona di consegna: CAP servito (il raggio è validato lato client col geocoding).
+  if (isDelivery) {
+    const regole = (() => { try { return JSON.parse(user.regolePrenotazione ?? '{}') } catch { return {} } })()
+    const capServiti = String(regole.capConsegna ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+    if (capServiti.length > 0 && (!cap || !capServiti.includes(String(cap).trim()))) {
+      return NextResponse.json({ error: 'Non consegniamo in questa zona (CAP non servito).' }, { status: 422 })
+    }
   }
   if (!isDelivery && user.blockAsporto) {
     return NextResponse.json({ error: 'Il servizio asporto non è al momento disponibile.' }, { status: 503 })

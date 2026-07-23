@@ -57,7 +57,7 @@ export default function PrenotaPage() {
   const [errore, setErrore] = useState('')
   const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
   const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
-  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; durataMedia?: number; fasceOrdini?: string; bloccoAutoTavoli?: boolean; modalitaOrario?: 'libero' | 'turni'; tempoMinimoArrivoMinuti?: number }>({})
+  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; durataMedia?: number; fasceOrdini?: string; bloccoAutoTavoli?: boolean; modalitaOrario?: 'libero' | 'turni'; tempoMinimoArrivoMinuti?: number; capConsegna?: string; raggioConsegnaKm?: number; latLocale?: number; lonLocale?: number }>({})
   const [disponibilitaTurni, setDisponibilitaTurni] = useState<Record<string, boolean> | null>(null)
   const [slotDisponibile, setSlotDisponibile] = useState<boolean | null>(null) // null = non ancora verificato
 
@@ -123,6 +123,10 @@ export default function PrenotaPage() {
             bloccoAutoTavoli: r.bloccoAutoTavoli ?? false,
             modalitaOrario: r.modalitaOrario ?? 'libero',
             tempoMinimoArrivoMinuti: r.tempoMinimoArrivoMinuti ? Number(r.tempoMinimoArrivoMinuti) : undefined,
+            capConsegna: r.capConsegna || undefined,
+            raggioConsegnaKm: r.raggioConsegnaKm ? Number(r.raggioConsegnaKm) : undefined,
+            latLocale: typeof r.latLocale === 'number' ? r.latLocale : undefined,
+            lonLocale: typeof r.lonLocale === 'number' ? r.lonLocale : undefined,
           })
         } catch {}
       })
@@ -386,6 +390,25 @@ export default function PrenotaPage() {
           setInviando(false)
           return
         }
+        // ── Zona di consegna: deve rispettare CAP servito E raggio massimo ──
+        const capServiti = (regole.capConsegna ?? '').split(',').map(s => s.trim()).filter(Boolean)
+        if (capServiti.length > 0 && !capServiti.includes(dati.cap)) {
+          setErrIndirizzo('Spiacenti, non consegniamo in questa zona (CAP non servito). Puoi comunque scegliere il ritiro in negozio (asporto).')
+          setInviando(false)
+          return
+        }
+        if (regole.raggioConsegnaKm && regole.latLocale != null && regole.lonLocale != null) {
+          const lat = parseFloat(geo[0].lat), lon = parseFloat(geo[0].lon)
+          const toRad = (v: number) => v * Math.PI / 180
+          const dLat = toRad(lat - regole.latLocale), dLon = toRad(lon - regole.lonLocale)
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(regole.latLocale)) * Math.cos(toRad(lat)) * Math.sin(dLon / 2) ** 2
+          const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+          if (dist > regole.raggioConsegnaKm) {
+            setErrIndirizzo(`Spiacenti, questo indirizzo è fuori dalla nostra zona di consegna (circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            setInviando(false)
+            return
+          }
+        }
       }
       const res = await fetch('/api/public/ordina', {
         method: 'POST',
@@ -582,7 +605,7 @@ export default function PrenotaPage() {
                       onChange={e => { setSlotDisponibile(null); setFormTavolo(f => ({ ...f, ora: e.target.value })) }}
                       className={`${inp} ${slotDisponibile === false ? 'border-red-300 focus:ring-red-300' : ''}`} />
                     {slotDisponibile === false && (
-                      <p className="text-xs text-red-500 mt-1 font-medium">Questo orario non è disponibile — tutti i tavoli sono occupati.</p>
+                      <p className="text-xs text-red-500 mt-1 font-medium">Questo orario non è disponibile — capienza esaurita.</p>
                     )}
                     {slotDisponibile !== false && (() => {
                       const fasce = fascePer(formTavolo.data)
@@ -865,6 +888,11 @@ export default function PrenotaPage() {
             {dati.tipo === 'delivery' && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <p className="text-sm font-semibold text-gray-700">Indirizzo di consegna</p>
+                {(regole.capConsegna || regole.raggioConsegnaKm) && (
+                  <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                    📍 Consegniamo{regole.capConsegna ? ` nei CAP: ${regole.capConsegna}` : ''}{regole.capConsegna && regole.raggioConsegnaKm ? ', ' : ''}{regole.raggioConsegnaKm ? ` entro ${regole.raggioConsegnaKm} km dal locale` : ''}.
+                  </p>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Città *</label>
                   <input value={dati.citta} onChange={e => { setDati(d => ({ ...d, citta: e.target.value })); setErrIndirizzo('') }}

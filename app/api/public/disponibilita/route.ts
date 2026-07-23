@@ -17,10 +17,9 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
 
   const regole = (() => { try { return JSON.parse(user.regolePrenotazione ?? '{}') } catch { return {} } })()
-  if (!regole.bloccoAutoTavoli) return NextResponse.json({ turni: null, disponibile: true })
-
-  const totaleTavoli = await prisma.tavolo.count({ where: { userId: user.id } })
-  if (totaleTavoli === 0) return NextResponse.json({ turni: null, disponibile: true })
+  // Blocco basato sulla capienza in coperti: attivo solo se il toggle è on E la capienza è impostata.
+  const capienza = Number(regole.copertiMax)
+  if (!regole.bloccoAutoTavoli || !capienza || capienza <= 0) return NextResponse.json({ turni: null, disponibile: true })
 
   // Conversione HH:MM → minuti del giorno
   function toMin(hhmm: string): number {
@@ -46,9 +45,8 @@ export async function GET(req: Request) {
       userId: user.id,
       status: { not: 'cancellato' },
       data: { gte: inizioGiorno, lte: fineGiorno },
-      OR: [{ tavoloId: { not: null } }, { tavoliIds: { not: null } }],
     },
-    select: { data: true, durata: true, tavoloId: true, tavoliIds: true },
+    select: { data: true, durata: true, coperti: true },
   })
 
   // Filtra solo gli appuntamenti che cadono nel giorno richiesto (ora locale)
@@ -58,28 +56,25 @@ export async function GET(req: Request) {
     return localDateStr === data
   })
 
-  // Conta tavoli occupati in una fascia (in minuti locali)
-  function tavoliOccupatiInFascia(inizioMin: number, fineMin: number): number {
-    const occupati = new Set<string>()
+  // Somma i coperti prenotati in una fascia (in minuti locali)
+  function copertiOccupatiInFascia(inizioMin: number, fineMin: number): number {
+    let coperti = 0
     for (const app of appDelGiorno) {
       const appStart = appToLocalMin(app.data)
       const appEnd = appStart + app.durata
       if (appStart < fineMin && appEnd > inizioMin) {
-        if (app.tavoloId) occupati.add(app.tavoloId)
-        if (app.tavoliIds) {
-          try { (JSON.parse(app.tavoliIds) as string[]).forEach(id => occupati.add(id)) } catch {}
-        }
+        coperti += app.coperti ?? 1
       }
     }
-    return occupati.size
+    return coperti
   }
 
   // ── Modalità slot puntuale ────────────────────────────────────────────────
   if (ora && durata) {
     const slotInizio = toMin(ora)
     const slotFine = slotInizio + Number(durata)
-    const occupati = tavoliOccupatiInFascia(slotInizio, slotFine)
-    return NextResponse.json({ disponibile: occupati < totaleTavoli })
+    const coperti = copertiOccupatiInFascia(slotInizio, slotFine)
+    return NextResponse.json({ disponibile: coperti < capienza })
   }
 
   // ── Modalità turni ────────────────────────────────────────────────────────
@@ -87,8 +82,8 @@ export async function GET(req: Request) {
     (() => { try { return JSON.parse(user.turniServizio ?? '[]') } catch { return [] } })()
 
   const turniConDisponibilita = turniServizio.map(turno => {
-    const occupati = tavoliOccupatiInFascia(toMin(turno.oraInizio), toMin(turno.oraFine))
-    return { id: turno.id, disponibile: occupati < totaleTavoli }
+    const coperti = copertiOccupatiInFascia(toMin(turno.oraInizio), toMin(turno.oraFine))
+    return { id: turno.id, disponibile: coperti < capienza }
   })
 
   return NextResponse.json({ turni: turniConDisponibilita })

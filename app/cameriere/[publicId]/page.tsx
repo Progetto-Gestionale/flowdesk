@@ -34,6 +34,7 @@ export default function CamerierePage() {
   const [verificandoPin, setVerificandoPin] = useState(false)
 
   const [selezionati, setSelezionati] = useState<number[]>([]) // numeri tavolo
+  const [coperti, setCoperti] = useState(2)
   const [carrello, setCarrello] = useState<RigaCarrello[]>([])
   const [noteOrdine, setNoteOrdine] = useState('')
   const [catAttiva, setCatAttiva] = useState<string | null>(null)
@@ -133,7 +134,7 @@ export default function CamerierePage() {
     try {
       const res = await fetch('/api/cameriere/ordina', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicId, tavoli: selezionati, righe: carrello, note: noteOrdine }),
+        body: JSON.stringify({ publicId, tavoli: selezionati, coperti, righe: carrello, note: noteOrdine }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -187,7 +188,7 @@ export default function CamerierePage() {
         <button onClick={() => setStep('menu')} className="mt-6 w-full py-3 rounded-xl text-white font-semibold" style={{ backgroundColor: coloreP }}>
           Ordina ancora per il tavolo {labelTavoli}
         </button>
-        <button onClick={async () => { setSelezionati([]); await caricaDati(); setStep('tavoli') }}
+        <button onClick={() => { setSelezionati([]); setCoperti(2); setStep('tavoli'); caricaDati() }}
           className="mt-2 w-full py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold">
           Cambia tavolo
         </button>
@@ -256,6 +257,16 @@ export default function CamerierePage() {
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg">
             <div className="max-w-lg mx-auto">
               {selezionati.length > 1 && <p className="text-xs text-center text-gray-500 mb-2">🔗 {selezionati.length} tavoli — i conti verranno uniti</p>}
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-gray-700">Coperti</span>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setCoperti(c => Math.max(1, c - 1))}
+                    className="w-9 h-9 rounded-full border-2 flex items-center justify-center font-bold text-lg" style={{ borderColor: coloreP, color: coloreP }}>−</button>
+                  <span className="font-bold text-gray-900 w-6 text-center text-lg">{coperti}</span>
+                  <button onClick={() => setCoperti(c => c + 1)}
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: coloreP }}>+</button>
+                </div>
+              </div>
               <button onClick={() => setStep('menu')} className="w-full py-3.5 rounded-2xl text-white font-bold shadow-md" style={{ backgroundColor: coloreP }}>
                 Prendi ordine — Tavolo {labelTavoli}
               </button>

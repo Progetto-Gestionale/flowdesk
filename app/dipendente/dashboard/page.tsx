@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Logo from '@/app/components/Logo'
+import { IconDelivery } from '@/app/components/icons'
 
 interface Turno {
   id: string
@@ -398,7 +399,7 @@ export default function DipendenteDashboard() {
             <button onClick={() => setSezione('delivery')}
               className="w-full bg-white rounded-xl border border-ink-navy/10 shadow-sm p-4 flex items-center gap-4 active:bg-mist transition-colors">
               <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
-                <span className="text-xl">🛵</span>
+                <IconDelivery className="w-5 h-5 text-teal-600" />
               </div>
               <div className="text-left flex-1 min-w-0">
                 <p className="font-semibold text-ink-navy text-sm">Consegne delivery</p>
@@ -578,7 +579,7 @@ export default function DipendenteDashboard() {
               <div className="space-y-3">
                 {deliveryOrdini.length === 0 ? (
                   <div className="bg-white rounded-2xl border border-ink-navy/10 p-10 text-center shadow-sm">
-                    <p className="text-3xl mb-3">🛵</p>
+                    <div className="flex justify-center mb-3"><IconDelivery className="w-9 h-9 text-ink-navy/25" /></div>
                     <p className="text-ink-navy/40 text-sm">Nessun ordine da consegnare</p>
                   </div>
                 ) : deliveryOrdini.map(o => {

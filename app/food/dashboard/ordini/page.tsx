@@ -284,10 +284,9 @@ export default function OrdiniPage() {
                 className="text-xs text-electric-blue hover:underline">cambia tavolo</button>
             </div>
           )}
-          {!isTavolo && (ci.telefono || ci.indirizzo) && (
+          {!isTavolo && ci.telefono && (
             <div className="px-4 py-2 space-y-0.5">
-              {ci.telefono && <p className="text-xs text-ink-navy/50">{ci.telefono}</p>}
-              {ci.indirizzo && <p className="text-xs text-ink-navy/50">{ci.indirizzo}</p>}
+              <p className="text-xs text-ink-navy/50">{ci.telefono}</p>
             </div>
           )}
           {o.righe.map(r => (

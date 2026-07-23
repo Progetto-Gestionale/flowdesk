@@ -118,10 +118,7 @@ export default function DeliveryPage() {
           <span className={`text-sm font-semibold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
           <div className="flex items-center gap-2">
             {stato === 'in_preparazione' && (
-              <button onClick={() => setStato(o.id, 'pronto')}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
-                Segna pronto
-              </button>
+              <span className="text-xs text-ink-navy/35">In cucina</span>
             )}
             {stato === 'pronto' && (
               <button onClick={() => setStato(o.id, 'consegnato')}
@@ -151,7 +148,6 @@ export default function DeliveryPage() {
   if (loading) return <p className="text-ink-navy/35 text-sm p-8">Caricamento...</p>
 
   const perStato = (s: Stato) => ordini.filter(o => statoOrdine(o) === s)
-  const vuoto = ordini.length === 0
 
   return (
     <div className="space-y-6">
@@ -166,30 +162,25 @@ export default function DeliveryPage() {
         </button>
       </div>
 
-      {vuoto ? (
-        <div className="bg-white rounded-2xl border border-ink-navy/10 p-16 text-center shadow-sm">
-          <p className="text-ink-navy/50 text-sm">Nessun ordine delivery oggi</p>
-          <p className="text-ink-navy/35 text-xs mt-1">Gli ordini a domicilio compaiono qui appena arrivano</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {SEZIONI.map(sez => {
-            const lista = perStato(sez.key)
-            if (lista.length === 0) return null
-            return (
-              <div key={sez.key}>
-                <h2 className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider flex items-center gap-2 mb-3">
-                  {sez.label}
-                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${sez.key === 'pronto' ? 'bg-teal-600 text-white' : 'bg-mist text-ink-navy/50'}`}>{lista.length}</span>
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {lista.map(o => <Card key={o.id} o={o} />)}
-                </div>
+      {/* Tre colonne sempre visibili: preparazione · pronti · consegnati (restano per tutta la giornata) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        {SEZIONI.map(sez => {
+          const lista = perStato(sez.key)
+          return (
+            <div key={sez.key} className="bg-mist/40 rounded-2xl border border-ink-navy/8 p-3">
+              <h2 className="text-sm font-semibold text-ink-navy/60 uppercase tracking-wider flex items-center gap-2 mb-3 px-1">
+                {sez.label}
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${sez.key === 'pronto' ? 'bg-teal-600 text-white' : 'bg-white text-ink-navy/50 border border-ink-navy/10'}`}>{lista.length}</span>
+              </h2>
+              <div className="space-y-3">
+                {lista.length === 0
+                  ? <p className="text-xs text-ink-navy/30 text-center py-8">Nessun ordine</p>
+                  : lista.map(o => <Card key={o.id} o={o} />)}
               </div>
-            )
-          })}
-        </div>
-      )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
