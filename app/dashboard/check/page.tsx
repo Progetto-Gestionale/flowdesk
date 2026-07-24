@@ -17,19 +17,17 @@ export default async function DashboardCheck() {
     redirect(user.verticale === 'care' ? '/care/dashboard' : '/food/dashboard')
   }
 
+  // Nuovo utente (nessun record DB) → creiamo il record con la verticale scelta in fase
+  // di iscrizione e andiamo DRITTI al dashboard, senza domande di onboarding.
   const clerkUser = await currentUser()
   const cookieStore = await cookies()
   const verticalePending = cookieStore.get('verticale_pending')?.value as 'food' | 'care' | undefined
-
-  // Nuovo utente appena iscritto → onboarding (che crea il record impostando la verticale dal cookie).
-  const createdAt = clerkUser?.createdAt ?? 0
-  const isNew = Date.now() - createdAt < 5 * 60 * 1000
-  if (isNew) redirect('/onboarding')
-
-  // Account Clerk esistente ma senza record DB (caso raro): lo creiamo con la verticale scelta.
   const verticale: 'food' | 'care' = verticalePending === 'care' ? 'care' : 'food'
-  await prisma.user.create({
-    data: {
+
+  await prisma.user.upsert({
+    where: { clerkId: userId },
+    update: {},
+    create: {
       clerkId: userId,
       email: clerkUser?.emailAddresses[0]?.emailAddress,
       name: clerkUser?.fullName ?? clerkUser?.firstName ?? '',

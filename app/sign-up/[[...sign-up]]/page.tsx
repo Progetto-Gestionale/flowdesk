@@ -12,6 +12,7 @@ export default async function SignUpPage() {
     <main className="flex min-h-screen items-center justify-center bg-mist">
       <SignUp
         signInUrl="/sign-in"
+        forceRedirectUrl="/dashboard/check"
         appearance={{
           variables: {
             colorPrimary: '#1F52FF',
