@@ -449,7 +449,12 @@ export default function PrenotaPage() {
   // Ordine completato
   if (tab === 'asporto' && step === 'inviato') return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="bg-white rounded-2xl p-10 text-center shadow-lg max-w-sm w-full">
+      <div className="bg-white rounded-3xl p-10 text-center shadow-lg max-w-sm w-full">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: `${coloreP}1a` }}>
+          <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" style={{ color: coloreP }}>
+            <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
         <h2 className="text-xl font-bold text-gray-900">Ordine ricevuto</h2>
         <p className="text-gray-500 text-sm mt-3">Il tuo ordine è stato registrato. Lo troverai pronto all&apos;orario indicato.</p>
         <button onClick={() => { setStep('menu'); setDati(d => ({ ...d, nome: '', cognome: '', email: '', telefono: '', noteCliente: '' })) }}
@@ -523,7 +528,12 @@ export default function PrenotaPage() {
       {tab === 'tavolo' && (
         <div className="max-w-lg mx-auto px-4 py-6 pb-10">
           {okTavolo ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow p-8 text-center">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow p-8 text-center">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: `${coloreP}1a` }}>
+                <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" style={{ color: coloreP }}>
+                  <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
               <h2 className="text-lg font-bold text-gray-800 mb-2">Richiesta ricevuta</h2>
               <p className="text-sm text-gray-500 leading-relaxed">
                 Riceverai una conferma via email entro breve.<br />

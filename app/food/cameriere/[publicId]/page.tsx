@@ -181,9 +181,13 @@ export default function CamerierePage() {
 
   if (step === 'ok') return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="bg-white rounded-2xl p-10 text-center shadow-lg max-w-sm w-full">
-        <div className="text-6xl mb-4">✅</div>
-        <h2 className="text-xl font-bold text-gray-900">Ordine inviato!</h2>
+      <div className="bg-white rounded-3xl p-10 text-center shadow-lg max-w-sm w-full">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: `${coloreP}1a` }}>
+          <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" style={{ color: coloreP }}>
+            <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-bold text-gray-900">Ordine inviato</h2>
         <p className="text-gray-500 text-sm mt-2">Tavolo {labelTavoli} — inviato in cucina.</p>
         <button onClick={() => setStep('menu')} className="mt-6 w-full py-3 rounded-xl text-white font-semibold" style={{ backgroundColor: coloreP }}>
           Ordina ancora per il tavolo {labelTavoli}

@@ -22,7 +22,7 @@ const VERTICALI = [
     title: 'Lo studio,',
     titleAccent: 'più sano.',
     description: 'Pazienti, appuntamenti e cartelle cliniche per professionisti sanitari, senza fogli sparsi e telefonate perse.',
-    live: false,
+    live: true,
     href: '/care',
   },
   {
@@ -115,7 +115,7 @@ export default function Home() {
 
                 {v.live ? (
                   <span className="mt-6 inline-flex items-center justify-center gap-2 bg-zest-lime text-ink-navy font-bold text-sm px-5 py-2.5 rounded-lg group-hover:bg-zest-lime/90 transition-colors w-fit">
-                    Scopri Flowest Food
+                    Scopri Flowest {v.id.charAt(0).toUpperCase() + v.id.slice(1)}
                     <span className="w-4 h-4"><IconArrowRight /></span>
                   </span>
                 ) : (

@@ -650,8 +650,10 @@ export default function DipendenteDashboard() {
                               </p>
                               {turniGiorno.map((t, i) => (
                                 <div key={i} onClick={() => setTurnoSelezionato(turnoSelezionato?.id === t.id ? null : t)}
-                                  className="bg-electric-blue text-white rounded-lg px-1.5 py-1 text-xs font-semibold mb-1 cursor-pointer hover:bg-electric-blue/80 transition-colors">
-                                  {t.oraInizio}–{t.oraFine}
+                                  title={`${t.oraInizio} – ${t.oraFine}`}
+                                  className="bg-electric-blue text-white rounded-lg px-1 py-1 mb-1 cursor-pointer hover:bg-electric-blue/80 transition-colors flex items-center justify-center gap-0.5 whitespace-nowrap leading-none">
+                                  <span className="text-xs font-bold">{t.oraInizio}</span>
+                                  <span className="w-1 h-1 rounded-full bg-white/60 shrink-0" />
                                 </div>
                               ))}
                             </>
