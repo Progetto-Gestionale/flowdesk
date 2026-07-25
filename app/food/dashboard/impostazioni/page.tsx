@@ -8,6 +8,7 @@ import {
   IconChat, IconCamera, IconPin,
 } from '@/app/components/icons'
 import { preparaFoto } from '@/lib/uploadFoto'
+import OrarioSelect from '@/app/components/OrarioSelect'
 
 const SETTORI = [
   'Ristorazione', 'Biomedica', 'Consulenza', 'E-commerce',
@@ -23,6 +24,28 @@ const GIORNI_LABEL: Record<string, string> = {
 
 const GIORNI_LUNGHI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+
+// Palette colori per la personalizzazione del menu (al posto del color-picker nativo).
+const COLORI_PRIMARI = [
+  '#4f46e5', '#1F52FF', '#0ea5e9', '#0d9488', '#16a34a', '#65a30d',
+  '#ca8a04', '#ea580c', '#dc2626', '#db2777', '#9333ea', '#0B1533',
+]
+const COLORI_SECONDARI = ['#ffffff', '#f5f5f4', '#0B1533', '#111827']
+
+function PalettaColori({ colori, valore, onChange }: { colori: string[]; valore: string; onChange: (c: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2 mt-1.5">
+      {colori.map(c => {
+        const sel = valore.toLowerCase() === c.toLowerCase()
+        return (
+          <button key={c} type="button" onClick={() => onChange(c)} aria-label={c} title={c}
+            className={`w-8 h-8 rounded-lg transition-transform ${sel ? 'ring-2 ring-electric-blue ring-offset-2 scale-105' : 'border border-ink-navy/15 hover:scale-105'}`}
+            style={{ backgroundColor: c }} />
+        )
+      })}
+    </div>
+  )
+}
 
 const SEZIONI = [
   { id: 'generale', label: 'Locale', Icon: IconHome },
@@ -714,14 +737,14 @@ export default function Impostazioni() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-ink-navy/60 mb-1">Inizio</label>
-                        <input type="time" step={900} value={t.oraInizio}
-                          onChange={e => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraInizio: e.target.value } : x)); dirty('turni') }}
+                        <OrarioSelect value={t.oraInizio}
+                          onChange={v => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraInizio: v } : x)); dirty('turni') }}
                           className={cls} />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-ink-navy/60 mb-1">Fine</label>
-                        <input type="time" step={900} value={t.oraFine}
-                          onChange={e => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraFine: e.target.value } : x)); dirty('turni') }}
+                        <OrarioSelect value={t.oraFine}
+                          onChange={v => { setTurniServizio(prev => prev.map((x, j) => j === i ? { ...x, oraFine: v } : x)); dirty('turni') }}
                           className={cls} />
                       </div>
                     </div>
@@ -917,22 +940,14 @@ export default function Impostazioni() {
                     <div className="space-y-1">
                       <label className="block text-sm font-medium text-ink-navy/70">Colore principale</label>
                       <p className="text-xs text-ink-navy/35">Il colore del tuo brand: bottoni, prezzi e categorie</p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <input type="color" value={grafica.menuColoreP}
-                          onChange={e => { setGrafica(g => ({ ...g, menuColoreP: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
-                          className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
-                        <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreP}</span>
-                      </div>
+                      <PalettaColori colori={COLORI_PRIMARI} valore={grafica.menuColoreP}
+                        onChange={c => { setGrafica(g => ({ ...g, menuColoreP: c })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }} />
                     </div>
                     <div className="space-y-1">
                       <label className="block text-sm font-medium text-ink-navy/70">Colore secondario</label>
                       <p className="text-xs text-ink-navy/35">Testo sopra i bottoni colorati (di solito bianco)</p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <input type="color" value={grafica.menuColoreS}
-                          onChange={e => { setGrafica(g => ({ ...g, menuColoreS: e.target.value })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }}
-                          className="w-12 h-10 rounded-lg border border-ink-navy/15 cursor-pointer p-0.5" />
-                        <span className="text-sm font-mono text-ink-navy/60">{grafica.menuColoreS}</span>
-                      </div>
+                      <PalettaColori colori={COLORI_SECONDARI} valore={grafica.menuColoreS}
+                        onChange={c => { setGrafica(g => ({ ...g, menuColoreS: c })); setGraficaStatus(s => ({ ...s, dirty: true, saved: false })) }} />
                     </div>
                   </div>
                   <div>

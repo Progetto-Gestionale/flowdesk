@@ -20,6 +20,20 @@ export async function POST(req: Request) {
     })
     if (!dip) return NextResponse.json({ error: 'Accesso non autorizzato' }, { status: 403 })
 
+    // Il titolare sceglie UNA modalità (fisso o ciclante): è valido solo il token di quella
+    // modalità, così le due cose restano separate e non si creano conflitti (es. un vecchio
+    // QR fisso stampato che continua a funzionare dopo il passaggio al ciclante).
+    const titolare = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { qrTimbraturaFisso: true },
+    })
+    if (payload.fisso !== (titolare?.qrTimbraturaFisso ?? false)) {
+      return NextResponse.json(
+        { error: 'Questo QR non è più attivo. Usa il QR timbratura corrente.' },
+        { status: 400 },
+      )
+    }
+
     // Determina tipo: se l'ultima timbratura è entrata → uscita, altrimenti entrata
     const ultima = await prisma.timbratura.findFirst({
       where: { dipendenteId: dip.id, userId: payload.userId },

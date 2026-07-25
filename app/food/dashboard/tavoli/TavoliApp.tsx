@@ -370,9 +370,11 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     }
   }
 
-  // Adatta la vista in modo che TUTTI i tavoli entrino nella mappa, centrati.
+  // Adatta la vista in modo che i tavoli della SALA ATTIVA entrino nella mappa, centrati.
+  // Usiamo solo i tavoli passati via prop (già filtrati per sala), non tutto mdRef,
+  // così il fit funziona per singola sala e non viene sbilanciato da altre sale.
   function fitTutti() {
-    const items = Object.values(mdRef.current)
+    const items = tavoli.map(t => mdRef.current[t.id]).filter((d): d is MapData => !!d)
     if (items.length === 0) return
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
     items.forEach(d => {
@@ -401,6 +403,17 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     didAutoFit.current = true
     if (!hasSaved) requestAnimationFrame(() => fitTutti())
   }, [tavoli])
+
+  // Cambiando sala, ricentra la vista sui tavoli di quella sala (ogni sala ha il suo fit).
+  const prevSalaRef = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    const sid = salaAttiva?.id ?? null
+    if (prevSalaRef.current === undefined) { prevSalaRef.current = sid; return } // primo mount: lo gestisce l'auto-fit iniziale
+    if (prevSalaRef.current !== sid) {
+      prevSalaRef.current = sid
+      requestAnimationFrame(() => fitTutti())
+    }
+  }, [salaAttiva?.id])
 
   function ripulisciMappa() {
     // Rimuove tutti gli elementi decorativi

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import OrarioSelect from '@/app/components/OrarioSelect'
 import { useRouter } from 'next/navigation'
 import Logo from '@/app/components/Logo'
 import { IconDelivery } from '@/app/components/icons'
@@ -955,11 +956,11 @@ export default function DipendenteDashboard() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Dalle</label>
-                    <input type="time" step={900} value={g.oraInizio} onChange={e => aggiornaGiorno(giornoOrario, 'oraInizio', e.target.value)} className={inp} />
+                    <OrarioSelect value={g.oraInizio} onChange={v => aggiornaGiorno(giornoOrario, 'oraInizio', v)} className={inp} />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Alle</label>
-                    <input type="time" step={900} value={g.oraFine} onChange={e => aggiornaGiorno(giornoOrario, 'oraFine', e.target.value)} className={inp} />
+                    <OrarioSelect value={g.oraFine} onChange={v => aggiornaGiorno(giornoOrario, 'oraFine', v)} className={inp} />
                   </div>
                 </div>
                 <input value={g.note} onChange={e => aggiornaGiorno(giornoOrario, 'note', e.target.value)} placeholder="Note (opzionale)" className={inp} />
@@ -1009,11 +1010,11 @@ export default function DipendenteDashboard() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Dalle</label>
-                      <input type="time" step={900} value={form.oraInizio} onChange={e => setForm(f => ({ ...f, oraInizio: e.target.value }))} className={inp} />
+                      <OrarioSelect value={form.oraInizio} onChange={v => setForm(f => ({ ...f, oraInizio: v }))} className={inp} />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Alle</label>
-                      <input type="time" step={900} value={form.oraFine} onChange={e => setForm(f => ({ ...f, oraFine: e.target.value }))} className={inp} />
+                      <OrarioSelect value={form.oraFine} onChange={v => setForm(f => ({ ...f, oraFine: v }))} className={inp} />
                     </div>
                   </div>
                 </div>

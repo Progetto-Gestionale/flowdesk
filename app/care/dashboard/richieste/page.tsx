@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import OrarioSelect from '@/app/components/OrarioSelect'
 import { IconClipboard, IconCheck } from '@/app/components/icons'
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
@@ -257,7 +258,7 @@ export default function RichiestePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora</label>
-                <input type="time" value={oraApp} onChange={e => setOraApp(e.target.value)}
+                <OrarioSelect value={oraApp} onChange={setOraApp}
                   className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>

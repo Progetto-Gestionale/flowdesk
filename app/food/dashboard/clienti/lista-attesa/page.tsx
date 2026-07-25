@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import OrarioSelect from '@/app/components/OrarioSelect'
 import { IconTrash } from '@/app/components/icons'
 
 interface Attesa {
@@ -205,7 +206,7 @@ export default function ListaAttesaPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Orario *</label>
-                <input type="time" value={form.ora} step={900} onChange={e => setForm(f => ({ ...f, ora: e.target.value }))}
+                <OrarioSelect value={form.ora} onChange={v => setForm(f => ({ ...f, ora: v }))}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div>

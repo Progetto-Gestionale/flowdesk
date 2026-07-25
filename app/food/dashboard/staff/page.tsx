@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import OrarioSelect from '@/app/components/OrarioSelect'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
 import { IconUsers, IconTrash, IconPencil } from '@/app/components/icons'
@@ -1048,14 +1049,14 @@ export default function StaffPage() {
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-ink-navy/60 mb-1">Dalle</label>
-                <input type="time" step={900} value={cellModal.oraInizio}
-                  onChange={e => setCellModal(m => m ? { ...m, oraInizio: e.target.value } : m)}
+                <OrarioSelect value={cellModal.oraInizio}
+                  onChange={v => setCellModal(m => m ? { ...m, oraInizio: v } : m)}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div className="flex-1">
                 <label className="block text-xs font-medium text-ink-navy/60 mb-1">Alle</label>
-                <input type="time" step={900} value={cellModal.oraFine}
-                  onChange={e => setCellModal(m => m ? { ...m, oraFine: e.target.value } : m)}
+                <OrarioSelect value={cellModal.oraFine}
+                  onChange={v => setCellModal(m => m ? { ...m, oraFine: v } : m)}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>
@@ -1366,12 +1367,12 @@ export default function StaffPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-ink-navy/70 mb-1">Inizio *</label>
-                  <input type="time" step={900} value={formTurno.oraInizio} onChange={e => setFormTurno(f => ({ ...f, oraInizio: e.target.value }))}
+                  <OrarioSelect value={formTurno.oraInizio} onChange={v => setFormTurno(f => ({ ...f, oraInizio: v }))}
                     className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-ink-navy/70 mb-1">Fine *</label>
-                  <input type="time" step={900} value={formTurno.oraFine} onChange={e => setFormTurno(f => ({ ...f, oraFine: e.target.value }))}
+                  <OrarioSelect value={formTurno.oraFine} onChange={v => setFormTurno(f => ({ ...f, oraFine: v }))}
                     className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
               </div>
@@ -1450,14 +1451,14 @@ export default function StaffPage() {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Inizio</label>
-                  <input type="time" step={900} value={editForm.oraInizio}
-                    onChange={e => setEditForm(f => ({ ...f, oraInizio: e.target.value }))}
+                  <OrarioSelect value={editForm.oraInizio}
+                    onChange={v => setEditForm(f => ({ ...f, oraInizio: v }))}
                     className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
                 </div>
                 <div className="flex-1">
                   <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Fine</label>
-                  <input type="time" step={900} value={editForm.oraFine}
-                    onChange={e => setEditForm(f => ({ ...f, oraFine: e.target.value }))}
+                  <OrarioSelect value={editForm.oraFine}
+                    onChange={v => setEditForm(f => ({ ...f, oraFine: v }))}
                     className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
                 </div>
               </div>

@@ -18,12 +18,21 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: 'Flowest',
   description: 'Il tuo business gestisce se stesso. Tu pensi a crescere.',
+  applicationName: 'Flowest',
+  // Abilita l'apertura a schermo intero su iOS/iPadOS quando aggiunto alla Home
+  // (aggiunge apple-mobile-web-app-capable, -title, -status-bar-style).
+  appleWebApp: {
+    capable: true,
+    title: 'Flowest',
+    statusBarStyle: 'default',
+  },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  viewportFit: 'cover', // usa tutta l'area anche sui telefoni con notch/home indicator
+  viewportFit: 'cover', // usa tutta l'area anche sui tablet/telefoni con notch/home indicator
+  themeColor: '#0B1533', // colore della barra di stato in modalità standalone
 }
 
 export default function RootLayout({

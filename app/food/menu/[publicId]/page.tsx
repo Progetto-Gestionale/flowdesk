@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import { geocodaIndirizzo, distanzaKm } from '@/lib/geocode'
+import OrarioSelect from '@/app/components/OrarioSelect'
 
 interface Piatto {
   id: string
@@ -519,15 +520,15 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             {dati.tipo === 'delivery' ? 'Quando vuoi la consegna?' : 'Quando passi a ritirare?'}
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-gray-500 mb-1">Data *</label>
               <input type="date" value={dati.data} min={oggi}
-                onChange={e => setDati(d => ({ ...d, data: e.target.value }))} className={inpFocus} />
+                onChange={e => setDati(d => ({ ...d, data: e.target.value }))} className={`${inpFocus} min-w-0 max-w-full`} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-gray-500 mb-1">Orario *</label>
-              <input type="time" value={dati.ora} step={900}
-                onChange={e => setDati(d => ({ ...d, ora: e.target.value }))} className={inpFocus} />
+              <OrarioSelect value={dati.ora}
+                onChange={v => setDati(d => ({ ...d, ora: v }))} className={`${inpFocus} min-w-0 max-w-full`} />
             </div>
           </div>
           {(() => {

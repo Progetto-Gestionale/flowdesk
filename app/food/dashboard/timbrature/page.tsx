@@ -6,6 +6,7 @@ type Modo = 'ciclante' | 'fisso'
 
 export default function TimbraturePage() {
   const [modo, setModo] = useState<Modo>('ciclante')
+  const [caricato, setCaricato] = useState(false)
   const [token, setToken] = useState<string | null>(null)
   const [secondi, setSecondi] = useState(60)
   const qrRef = useRef<HTMLDivElement>(null)
@@ -18,7 +19,29 @@ export default function TimbraturePage() {
     }
   }
 
+  // Carica la modalità salvata dal titolare (persistita lato server): è quella che
+  // determina anche quale token è valido allo scan, così le due modalità non si mescolano.
   useEffect(() => {
+    fetch('/api/settings', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.qrTimbraturaFisso) setModo('fisso') })
+      .catch(() => {})
+      .finally(() => setCaricato(true))
+  }, [])
+
+  // Salva la scelta lato server e aggiorna la modalità mostrata.
+  async function cambiaModo(m: Modo) {
+    if (m === modo) return
+    setModo(m)
+    await fetch('/api/settings', {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qrTimbraturaFisso: m === 'fisso' }),
+    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    if (!caricato) return // aspetta la modalità salvata per non mostrare il QR sbagliato
     setToken(null)
     fetchToken(modo === 'fisso')
     if (modo === 'fisso') return // il QR fisso non scade: nessun timer
@@ -32,7 +55,7 @@ export default function TimbraturePage() {
       })
     }, 1000)
     return () => clearInterval(tick)
-  }, [modo])
+  }, [modo, caricato])
 
   function stampaQr() {
     const svg = qrRef.current?.querySelector('svg')
@@ -70,7 +93,7 @@ export default function TimbraturePage() {
           { k: 'ciclante' as const, l: 'Ciclante (sicuro)' },
           { k: 'fisso' as const, l: 'Fisso (stampabile)' },
         ]).map(o => (
-          <button key={o.k} onClick={() => setModo(o.k)}
+          <button key={o.k} onClick={() => cambiaModo(o.k)}
             className={`flex-1 px-4 py-2 transition-colors ${modo === o.k ? 'bg-electric-blue text-white' : 'text-ink-navy/50 hover:bg-mist'}`}>
             {o.l}
           </button>

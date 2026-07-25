@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { geocodaIndirizzo, distanzaKm } from '@/lib/geocode'
+import OrarioSelect from '@/app/components/OrarioSelect'
 
 // ── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -230,7 +231,15 @@ export default function PrenotaPage() {
 
   function oraInFasce(ora: string, fasce: { inizio: string; fine: string }[]): boolean {
     if (fasce.length === 0) return true // nessun vincolo
-    return fasce.some(f => ora >= f.inizio && ora <= f.fine)
+    const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+    const o = toMin(ora)
+    return fasce.some(f => {
+      const start = toMin(f.inizio)
+      let end = toMin(f.fine)
+      if (end === 0) end = 24 * 60 // "00:00" = mezzanotte di fine giornata
+      if (end >= start) return o >= start && o <= end // fascia normale
+      return o >= start || o <= end // fascia che scavalca la mezzanotte (es. 18:00–02:00)
+    })
   }
 
   function minOraPerData(dataStr: string): string {
@@ -602,9 +611,9 @@ export default function PrenotaPage() {
                   /* Modalità libera: il cliente sceglie l'orario */
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Ora *</label>
-                    <input type="time" required value={formTavolo.ora}
-                      min={minOraPerData(formTavolo.data)} step={900}
-                      onChange={e => { setSlotDisponibile(null); setFormTavolo(f => ({ ...f, ora: e.target.value })) }}
+                    <OrarioSelect required value={formTavolo.ora}
+                      min={minOraPerData(formTavolo.data)}
+                      onChange={v => { setSlotDisponibile(null); setFormTavolo(f => ({ ...f, ora: v })) }}
                       className={`${inp} ${slotDisponibile === false ? 'border-red-300 focus:ring-red-300' : ''}`} />
                     {slotDisponibile === false && (
                       <p className="text-xs text-red-500 mt-1 font-medium">Questo orario non è disponibile — capienza esaurita.</p>
@@ -863,16 +872,16 @@ export default function PrenotaPage() {
                 {dati.tipo === 'delivery' ? 'Quando vuoi la consegna?' : 'Quando passi a ritirare?'}
               </p>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-medium text-gray-500 mb-1">Data *</label>
                   <input type="date" value={dati.data} min={oggi}
-                    onChange={e => setDati(d => ({ ...d, data: e.target.value }))} className={inp} />
+                    onChange={e => setDati(d => ({ ...d, data: e.target.value }))} className={`${inp} min-w-0 max-w-full`} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-medium text-gray-500 mb-1">Orario *</label>
-                  <input type="time" value={dati.ora}
-                    min={minOraPerData(dati.data)} step={900}
-                    onChange={e => setDati(d => ({ ...d, ora: e.target.value }))} className={inp} />
+                  <OrarioSelect value={dati.ora}
+                    min={minOraPerData(dati.data)}
+                    onChange={v => setDati(d => ({ ...d, ora: v }))} className={`${inp} min-w-0 max-w-full`} />
                 </div>
               </div>
               {(() => {

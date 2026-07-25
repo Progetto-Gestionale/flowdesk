@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import OrarioSelect from '@/app/components/OrarioSelect'
 import { IconTrash } from '@/app/components/icons'
 
 const GIORNI_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -718,8 +719,8 @@ export default function Calendario() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora *</label>
-                    <input type="time" value={formApp.ora} step={900}
-                      onChange={e => setFormApp(f => ({ ...f, ora: e.target.value }))} className={inp} />
+                    <OrarioSelect value={formApp.ora}
+                      onChange={v => setFormApp(f => ({ ...f, ora: v }))} className={inp} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">

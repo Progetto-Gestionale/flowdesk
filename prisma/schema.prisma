@@ -58,6 +58,7 @@ model User {
   blockAsporto       Boolean           @default(false)
   blockDelivery      Boolean           @default(false)
   camerierePin       String?           // hash bcrypt del PIN per la pagina pubblica camerieri (null = nessun PIN)
+  qrTimbraturaFisso  Boolean           @default(false) // true = QR timbratura fisso stampabile; false = ciclante. Solo il token della modalità scelta è valido.
   // Flowest Care
   pazienti           Paziente[]
   sedute             Seduta[]

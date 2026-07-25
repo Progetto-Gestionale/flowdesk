@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import OrarioSelect from '@/app/components/OrarioSelect'
 import Link from 'next/link'
 import { IconTrash, IconArrowRight, IconClock } from '@/app/components/icons'
 
@@ -372,7 +373,7 @@ export default function CalendarioPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora</label>
-                  <input type="time" value={form.ora} onChange={e => setForm({ ...form, ora: e.target.value })}
+                  <OrarioSelect value={form.ora} onChange={v => setForm({ ...form, ora: v })}
                     className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
