@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
+import { geocodaIndirizzo, distanzaKm } from '@/lib/geocode'
 
 interface Piatto {
   id: string
@@ -51,7 +52,7 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
   const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
-  const [regole, setRegole] = useState<{ preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; fasceOrdini?: string }>({})
+  const [regole, setRegole] = useState<{ preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; fasceOrdini?: string; capConsegna?: string; raggioConsegnaKm?: number; latLocale?: number; lonLocale?: number }>({})
 
   const [carrello, setCarrello] = useState<RigaCarrello[]>([])
   const [step, setStep] = useState<'menu' | 'checkout' | 'inviato'>('menu')
@@ -119,6 +120,10 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             preavvisoOrdiniMinMinuti: r.preavvisoOrdiniMinMinuti ? Number(r.preavvisoOrdiniMinMinuti) : undefined,
             anticipoMaxGiorni: r.anticipoMaxGiorni ? Number(r.anticipoMaxGiorni) : undefined,
             fasceOrdini: r.fasceOrdini || undefined,
+            capConsegna: r.capConsegna || undefined,
+            raggioConsegnaKm: r.raggioConsegnaKm ? Number(r.raggioConsegnaKm) : undefined,
+            latLocale: typeof r.latLocale === 'number' ? r.latLocale : undefined,
+            lonLocale: typeof r.lonLocale === 'number' ? r.lonLocale : undefined,
           })
         } catch {}
       }).catch(() => {})
@@ -231,20 +236,26 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
     setInviando(true)
     try {
       if (dati.tipo === 'delivery') {
-        const q = encodeURIComponent(`${dati.via}, ${dati.cap} ${dati.citta}, Italia`)
-        const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it&addressdetails=1`, {
-          headers: { 'Accept-Language': 'it', 'User-Agent': 'Flowest/1.0' },
-        }).then(r => r.json()).catch(() => [])
-        if (!geo || geo.length === 0) {
+        const geo = await geocodaIndirizzo(dati.via, dati.cap, dati.citta)
+        if (!geo) {
           setErrIndirizzo('Indirizzo non trovato. Controlla via, CAP e città.')
           setInviando(false)
           return
         }
-        const capRitornato = geo[0]?.address?.postcode?.replace(/\s/g, '')
-        if (capRitornato && capRitornato !== dati.cap) {
-          setErrIndirizzo(`CAP non corretto per questo indirizzo (CAP atteso: ${capRitornato}).`)
+        // ── Zona di consegna: deve rispettare CAP servito E raggio massimo ──
+        const capServiti = (regole.capConsegna ?? '').split(',').map(s => s.trim()).filter(Boolean)
+        if (capServiti.length > 0 && !capServiti.includes(dati.cap)) {
+          setErrIndirizzo('Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (CAP non coperto). Puoi comunque scegliere il ritiro in negozio (asporto).')
           setInviando(false)
           return
+        }
+        if (regole.raggioConsegnaKm && regole.latLocale != null && regole.lonLocale != null) {
+          const dist = distanzaKm(regole.latLocale, regole.lonLocale, geo.lat, geo.lon)
+          if (dist > regole.raggioConsegnaKm) {
+            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            setInviando(false)
+            return
+          }
         }
       }
       const res = await fetch('/api/public/ordina', {
@@ -534,10 +545,22 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
         {dati.tipo === 'delivery' && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
             <p className="text-sm font-semibold text-gray-700">Indirizzo di consegna</p>
+            {(regole.capConsegna || regole.raggioConsegnaKm) && (
+              <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                📍 Consegniamo{regole.capConsegna ? ` nei CAP: ${regole.capConsegna}` : ''}{regole.capConsegna && regole.raggioConsegnaKm ? ', ' : ''}{regole.raggioConsegnaKm ? ` entro ${regole.raggioConsegnaKm} km dal locale` : ''}.
+              </p>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Città *</label>
               <input value={dati.citta} onChange={e => { setDati(d => ({ ...d, citta: e.target.value })); setErrIndirizzo('') }}
                 placeholder="Milano" className={inpFocus} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">CAP *</label>
+              <input value={dati.cap} onChange={e => setDati(d => ({ ...d, cap: e.target.value.replace(/\D/g, '').slice(0, 5) }))}
+                placeholder="20100" inputMode="numeric" maxLength={5}
+                className={`${inpFocus} ${dati.cap && !capValido ? 'border-red-300 focus:ring-red-200' : ''}`} />
+              {dati.cap && !capValido && <p className="text-xs text-red-500 mt-1">CAP non valido (5 cifre)</p>}
             </div>
             <div className="relative">
               <label className="block text-xs font-medium text-gray-500 mb-1">Via / Piazza *</label>
@@ -562,13 +585,6 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
                   })}
                 </div>
               )}
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">CAP *</label>
-              <input value={dati.cap} onChange={e => setDati(d => ({ ...d, cap: e.target.value.replace(/\D/g, '').slice(0, 5) }))}
-                placeholder="20100" inputMode="numeric" maxLength={5}
-                className={`${inpFocus} ${dati.cap && !capValido ? 'border-red-300 focus:ring-red-200' : ''}`} />
-              {dati.cap && !capValido && <p className="text-xs text-red-500 mt-1">CAP non valido (5 cifre)</p>}
             </div>
             {errIndirizzo && (
               <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700 font-medium">

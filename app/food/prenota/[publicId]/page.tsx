@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { geocodaIndirizzo, distanzaKm } from '@/lib/geocode'
 
 // ── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -373,38 +374,25 @@ export default function PrenotaPage() {
     }
     setInviando(true)
     try {
-      // Verifica indirizzo delivery con Nominatim (OpenStreetMap)
+      // Verifica indirizzo delivery con geocodifica robusta (OpenStreetMap)
       if (dati.tipo === 'delivery') {
-        const q = encodeURIComponent(`${dati.via}, ${dati.cap} ${dati.citta}, Italia`)
-        const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it&addressdetails=1`, {
-          headers: { 'Accept-Language': 'it', 'User-Agent': 'Flowest/1.0' },
-        }).then(r => r.json()).catch(() => [])
-        if (!geo || geo.length === 0) {
+        const geo = await geocodaIndirizzo(dati.via, dati.cap, dati.citta)
+        if (!geo) {
           setErrIndirizzo('Indirizzo non trovato. Controlla via, CAP e città.')
-          setInviando(false)
-          return
-        }
-        const capRitornato = geo[0]?.address?.postcode?.replace(/\s/g, '')
-        if (capRitornato && capRitornato !== dati.cap) {
-          setErrIndirizzo(`CAP non corretto per questo indirizzo (CAP atteso: ${capRitornato}).`)
           setInviando(false)
           return
         }
         // ── Zona di consegna: deve rispettare CAP servito E raggio massimo ──
         const capServiti = (regole.capConsegna ?? '').split(',').map(s => s.trim()).filter(Boolean)
         if (capServiti.length > 0 && !capServiti.includes(dati.cap)) {
-          setErrIndirizzo('Spiacenti, non consegniamo in questa zona (CAP non servito). Puoi comunque scegliere il ritiro in negozio (asporto).')
+          setErrIndirizzo('Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (CAP non coperto). Puoi comunque scegliere il ritiro in negozio (asporto).')
           setInviando(false)
           return
         }
         if (regole.raggioConsegnaKm && regole.latLocale != null && regole.lonLocale != null) {
-          const lat = parseFloat(geo[0].lat), lon = parseFloat(geo[0].lon)
-          const toRad = (v: number) => v * Math.PI / 180
-          const dLat = toRad(lat - regole.latLocale), dLon = toRad(lon - regole.lonLocale)
-          const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(regole.latLocale)) * Math.cos(toRad(lat)) * Math.sin(dLon / 2) ** 2
-          const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+          const dist = distanzaKm(regole.latLocale, regole.lonLocale, geo.lat, geo.lon)
           if (dist > regole.raggioConsegnaKm) {
-            setErrIndirizzo(`Spiacenti, questo indirizzo è fuori dalla nostra zona di consegna (circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
             setInviando(false)
             return
           }
@@ -912,6 +900,13 @@ export default function PrenotaPage() {
                   <input value={dati.citta} onChange={e => { setDati(d => ({ ...d, citta: e.target.value })); setErrIndirizzo('') }}
                     placeholder="Milano" className={inp} />
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">CAP *</label>
+                  <input value={dati.cap} onChange={e => setDati(d => ({ ...d, cap: e.target.value.replace(/\D/g, '').slice(0, 5) }))}
+                    placeholder="20100" inputMode="numeric" maxLength={5}
+                    className={`${inp} ${dati.cap && !capValido ? 'border-red-300 focus:ring-red-200' : ''}`} />
+                  {dati.cap && !capValido && <p className="text-xs text-red-500 mt-1">CAP non valido (5 cifre)</p>}
+                </div>
                 <div className="relative">
                   <label className="block text-xs font-medium text-gray-500 mb-1">Via / Piazza *</label>
                   <input value={dati.via}
@@ -935,13 +930,6 @@ export default function PrenotaPage() {
                       })}
                     </div>
                   )}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">CAP *</label>
-                  <input value={dati.cap} onChange={e => setDati(d => ({ ...d, cap: e.target.value.replace(/\D/g, '').slice(0, 5) }))}
-                    placeholder="20100" inputMode="numeric" maxLength={5}
-                    className={`${inp} ${dati.cap && !capValido ? 'border-red-300 focus:ring-red-200' : ''}`} />
-                  {dati.cap && !capValido && <p className="text-xs text-red-500 mt-1">CAP non valido (5 cifre)</p>}
                 </div>
               </div>
             )}

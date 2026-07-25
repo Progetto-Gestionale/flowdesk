@@ -15,18 +15,20 @@ export async function GET() {
   return NextResponse.json({ ordini })
 }
 
-// Il fattorino segna un ordine come consegnato
+// Il fattorino segna un ordine come consegnato (o non consegnato)
 export async function PATCH(req: Request) {
   const session = await getDipSession()
   if (!session) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
-  const { id } = await req.json()
+  const { id, status } = await req.json()
   if (!id) return NextResponse.json({ error: 'Id mancante' }, { status: 400 })
+
+  const nuovoStatus = status === 'non_consegnato' ? 'non_consegnato' : 'consegnato'
 
   // updateMany con scope su userId + tipo: aggiorna solo se l'ordine è di questo ristorante
   const res = await prisma.ordine.updateMany({
     where: { id, userId: session.userId, tipo: 'delivery' },
-    data: { status: 'consegnato' },
+    data: { status: nuovoStatus, closedAt: new Date() },
   })
   if (res.count === 0) return NextResponse.json({ error: 'Ordine non trovato' }, { status: 404 })
 

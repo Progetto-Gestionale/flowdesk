@@ -82,7 +82,7 @@ export async function GET(req: Request) {
         status: 'chiuso',
         createdAt: { gte: from, lt: toEffettivo },
       },
-      select: { id: true, totale: true, coperti: true, gruppoId: true, createdAt: true, closedAt: true },
+      select: { id: true, totale: true, coperti: true, gruppoId: true, tavoloId: true, tavolo: true, createdAt: true, closedAt: true },
     }),
     prisma.appuntamento.findMany({
       where: {
@@ -94,21 +94,34 @@ export async function GET(req: Request) {
     }),
   ])
 
-  // Deduplicazione gruppi: un gruppo conta come 1 sessione
-  const gruppiContati = new Set<string>()
+  // Un "conto" (bill) = un gruppo di tavoli uniti, oppure un singolo tavolo in una sessione.
+  // Tutti gli ordini (sottogruppi) di uno stesso conto vengono chiusi insieme con lo stesso
+  // closedAt e con gli stessi coperti (quelli inseriti dal cameriere alla chiusura).
+  // → "tavoli serviti" = numero di CONTI chiusi (non i sottogruppi, non i coperti);
+  //   i coperti totali si contano UNA sola volta per conto.
+  const contoKey = (o: typeof ordini[number]) => {
+    const base = o.gruppoId ?? o.tavoloId ?? o.tavolo ?? o.id
+    const when = o.closedAt ? new Date(o.closedAt).getTime() : new Date(o.createdAt).getTime()
+    return `${base}#${when}`
+  }
+  // Coperti per conto = valore inserito dal cameriere alla chiusura (uguale su tutti i sottogruppi;
+  // prendiamo il massimo per robustezza contro eventuali sottogruppi rimasti senza coperti).
+  const copertiConto = new Map<string, number>()
+  for (const o of ordini) {
+    const ck = contoKey(o)
+    copertiConto.set(ck, Math.max(copertiConto.get(ck) ?? 0, o.coperti ?? 0))
+  }
+
+  const contiVisti = new Set<string>()
   for (const o of ordini) {
     const k = bucketKey(o.createdAt, byMonth)
     if (!bucketMap[k]) continue
-    bucketMap[k].incasso += o.totale
-    if (o.gruppoId) {
-      if (!gruppiContati.has(o.gruppoId)) {
-        gruppiContati.add(o.gruppoId)
-        bucketMap[k].ordini += 1
-        bucketMap[k].coperti += o.coperti ?? 0
-      }
-    } else {
-      bucketMap[k].ordini += 1
-      bucketMap[k].coperti += o.coperti ?? 0
+    bucketMap[k].incasso += o.totale        // l'incasso somma tutti i sottogruppi (soldi reali)
+    const ck = contoKey(o)
+    if (!contiVisti.has(ck)) {
+      contiVisti.add(ck)
+      bucketMap[k].ordini += 1               // +1 conto servito
+      bucketMap[k].coperti += copertiConto.get(ck) ?? 0
     }
   }
 
@@ -118,19 +131,9 @@ export async function GET(req: Request) {
 
   const totaleIncasso = ordini.reduce((s, o) => s + o.totale, 0)
 
-  // Coperti totali (deduplicated per gruppo)
-  const gruppiPerCoperti = new Set<string>()
+  // Coperti totali = somma dei coperti per conto (inseriti dal cameriere alla chiusura).
   let copertiConfermati = 0
-  for (const o of ordini) {
-    if (o.gruppoId) {
-      if (!gruppiPerCoperti.has(o.gruppoId)) {
-        gruppiPerCoperti.add(o.gruppoId)
-        copertiConfermati += o.coperti ?? 0
-      }
-    } else {
-      copertiConfermati += o.coperti ?? 0
-    }
-  }
+  for (const v of copertiConto.values()) copertiConfermati += v
 
   // Coperti su prenotazione = somma coperti appuntamenti confermati
   const copertiPrenotazione = appuntamenti
@@ -142,21 +145,40 @@ export async function GET(req: Request) {
   const noShow = appuntamenti.filter(a => a.status === 'no_show').length
 
   const spesaMediaPersona = copertiConfermati > 0 ? totaleIncasso / copertiConfermati : 0
-  const ordiniConDurata = ordini.filter(o => o.closedAt != null)
-  const durataMedia = ordiniConDurata.length > 0
-    ? ordiniConDurata.reduce((s, o) => s + (o.closedAt!.getTime() - o.createdAt.getTime()), 0) / ordiniConDurata.length / 60000
+
+  // Durata media = dall'APERTURA del conto alla CHIUSURA del conto (non per singolo ordine).
+  // Se il cameriere ha unito più conti (stesso gruppo, tavoli diversi), quelli erano un unico
+  // tavolo: l'apertura del conto è la MEDIA delle aperture dei sotto-conti (uno per tavolo),
+  // mentre la chiusura (closedAt) è la stessa per tutti.
+  const ordiniPerConto = new Map<string, (typeof ordini[number])[]>()
+  for (const o of ordini) {
+    const ck = contoKey(o)
+    const arr = ordiniPerConto.get(ck) ?? []
+    arr.push(o)
+    ordiniPerConto.set(ck, arr)
+  }
+  const durateConto: number[] = []
+  for (const ordiniConto of ordiniPerConto.values()) {
+    const chiusura = ordiniConto.find(o => o.closedAt != null)?.closedAt
+    if (!chiusura) continue
+    // Apertura di ogni sotto-conto (per tavolo) = createdAt più vecchio di quel tavolo.
+    const aperturaPerTavolo = new Map<string, number>()
+    for (const o of ordiniConto) {
+      const sub = o.tavoloId ?? o.id
+      const t = new Date(o.createdAt).getTime()
+      aperturaPerTavolo.set(sub, Math.min(aperturaPerTavolo.get(sub) ?? Infinity, t))
+    }
+    const aperture = [...aperturaPerTavolo.values()]
+    const aperturaMedia = aperture.reduce((s, x) => s + x, 0) / aperture.length
+    const durMin = (new Date(chiusura).getTime() - aperturaMedia) / 60000
+    if (durMin >= 0) durateConto.push(durMin)
+  }
+  const durataMedia = durateConto.length > 0
+    ? durateConto.reduce((s, x) => s + x, 0) / durateConto.length
     : 0
 
-  // Totale tavoli deduplicati
-  const gruppiTot = new Set<string>()
-  let totaleTavoli = 0
-  for (const o of ordini) {
-    if (o.gruppoId) {
-      if (!gruppiTot.has(o.gruppoId)) { gruppiTot.add(o.gruppoId); totaleTavoli++ }
-    } else {
-      totaleTavoli++
-    }
-  }
+  // Tavoli serviti = numero di conti chiusi (una entry per conto nella mappa coperti).
+  const totaleTavoli = copertiConto.size
 
   return NextResponse.json({
     totaleIncasso,

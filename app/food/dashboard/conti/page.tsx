@@ -324,8 +324,9 @@ export default function ContiPage() {
   const ordini = isOggi ? tutti : tutti.filter(o => getSerataKey(o.createdAt) === dataFiltro)
   const isTavolo = (o: Ordine) => o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
   // Per i tavoli il conto resta aperto finché non è 'chiuso' (i sottogruppi 'pagato' e
-  // 'consegnato' restano visibili nel conto). Per asporto/delivery 'consegnato' = concluso.
-  const isDone = (o: Ordine) => isTavolo(o) ? o.status === 'chiuso' : (o.status === 'consegnato' || o.status === 'chiuso')
+  // 'consegnato' restano visibili nel conto). Per asporto/delivery 'consegnato' = concluso;
+  // 'non_consegnato' (non consegnato / non ritirato) = conto concluso ma NON incassato.
+  const isDone = (o: Ordine) => isTavolo(o) ? o.status === 'chiuso' : (o.status === 'consegnato' || o.status === 'chiuso' || o.status === 'non_consegnato')
   const isPagato = (o: Ordine) => o.status === 'pagato'
   const matchesFiltro = (o: Ordine) => {
     if (filtroTipo === 'tavolo') return isTavolo(o)
@@ -340,7 +341,8 @@ export default function ContiPage() {
     delivery: ordini.filter(o => !isDone(o) && o.tipo === 'delivery').length,
   }
   const totaleAperti = aperti.reduce((s, o) => s + o.totale, 0)
-  const totaleChiusi = chiusi.reduce((s, o) => s + o.totale, 0)
+  // Gli ordini non consegnati/non ritirati sono conclusi ma non incassati → esclusi dal totale.
+  const totaleChiusi = chiusi.reduce((s, o) => s + (o.status === 'non_consegnato' ? 0 : o.totale), 0)
   // Per i tavoli raggruppo i sottogruppi in conti; asporto/delivery restano card singole
   const contiAperti = filtroTipo === 'tavolo' ? raggruppaConti(aperti) : []
   // Anche i conti chiusi restano raggruppati: i sottogruppi devono stare dentro lo stesso conto, non separati
@@ -440,6 +442,22 @@ export default function ContiPage() {
     }
   }
 
+  // Asporto non ritirato / delivery non consegnato → conto concluso ma non incassato.
+  async function segnaNonConsegnato(o: Ordine) {
+    setChiudendo(o.id)
+    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'non_consegnato' } : x))
+    try {
+      await fetch(`/api/ordini/${o.id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'non_consegnato' }),
+      })
+    } finally {
+      setChiudendo(null)
+      fetchOrdini()
+    }
+  }
+
   async function eliminaOrdine(o: Ordine) {
     setTutti(prev => prev.filter(x => x.id !== o.id))
     setConfermaElimina(null)
@@ -449,6 +467,7 @@ export default function ContiPage() {
 
   function OrdineCard({ o }: { o: Ordine }) {
     const aperto = !isDone(o)
+    const nonConsegnato = o.status === 'non_consegnato'
     const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 
     // etichetta tipo (solo asporto/delivery; i tavoli mostrano già il nome tavolo)
@@ -459,7 +478,12 @@ export default function ContiPage() {
       : (() => { try { return JSON.parse(o.clienteInfo ?? '{}').nome || o.tavolo } catch { return o.tavolo } })()
 
     return (
-      <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden shadow-sm">
+      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${nonConsegnato ? 'border-red-300' : 'border-ink-navy/10'}`}>
+        {nonConsegnato && (
+          <div className="px-4 py-2 bg-red-500 text-white text-center">
+            <p className="text-xs font-bold uppercase tracking-wide">{o.tipo === 'delivery' ? 'Non consegnato' : 'Non ritirato'}</p>
+          </div>
+        )}
         <div className={`px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b border-ink-navy/8 ${aperto ? 'bg-white' : 'bg-mist'}`}>
           <div className="flex items-center gap-2">
             <span className={`text-sm font-bold ${aperto ? 'text-ink-navy' : 'text-ink-navy/50'}`}>{label}</span>
@@ -483,10 +507,16 @@ export default function ContiPage() {
                   {chiudendo === o.id ? '…' : 'Chiudi'}
                 </button>
               ) : (
-                <button onClick={() => segnaPronte(o)} disabled={chiudendo === o.id}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
-                  {chiudendo === o.id ? '…' : 'Pronto'}
-                </button>
+                <>
+                  <button onClick={() => segnaNonConsegnato(o)} disabled={chiudendo === o.id}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-40 transition-colors">
+                    {o.tipo === 'delivery' ? 'Non consegnato' : 'Non ritirato'}
+                  </button>
+                  <button onClick={() => segnaPronte(o)} disabled={chiudendo === o.id}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
+                    {chiudendo === o.id ? '…' : 'Pronto'}
+                  </button>
+                </>
               )
             )}
             {!aperto && (
@@ -756,7 +786,7 @@ export default function ContiPage() {
           {isOggi ? (
             <button onClick={() => setChiusiAperti(v => !v)} className="w-full flex items-center gap-3 py-2 text-left">
               <span className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider">
-                {filtroTipo === 'tavolo' ? 'Conti chiusi' : 'Pronti questa serata'} <span className="font-normal normal-case text-ink-navy/35">({chiusi.length})</span>
+                {filtroTipo === 'tavolo' ? 'Conti chiusi' : 'Pronti questa serata'} <span className="font-normal normal-case text-ink-navy/35">({filtroTipo === 'tavolo' ? contiChiusi.length : chiusi.length})</span>
               </span>
               <span className="text-xs text-ink-navy/40">{fmt(totaleChiusi)}</span>
               <span className={`ml-auto text-ink-navy/30 transition-transform ${chiusiAperti ? 'rotate-180' : ''}`}>▾</span>
@@ -764,7 +794,7 @@ export default function ContiPage() {
           ) : (
             <div className="flex items-center gap-3 mb-3">
               <h2 className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider capitalize">
-                {fmtGiorno(dataFiltro)} <span className="font-normal text-ink-navy/35">({chiusi.length + aperti.length})</span>
+                {fmtGiorno(dataFiltro)} <span className="font-normal text-ink-navy/35">({filtroTipo === 'tavolo' ? contiChiusi.length + contiAperti.length : chiusi.length + aperti.length})</span>
               </h2>
               <span className="text-xs text-ink-navy/40">{fmt(totaleChiusi + totaleAperti)}</span>
             </div>

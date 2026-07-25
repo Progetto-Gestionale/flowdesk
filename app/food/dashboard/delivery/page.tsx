@@ -17,7 +17,8 @@ interface Ordine {
 type Stato = 'in_preparazione' | 'pronto' | 'consegnato'
 
 function statoOrdine(o: Ordine): Stato {
-  if (o.status === 'consegnato' || o.status === 'chiuso') return 'consegnato'
+  // 'non_consegnato' finisce comunque tra i "consegnati" (storico serata) ma con banner.
+  if (o.status === 'consegnato' || o.status === 'chiuso' || o.status === 'non_consegnato') return 'consegnato'
   if (o.status === 'pronto') return 'pronto'
   return 'in_preparazione'
 }
@@ -65,13 +66,19 @@ export default function DeliveryPage() {
   function Card({ o }: { o: Ordine }) {
     const stato = statoOrdine(o)
     const isDone = stato === 'consegnato'
+    const nonConsegnato = o.status === 'non_consegnato'
     let ci: { nome?: string; telefono?: string; indirizzo?: string; ora?: string } = {}
     try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
     const label = ci.nome || 'Ordine online'
     const oraArrivo = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 
     return (
-      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${isDone ? 'border-ink-navy/10' : 'border-teal-300'}`}>
+      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${nonConsegnato ? 'border-red-300' : isDone ? 'border-ink-navy/10' : 'border-teal-300'}`}>
+        {nonConsegnato && (
+          <div className="px-4 py-2 bg-red-500 text-white text-center">
+            <p className="text-xs font-bold uppercase tracking-wide">Non consegnato</p>
+          </div>
+        )}
         {/* Header */}
         <div className={`px-4 py-3 border-b ${isDone ? 'bg-mist border-ink-navy/10' : 'bg-teal-50 border-teal-300'}`}>
           <div className="flex items-start justify-between gap-2">
@@ -121,10 +128,16 @@ export default function DeliveryPage() {
               <span className="text-xs text-ink-navy/35">In cucina</span>
             )}
             {stato === 'pronto' && (
-              <button onClick={() => setStato(o.id, 'consegnato')}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
-                Segna consegnato
-              </button>
+              <>
+                <button onClick={() => setStato(o.id, 'non_consegnato')}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                  Non consegnato
+                </button>
+                <button onClick={() => setStato(o.id, 'consegnato')}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
+                  Segna consegnato
+                </button>
+              </>
             )}
             {isDone && (
               confermaElimina === o.id ? (

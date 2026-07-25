@@ -16,22 +16,22 @@ export async function sendEmailAccessoDipendente(email: string, nome: string, us
     subject: 'Accesso alla tua area personale',
     html: `<!DOCTYPE html>
 <html>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<body style="margin:0;padding:0;background:#F5F6FB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F6FB;padding:40px 20px;">
     <tr><td align="center">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <tr><td style="background:#7c3aed;padding:28px 32px;">
-          <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">🔐 La tua area personale</h1>
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(11,21,51,0.08);">
+        <tr><td style="background:#0B1533;padding:28px 32px;">
+          <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">La tua area personale</h1>
         </td></tr>
         <tr><td style="padding:28px 32px;">
           <p style="margin:0 0 16px;color:#374151;font-size:15px;">Ciao <strong>${nome}</strong>,</p>
           <p style="margin:0 0 24px;color:#374151;font-size:15px;">Ecco le tue credenziali per accedere alla tua area personale:</p>
-          <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+          <div style="background:#F5F6FB;border:1px solid #E6E8F2;border-left:3px solid #1F52FF;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
             <p style="margin:0 0 8px;color:#6b7280;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Nome utente</p>
-            <p style="margin:0;color:#5b21b6;font-size:18px;font-weight:700;font-family:monospace;">${username}</p>
+            <p style="margin:0;color:#1F52FF;font-size:18px;font-weight:700;font-family:monospace;">${username}</p>
           </div>
           <p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Usa la password che ti è stata comunicata dal tuo responsabile. Potrai cambiarla dopo il primo accesso.</p>
-          <a href="${loginUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">Accedi all'area personale</a>
+          <a href="${loginUrl}" style="display:inline-block;background:#1F52FF;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">Accedi all'area personale</a>
           <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;">Oppure copia questo link: ${loginUrl}</p>
         </td></tr>
       </table>
@@ -76,28 +76,28 @@ function buildDettagliRighe(p: Partial<EmailConfermaParams>) {
     : null
 
   return [
-    dataFormattata && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;width:120px;">📅 Data</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#111827;">${dataFormattata}</td></tr>`,
-    ora && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">🕐 Orario</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#111827;">${ora}</td></tr>`,
-    isTavolo && coperti && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">🪑 Coperti</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#111827;">${coperti} ${coperti === 1 ? 'persona' : 'persone'}</td></tr>`,
-    !isTavolo && servizio && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">⚙️ Servizio</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#111827;">${servizio}</td></tr>`,
-    allergie && allergie.toLowerCase() !== 'nessuna' && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">⚠️ Allergie</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#111827;">${allergie}</td></tr>`,
-    occasione && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">🎉 Occasione</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#111827;">${occasione}</td></tr>`,
+    dataFormattata && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;width:120px;">Data</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${dataFormattata}</td></tr>`,
+    ora && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Orario</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${ora}</td></tr>`,
+    isTavolo && coperti && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Coperti</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${coperti} ${coperti === 1 ? 'persona' : 'persone'}</td></tr>`,
+    !isTavolo && servizio && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Servizio</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${servizio}</td></tr>`,
+    allergie && allergie.toLowerCase() !== 'nessuna' && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Allergie</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${allergie}</td></tr>`,
+    occasione && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Occasione</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${occasione}</td></tr>`,
   ].filter(Boolean).join('\n')
 }
 
 function wrapEmail(nomeLocale: string, headerColor: string, headerEmoji: string, titolo: string, body: string) {
   return `<!DOCTYPE html>
 <html>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+<body style="margin:0;padding:0;background:#F5F6FB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F6FB;padding:40px 20px;">
     <tr><td align="center">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(11,21,51,0.08);">
         <tr><td style="background:${headerColor};padding:28px 32px;">
-          <p style="margin:0;color:rgba(255,255,255,0.7);font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">${nomeLocale}</p>
-          <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">${headerEmoji} ${titolo}</h1>
+          <p style="margin:0;color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">${nomeLocale}</p>
+          <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">${headerEmoji ? `${headerEmoji} ` : ''}${titolo}</h1>
         </td></tr>
         <tr><td style="padding:28px 32px;">${body}</td></tr>
-        <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+        <tr><td style="background:#F5F6FB;padding:16px 32px;border-top:1px solid #E6E8F2;">
           <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">${nomeLocale}</p>
         </td></tr>
       </table>
@@ -114,16 +114,16 @@ export async function sendEmailConferma(params: EmailConfermaParams) {
 
   const html = wrapEmail(
     params.nomeLocale,
-    '#4f46e5',
-    isTavolo ? '🍽️' : '✅',
+    '#0B1533',
+    '',
     isTavolo ? 'Prenotazione confermata' : 'Appuntamento confermato',
     `<p style="margin:0 0 20px;color:#374151;font-size:15px;">
       Ciao <strong>${params.clienteNome}</strong>,<br>
       la tua ${isTavolo ? 'prenotazione' : 'richiesta'} è stata confermata. Ecco il riepilogo:
     </p>
-    ${params.messaggioProposta ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
-      <p style="margin:0 0 4px;color:#15803d;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Dettagli concordati</p>
-      <p style="margin:0;color:#166534;font-size:14px;">${params.messaggioProposta}</p>
+    ${params.messaggioProposta ? `<div style="background:#F5F6FB;border:1px solid #E6E8F2;border-left:3px solid #1F52FF;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+      <p style="margin:0 0 4px;color:#1F52FF;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Dettagli concordati</p>
+      <p style="margin:0;color:#0B1533;font-size:14px;">${params.messaggioProposta}</p>
     </div>` : ''}
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;margin-bottom:24px;">${dettagli}</table>
     <p style="margin:0;color:#6b7280;font-size:13px;">Per qualsiasi informazione o modifica, contattaci direttamente.<br>A presto!</p>`
@@ -146,26 +146,26 @@ export async function sendEmailProposta(params: EmailPropostaParams) {
 
   const html = wrapEmail(
     params.nomeLocale,
-    '#d97706',
-    '📋',
+    '#0B1533',
+    '',
     'Proposta di modifica',
     `<p style="margin:0 0 16px;color:#374151;font-size:15px;">
       Ciao <strong>${params.clienteNome}</strong>,<br>
       abbiamo ricevuto la tua richiesta e vorremmo proporti alcune modifiche.
     </p>
-    ${params.messaggio ? `<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
-      <p style="margin:0;color:#92400e;font-size:14px;">${params.messaggio}</p>
+    ${params.messaggio ? `<div style="background:#F5F6FB;border:1px solid #E6E8F2;border-left:3px solid #1F52FF;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+      <p style="margin:0;color:#0B1533;font-size:14px;">${params.messaggio}</p>
     </div>` : ''}
     <p style="margin:0 0 8px;color:#374151;font-size:14px;font-weight:600;">Dettagli proposti:</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;margin-bottom:24px;">${dettagli}</table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #E6E8F2;margin-bottom:24px;">${dettagli}</table>
     <p style="margin:0 0 16px;color:#374151;font-size:14px;">Cosa vuoi fare?</p>
     <table cellpadding="0" cellspacing="0">
       <tr>
         <td style="padding-right:12px;">
-          <a href="${linkAccetta}" style="display:inline-block;background:#16a34a;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:12px 28px;border-radius:8px;">✓ Accetto</a>
+          <a href="${linkAccetta}" style="display:inline-block;background:#1F52FF;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:12px 28px;border-radius:8px;">Accetto</a>
         </td>
         <td>
-          <a href="${linkRifiuta}" style="display:inline-block;background:#ffffff;color:#dc2626;font-size:15px;font-weight:700;text-decoration:none;padding:12px 28px;border-radius:8px;border:2px solid #dc2626;">✕ Rifiuto</a>
+          <a href="${linkRifiuta}" style="display:inline-block;background:#ffffff;color:#0B1533;font-size:15px;font-weight:700;text-decoration:none;padding:12px 28px;border-radius:8px;border:2px solid #0B1533;">Rifiuto</a>
         </td>
       </tr>
     </table>
@@ -186,8 +186,8 @@ export async function sendEmailRifiuto(params: EmailRifiutoParams) {
 
   const html = wrapEmail(
     params.nomeLocale,
-    '#dc2626',
-    '❌',
+    '#0B1533',
+    '',
     isTavolo ? 'Prenotazione non disponibile' : 'Richiesta non accettata',
     `<p style="margin:0 0 16px;color:#374151;font-size:15px;">
       Ciao <strong>${params.clienteNome}</strong>,<br>

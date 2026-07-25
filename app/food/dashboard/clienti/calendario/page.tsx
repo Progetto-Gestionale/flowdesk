@@ -9,22 +9,45 @@ const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Lug
 
 const PX_PER_HOUR = 80
 
+// Estrae la fascia oraria [start, end] (in ore intere) che la griglia del calendario
+// deve coprire, a partire dagli orari di apertura settimanali. Gestisce:
+//  - più fasce per giorno separate da virgola ("12:00-15:00, 19:00-23:00")
+//  - orari con minuti (apertura arrotondata per difetto, chiusura per eccesso)
+//  - chiusura a mezzanotte ("...-00:00" / "...-24:00") trattata come le 24
+//  - chiusura dopo mezzanotte ("19:00-02:00"): la fascia prosegue oltre le 24
+//    (es. chiusura 02:00 → end 26), così la griglia continua nel giorno lavorativo
+// Garantisce sempre end > start, così la griglia non sparisce mai. Cap a 30 (06:00).
 function parseOrariRange(orariApertura: Record<string, string>): { start: number; end: number } {
-  let minH = 24, maxH = 0
-  Object.values(orariApertura).forEach(v => {
-    if (!v) return
-    const parts = v.split(/[-–]/).map(s => s.trim())
-    if (parts.length < 2) return
-    const openH = parseInt(parts[0])
-    let closeH = parseInt(parts[1])
-    if (isNaN(openH) || isNaN(closeH)) return
-    if (closeH === 0 || closeH === 24) closeH = 24
-    if (openH === 0 && closeH === 0) return
-    if (openH < minH) minH = openH
-    if (closeH > maxH) maxH = closeH
+  let minStart = 24, maxEnd = 0
+
+  const toHour = (s: string, mode: 'floor' | 'ceil'): number | null => {
+    const t = s.trim()
+    if (!t) return null
+    const [hRaw, mRaw] = t.split(':')
+    const h = parseInt(hRaw, 10)
+    if (isNaN(h)) return null
+    const m = parseInt(mRaw ?? '0', 10) || 0
+    return mode === 'ceil' ? h + (m > 0 ? 1 : 0) : h
+  }
+
+  Object.values(orariApertura).forEach(giorno => {
+    if (!giorno) return
+    // Ogni giorno può contenere più fasce separate da virgola.
+    giorno.split(',').forEach(fascia => {
+      const parts = fascia.split(/[-–]/)
+      if (parts.length < 2) return
+      const open = toHour(parts[0], 'floor')
+      let close = toHour(parts[1], 'ceil')
+      if (open == null || close == null) return
+      if (close === 0) close = 24        // "...-00:00" = mezzanotte
+      if (close <= open) close += 24     // oltre mezzanotte: es. 19→02 diventa 26
+      if (open < minStart) minStart = open
+      if (close > maxEnd) maxEnd = close
+    })
   })
-  if (minH === 24 || maxH === 0) return { start: 11, end: 24 }
-  return { start: Math.max(0, minH - 1), end: Math.min(24, maxH) }
+
+  if (minStart >= maxEnd) return { start: 11, end: 24 } // nessun orario valido → default
+  return { start: Math.max(0, minStart - 1), end: Math.min(30, maxEnd) }
 }
 
 const TIPO_STYLE: Record<string, { barColor: string; bg: string; text: string; badge: string; label: string }> = {
@@ -216,8 +239,19 @@ export default function Calendario() {
   }, [])
 
   function appForDay(day: Date) {
+    // Ore dopo mezzanotte che appartengono al giorno lavorativo PRECEDENTE (es. chiusura 02:00 → 2).
+    const cutoff = Math.max(0, hourEnd - 24)
+    const domani = addDays(day, 1)
     return appuntamenti
-      .filter(a => isSameDay(new Date(a.data), day))
+      .filter(a => {
+        const dt = new Date(a.data)
+        const h = dt.getHours() + dt.getMinutes() / 60
+        // Stesso giorno di calendario, escluse le prime ore che appartengono al giorno prima.
+        if (isSameDay(dt, day)) return h >= cutoff
+        // Dopo mezzanotte: appuntamento del giorno di calendario successivo ma dello stesso turno.
+        if (cutoff > 0 && isSameDay(dt, domani)) return h < cutoff
+        return false
+      })
       .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
   }
   function appForDayFiltered(day: Date) {
@@ -327,7 +361,7 @@ export default function Calendario() {
   }
 
   const hoursGrid = Array.from({ length: hourEnd - hourStart + 1 }, (_, i) => hourStart + i)
-  const fmtHour = (h: number) => h >= 24 ? '00:00' : `${String(h).padStart(2, '0')}:00`
+  const fmtHour = (h: number) => `${String(h % 24).padStart(2, '0')}:00`
 
   // ── Month grid ────────────────────────────────────────────────────────────
   const monthCells = (() => {
@@ -452,7 +486,8 @@ export default function Calendario() {
                             const ts = TIPO_STYLE[tipo]
                             const sc = STATUS_COLORS[a.status] ?? STATUS_COLORS.confermato
                             const dt = new Date(a.data)
-                            const startH = dt.getHours() + dt.getMinutes() / 60
+                            // Appuntamento dopo mezzanotte (giorno di calendario successivo) → collocato a ora+24.
+                            const startH = (isSameDay(dt, currentDay) ? 0 : 24) + dt.getHours() + dt.getMinutes() / 60
                             const top = Math.max(0, (startH - hourStart) * PX_PER_HOUR)
                             const ora = dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
                             const pct = 100 / total
@@ -586,7 +621,6 @@ export default function Calendario() {
       {/* ── DETTAGLIO APPUNTAMENTO ── */}
       {selected && (() => {
         const tavoliAssegnati = getTavoliIds(selected)
-        const tipo = inferTipo(selected.servizio)
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
@@ -638,60 +672,8 @@ export default function Calendario() {
                   </div>
                 </div>
 
-                {tipo === 'tavolo' && tavoli.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider">Tavoli assegnati</p>
-                      {tavoliAssegnati.length > 0 && (
-                        <span className="text-xs font-bold text-electric-blue">
-                          {tavoliAssegnati.length === 1
-                            ? `T${tavoli.find(t => t.id === tavoliAssegnati[0])?.numero ?? ''}`
-                            : `T${tavoli.filter(t => tavoliAssegnati.includes(t.id)).sort((a,b)=>a.numero-b.numero).map(t=>t.numero).join('+')}`}
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-1.5 mb-3">
-                      {tavoli.map(t => {
-                        const selStart = new Date(selected.data).getTime()
-                        const selEnd = selStart + selected.durata * 60000
-                        const occupato = appuntamenti.some(a => {
-                          if (a.id === selected.id || a.status === 'cancellato') return false
-                          const usaTavolo = a.tavoloId === t.id || (() => { try { return (JSON.parse(a.tavoliIds ?? '[]') as string[]).includes(t.id) } catch { return false } })()
-                          if (!usaTavolo) return false
-                          const aStart = new Date(a.data).getTime()
-                          return aStart < selEnd && (aStart + a.durata * 60000) > selStart
-                        })
-                        const checked = selectedTavoliIds.length > 0 ? selectedTavoliIds.includes(t.id) : tavoliAssegnati.includes(t.id)
-                        return (
-                          <label key={t.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                            checked ? 'border-electric-blue/40 bg-electric-blue/10' : 'border-ink-navy/10 hover:bg-mist'
-                          } ${occupato && !checked ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            <input type="checkbox" checked={checked} disabled={occupato && !checked}
-                              onChange={e => {
-                                const base = selectedTavoliIds.length > 0 ? selectedTavoliIds : tavoliAssegnati
-                                setSelectedTavoliIds(e.target.checked ? [...base, t.id] : base.filter(id => id !== t.id))
-                              }}
-                              className="accent-electric-blue w-4 h-4 shrink-0" />
-                            <span className="text-sm text-ink-navy/70 flex-1">
-                              <span className="font-semibold">Tavolo {t.numero}</span>
-                              <span className="text-ink-navy/35"> · {t.posti} posti{t.note ? ` · ${t.note}` : ''}</span>
-                            </span>
-                            {occupato && !checked && <span className="text-xs text-red-400">occupato</span>}
-                          </label>
-                        )
-                      })}
-                    </div>
-                    {(() => {
-                      const ids = selectedTavoliIds.length > 0 ? selectedTavoliIds : tavoliAssegnati
-                      return (
-                        <button onClick={() => handleAssegnaTavoli(selected.id, ids)} disabled={assegnaLoading || ids.length === 0}
-                          className="w-full text-sm font-semibold bg-electric-blue text-white py-2 rounded-lg hover:bg-electric-blue/90 disabled:opacity-50">
-                          {assegnaLoading ? 'Salvataggio…' : ids.length >= 2 ? `Assegna e fondi (T${tavoli.filter(t=>ids.includes(t.id)).sort((a,b)=>a.numero-b.numero).map(t=>t.numero).join('+')})` : 'Assegna tavolo'}
-                        </button>
-                      )
-                    })()}
-                  </div>
-                )}
+                {/* Assegnazione tavolo rimossa dal modale: il titolare gestisce i tavoli in autonomia.
+                    I tavoli eventualmente assegnati restano comunque mostrati nel riepilogo sopra. */}
               </div>
 
               <div className="px-5 py-3 border-t border-ink-navy/8">

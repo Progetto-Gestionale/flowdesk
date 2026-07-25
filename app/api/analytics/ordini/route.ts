@@ -81,13 +81,16 @@ export async function GET(req: Request) {
     select: { id: true, tipo: true, totale: true, status: true, createdAt: true, clienteInfo: true, prontoAt: true, closedAt: true },
   })
 
+  // Un ordine non consegnato/non ritirato (o annullato) non genera incasso, ma resta nel volume.
+  const consegnato = (o: { status: string }) => o.status !== 'non_consegnato' && o.status !== 'annullato'
+
   for (const o of ordini) {
     const k = bucketKey(o.createdAt, byMonth)
     if (bucketMap[k]) {
-      bucketMap[k].incasso += o.totale
       bucketMap[k].ordini += 1
-      if (o.tipo === 'asporto') { bucketMap[k].asporto += 1; bucketMap[k].incassoAsporto += o.totale }
-      else { bucketMap[k].delivery += 1; bucketMap[k].incassoDelivery += o.totale }
+      if (o.tipo === 'asporto') { bucketMap[k].asporto += 1; if (consegnato(o)) bucketMap[k].incassoAsporto += o.totale }
+      else { bucketMap[k].delivery += 1; if (consegnato(o)) bucketMap[k].incassoDelivery += o.totale }
+      if (consegnato(o)) bucketMap[k].incasso += o.totale
     }
   }
 
@@ -142,9 +145,10 @@ export async function GET(req: Request) {
 
   const asportoCount = ordini.filter(o => o.tipo === 'asporto').length
   const deliveryCount = ordini.filter(o => o.tipo === 'delivery').length
-  const nonConsegnati = ordini.filter(o => o.status === 'annullato' || o.status === 'non_consegnato').length
-  const totaleIncasso = ordini.reduce((s, o) => s + o.totale, 0)
-  const spesaMedia = ordini.length > 0 ? totaleIncasso / ordini.length : 0
+  const nonConsegnati = ordini.filter(o => !consegnato(o)).length
+  const ordiniConsegnati = ordini.filter(consegnato)
+  const totaleIncasso = ordiniConsegnati.reduce((s, o) => s + o.totale, 0)
+  const spesaMedia = ordiniConsegnati.length > 0 ? totaleIncasso / ordiniConsegnati.length : 0
   const tassoNonConsegnati = ordini.length > 0 ? (nonConsegnati / ordini.length) * 100 : 0
 
   return NextResponse.json({

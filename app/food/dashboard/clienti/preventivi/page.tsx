@@ -1128,19 +1128,8 @@ function Richieste() {
                 </div>
               </div>
 
-              {/* Footer — solo "Assegna tavolo" quando pertinente */}
-              {selected.tipo === 'tavolo' && selected.status === 'accettato' && (
-                <div className="px-6 py-4 border-t border-ink-navy/8">
-                  <button onClick={() => { setSelected(null); setConfermaApp(selected) }}
-                    className="w-full text-sm font-medium text-ink-navy py-2.5 rounded-lg border border-ink-navy/12 hover:bg-mist transition-colors flex items-center justify-center gap-2">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="7" width="18" height="4.5" rx="1.5" />
-                      <path d="M6 11.5v9M18 11.5v9" />
-                    </svg>
-                    Assegna tavolo
-                  </button>
-                </div>
-              )}
+              {/* Bottone "Assegna tavolo" rimosso: la prenotazione accettata è già a calendario
+                  senza tavolo e il titolare gestisce i tavoli in autonomia. */}
 
             </div>
           </div>

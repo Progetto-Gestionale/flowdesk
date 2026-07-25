@@ -123,10 +123,12 @@ export default function OrdiniPage() {
   }, [])
 
   // La cucina segna l'ordine come "pronto".
-  // Per i delivery lo stato diventa 'pronto' (poi il fattorino lo segnerà 'consegnato'
-  // dalla pagina Delivery o dall'area dipendenti); per asporto/tavolo resta 'consegnato'.
+  // - delivery: diventa 'pronto', poi il fattorino lo segnerà 'consegnato' (auto-chiusura conto).
+  // - asporto: diventa 'pronto' e il conto NON viene chiuso: lo chiude il cameriere con "Chiudi conto".
+  // - tavolo: va 'consegnato' (servito in sala; il conto del tavolo si gestisce dai Conti).
   async function avanzaOrdine(o: Ordine) {
-    const nuovoStatus = o.tipo === 'delivery' ? 'pronto' : 'consegnato'
+    const isTavolo = o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
+    const nuovoStatus = isTavolo ? 'consegnato' : 'pronto'
     // Update ottimistico: la card si sposta subito, senza aspettare il server.
     setOrdini(prev => prev.map(x => x.id === o.id ? { ...x, status: nuovoStatus } : x))
     try {
@@ -134,6 +136,34 @@ export default function OrdiniPage() {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nuovoStatus }),
+      })
+    } finally {
+      fetchOrdini()
+    }
+  }
+
+  // Il cameriere chiude manualmente il conto di un asporto pronto → 'chiuso' (imposta closedAt lato API).
+  async function chiudiOrdine(o: Ordine) {
+    setOrdini(prev => prev.map(x => x.id === o.id ? { ...x, status: 'chiuso' } : x))
+    try {
+      await fetch(`/api/ordini/${o.id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'chiuso' }),
+      })
+    } finally {
+      fetchOrdini()
+    }
+  }
+
+  // Asporto non ritirato (o delivery non consegnato) → 'non_consegnato': va nello storico ma non incassato.
+  async function segnaNonConsegnato(o: Ordine) {
+    setOrdini(prev => prev.map(x => x.id === o.id ? { ...x, status: 'non_consegnato' } : x))
+    try {
+      await fetch(`/api/ordini/${o.id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'non_consegnato' }),
       })
     } finally {
       fetchOrdini()
@@ -182,8 +212,8 @@ export default function OrdiniPage() {
   // Per la cucina un delivery è "concluso" già quando è pronto (la consegna la gestisce il fattorino).
   // 'pagato' = pagato in cassa → concluso anche per la cucina.
   const isDoneOrdine = (o: Ordine) => o.tipo === 'delivery'
-    ? ['pronto', 'consegnato', 'chiuso'].includes(o.status)
-    : ['consegnato', 'pagato', 'chiuso'].includes(o.status)
+    ? ['pronto', 'consegnato', 'chiuso', 'non_consegnato'].includes(o.status)
+    : ['consegnato', 'pagato', 'chiuso', 'non_consegnato'].includes(o.status)
   const isDoneApp = (a: AppuntamentoOrdine) => a.status === 'completato'
 
   const ordiniAttivi = ordini.filter(o => !isDoneOrdine(o))
@@ -217,7 +247,12 @@ export default function OrdiniPage() {
     try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
 
     return (
-      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${theme ? theme.border : 'border-ink-navy/10'}`}>
+      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${o.status === 'non_consegnato' ? 'border-red-300' : theme ? theme.border : 'border-ink-navy/10'}`}>
+        {o.status === 'non_consegnato' && (
+          <div className="px-4 py-2 bg-red-500 text-white text-center">
+            <p className="text-xs font-bold uppercase tracking-wide">{tipoKey === 'delivery' ? 'Non consegnato' : 'Non ritirato'}</p>
+          </div>
+        )}
         {/* Header */}
         <div className={`px-4 py-3 border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
           {/* Riga 1: label a sinistra + badge tipo (con orario per i tavoli) a destra */}
@@ -244,10 +279,26 @@ export default function OrdiniPage() {
           <div className="flex items-center gap-2 flex-wrap mt-2">
             <span className={`text-sm font-semibold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
             {!isDone && (
-              <button onClick={() => avanzaOrdine(o)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
-                {o.tipo === 'delivery' ? 'Segna pronto' : 'Pronto'}
-              </button>
+              <>
+                {o.status === 'pronto' && !isTavolo && o.tipo !== 'delivery' ? (
+                  <button onClick={() => chiudiOrdine(o)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue text-white hover:bg-electric-blue/90 transition-colors">
+                    Chiudi conto
+                  </button>
+                ) : (
+                  <button onClick={() => avanzaOrdine(o)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
+                    {o.tipo === 'delivery' ? 'Segna pronto' : 'Pronto'}
+                  </button>
+                )}
+                {/* Asporto non ritirato dal cliente */}
+                {!isTavolo && o.tipo !== 'delivery' && (
+                  <button onClick={() => segnaNonConsegnato(o)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                    Non ritirato
+                  </button>
+                )}
+              </>
             )}
             {isDone && (
               confermaElimina === o.id ? (

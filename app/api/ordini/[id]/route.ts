@@ -11,7 +11,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ('status' in body) {
     data.status = body.status
     if (body.status === 'pronto') data.prontoAt = new Date()
-    if (body.status === 'chiuso' || body.status === 'consegnato') data.closedAt = new Date()
+    // 'non_consegnato' = delivery non consegnato / asporto non ritirato: concluso (va nello storico) ma non incassato.
+    if (body.status === 'chiuso' || body.status === 'consegnato' || body.status === 'non_consegnato') data.closedAt = new Date()
   }
   if ('tavoloId' in body) data.tavoloId = body.tavoloId
   if ('tavolo' in body) data.tavolo = body.tavolo

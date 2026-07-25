@@ -156,12 +156,12 @@ export default function DipendenteDashboard() {
     if (res.ok) { const d = await res.json(); setDeliveryOrdini(d.ordini ?? []) }
   }
 
-  async function segnaConsegnato(id: string) {
+  async function segnaConsegnato(id: string, status: 'consegnato' | 'non_consegnato' = 'consegnato') {
     setDeliveryOrdini(prev => prev.filter(o => o.id !== id))
     await fetch('/api/dipendente/delivery', {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, status }),
     })
     fetchDelivery()
   }
@@ -599,9 +599,13 @@ export default function DipendenteDashboard() {
                         </div>
                         <p className="text-sm font-semibold text-ink-navy pt-1">Totale € {o.totale.toFixed(2)}</p>
                       </div>
-                      <div className="px-4 pb-4">
+                      <div className="px-4 pb-4 flex gap-2">
+                        <button onClick={() => segnaConsegnato(o.id, 'non_consegnato')}
+                          className="shrink-0 border border-red-200 text-red-500 font-semibold py-2.5 px-3 rounded-xl hover:bg-red-50 transition-colors text-sm">
+                          Non consegnato
+                        </button>
                         <button onClick={() => segnaConsegnato(o.id)}
-                          className="w-full bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 transition-colors text-sm">
+                          className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 transition-colors text-sm">
                           Segna consegnato
                         </button>
                       </div>
