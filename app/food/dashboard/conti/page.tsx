@@ -514,7 +514,7 @@ export default function ContiPage() {
                   </button>
                   <button onClick={() => segnaPronte(o)} disabled={chiudendo === o.id}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
-                    {chiudendo === o.id ? '…' : 'Pronto'}
+                    {chiudendo === o.id ? '…' : 'Chiudi conto'}
                   </button>
                 </>
               )

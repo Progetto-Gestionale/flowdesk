@@ -100,8 +100,8 @@ export default function DeliveryPage() {
         {/* Info consegna */}
         {(ci.indirizzo || ci.telefono) && (
           <div className="px-4 py-2.5 bg-white border-b border-ink-navy/6 space-y-0.5">
-            {ci.indirizzo && <p className="text-sm font-semibold text-ink-navy">📍 {ci.indirizzo}</p>}
-            {ci.telefono && <p className="text-xs text-ink-navy/50">📞 {ci.telefono}</p>}
+            {ci.indirizzo && <p className="text-sm font-semibold text-ink-navy">{ci.indirizzo}</p>}
+            {ci.telefono && <p className="text-xs text-ink-navy/50">{ci.telefono}</p>}
           </div>
         )}
 

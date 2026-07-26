@@ -156,19 +156,6 @@ export default function OrdiniPage() {
     }
   }
 
-  // Asporto non ritirato (o delivery non consegnato) → 'non_consegnato': va nello storico ma non incassato.
-  async function segnaNonConsegnato(o: Ordine) {
-    setOrdini(prev => prev.map(x => x.id === o.id ? { ...x, status: 'non_consegnato' } : x))
-    try {
-      await fetch(`/api/ordini/${o.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'non_consegnato' }),
-      })
-    } finally {
-      fetchOrdini()
-    }
-  }
 
   async function cancellaOrdine(id: string) {
     await fetch(`/api/ordini/${id}`, { method: 'DELETE', credentials: 'include' })
@@ -289,13 +276,6 @@ export default function OrdiniPage() {
                   <button onClick={() => avanzaOrdine(o)}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
                     {o.tipo === 'delivery' ? 'Segna pronto' : 'Pronto'}
-                  </button>
-                )}
-                {/* Asporto non ritirato dal cliente */}
-                {!isTavolo && o.tipo !== 'delivery' && (
-                  <button onClick={() => segnaNonConsegnato(o)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                    Non ritirato
                   </button>
                 )}
               </>
