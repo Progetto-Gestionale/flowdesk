@@ -142,20 +142,6 @@ export default function OrdiniPage() {
     }
   }
 
-  // Il cameriere chiude manualmente il conto di un asporto pronto → 'chiuso' (imposta closedAt lato API).
-  async function chiudiOrdine(o: Ordine) {
-    setOrdini(prev => prev.map(x => x.id === o.id ? { ...x, status: 'chiuso' } : x))
-    try {
-      await fetch(`/api/ordini/${o.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'chiuso' }),
-      })
-    } finally {
-      fetchOrdini()
-    }
-  }
-
 
   async function cancellaOrdine(id: string) {
     await fetch(`/api/ordini/${id}`, { method: 'DELETE', credentials: 'include' })
@@ -198,9 +184,14 @@ export default function OrdiniPage() {
 
   // Per la cucina un delivery è "concluso" già quando è pronto (la consegna la gestisce il fattorino).
   // 'pagato' = pagato in cassa → concluso anche per la cucina.
-  const isDoneOrdine = (o: Ordine) => o.tipo === 'delivery'
-    ? ['pronto', 'consegnato', 'chiuso', 'non_consegnato'].includes(o.status)
-    : ['consegnato', 'pagato', 'chiuso', 'non_consegnato'].includes(o.status)
+  // Tavolo: concluso solo quando 'consegnato'/'chiuso'. Asporto e delivery: 'pronto' = concluso
+  // per la cucina (esce dagli attivi). La chiusura conto / "non ritirato" si gestisce da Conti.
+  const isDoneOrdine = (o: Ordine) => {
+    const isTav = o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
+    return isTav
+      ? ['consegnato', 'pagato', 'chiuso', 'non_consegnato'].includes(o.status)
+      : ['pronto', 'consegnato', 'chiuso', 'non_consegnato'].includes(o.status)
+  }
   const isDoneApp = (a: AppuntamentoOrdine) => a.status === 'completato'
 
   const ordiniAttivi = ordini.filter(o => !isDoneOrdine(o))
@@ -266,19 +257,10 @@ export default function OrdiniPage() {
           <div className="flex items-center gap-2 flex-wrap mt-2">
             <span className={`text-sm font-semibold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
             {!isDone && (
-              <>
-                {o.status === 'pronto' && !isTavolo && o.tipo !== 'delivery' ? (
-                  <button onClick={() => chiudiOrdine(o)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue text-white hover:bg-electric-blue/90 transition-colors">
-                    Chiudi conto
-                  </button>
-                ) : (
-                  <button onClick={() => avanzaOrdine(o)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
-                    {o.tipo === 'delivery' ? 'Segna pronto' : 'Pronto'}
-                  </button>
-                )}
-              </>
+              <button onClick={() => avanzaOrdine(o)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
+                {o.tipo === 'delivery' ? 'Segna pronto' : 'Pronto'}
+              </button>
             )}
             {isDone && (
               confermaElimina === o.id ? (
