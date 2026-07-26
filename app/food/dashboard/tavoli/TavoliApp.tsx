@@ -444,33 +444,33 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     }
   }))
 
-  function startPan(e: React.MouseEvent) {
+  function startPan(e: React.PointerEvent) {
     if ((e.target as HTMLElement).dataset.drag) return
     e.preventDefault()
     const sx = e.clientX, sy = e.clientY, ox = panRef.current.x, oy = panRef.current.y
-    function mv(ev: MouseEvent) { setPanSync({ x: ox + (ev.clientX - sx), y: oy + (ev.clientY - sy) }) }
-    function up() { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
+    function mv(ev: PointerEvent) { setPanSync({ x: ox + (ev.clientX - sx), y: oy + (ev.clientY - sy) }) }
+    function up() { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up)
   }
 
-  function startDragT(e: React.MouseEvent, id: string) {
+  function startDragT(e: React.PointerEvent, id: string) {
     if (selectMode) { onToggleSelect(id); return }
     e.preventDefault(); e.stopPropagation()
     const d = mdRef.current[id]!; const ox = d.x, oy = d.y, sx = e.clientX, sy = e.clientY
-    function mv(ev: MouseEvent) {
+    function mv(ev: PointerEvent) {
       const dx = (ev.clientX - sx) / zoomRef.current, dy = (ev.clientY - sy) / zoomRef.current
       const upd = { ...mdRef.current, [id]: { ...mdRef.current[id], x: Math.max(0, ox + dx), y: Math.max(0, oy + dy) } }
       mdRef.current = upd; setMapData({ ...upd })
     }
-    function up() { saveMD(id, mdRef.current[id]); window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
+    function up() { saveMD(id, mdRef.current[id]); window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up)
   }
 
-  function startResizeT(e: React.MouseEvent, id: string, edge: 'r' | 'b' | 'rb') {
+  function startResizeT(e: React.PointerEvent, id: string, edge: 'r' | 'b' | 'rb') {
     e.preventDefault(); e.stopPropagation()
     const d = mdRef.current[id]!; const ow = d.w, oh = d.h, sx = e.clientX, sy = e.clientY
     resizeTRef.current = { id, edge, sx, sy, ow, oh }
-    function mv(ev: MouseEvent) {
+    function mv(ev: PointerEvent) {
       if (!resizeTRef.current) return
       const { id, edge, sx, sy, ow, oh } = resizeTRef.current
       const dx = (ev.clientX - sx) / zoomRef.current, dy = (ev.clientY - sy) / zoomRef.current
@@ -482,29 +482,29 @@ const VistaMappa = forwardRef<VistaMappHandle, {
       const upd = { ...mdRef.current, [id]: { ...cur, w: nw, h: nh } }
       mdRef.current = upd; setMapData({ ...upd })
     }
-    function up() { saveMD(id, mdRef.current[id]); resizeTRef.current = null; window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
+    function up() { saveMD(id, mdRef.current[id]); resizeTRef.current = null; window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up)
   }
 
-  function startDragEl(e: React.MouseEvent, id: string) {
+  function startDragEl(e: React.PointerEvent, id: string) {
     e.preventDefault(); e.stopPropagation()
     const el = elementi.find(x => x.id === id)!; const ox = el.x, oy = el.y, sx = e.clientX, sy = e.clientY
     let current = elementi
-    function mv(ev: MouseEvent) {
+    function mv(ev: PointerEvent) {
       const dx = (ev.clientX - sx) / zoomRef.current, dy = (ev.clientY - sy) / zoomRef.current
       current = current.map(x => x.id === id ? { ...x, x: Math.max(0, ox + dx), y: Math.max(0, oy + dy) } : x)
       onSaveElementi(current)
     }
-    function up() { if (salaAttiva) saveSalaElementi(salaAttiva.id, current); window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
+    function up() { if (salaAttiva) saveSalaElementi(salaAttiva.id, current); window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up)
   }
 
-  function startResizeEl(e: React.MouseEvent, id: string) {
+  function startResizeEl(e: React.PointerEvent, id: string) {
     e.preventDefault(); e.stopPropagation()
     const el = elementi.find(x => x.id === id)!; const ow = el.w, oh = el.h, sx = e.clientX, sy = e.clientY
     resizeERef.current = { id, sx, sy, ow, oh }
     let current = elementi
-    function mv(ev: MouseEvent) {
+    function mv(ev: PointerEvent) {
       if (!resizeERef.current) return
       const dx = (ev.clientX - resizeERef.current.sx) / zoomRef.current, dy = (ev.clientY - resizeERef.current.sy) / zoomRef.current
       const nw = Math.max(30, Math.round((resizeERef.current.ow + dx) / 10) * 10)
@@ -512,8 +512,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
       current = current.map(x => x.id === id ? { ...x, w: nw, h: nh } : x)
       onSaveElementi(current)
     }
-    function up() { if (salaAttiva) saveSalaElementi(salaAttiva.id, current); resizeERef.current = null; window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up)
+    function up() { if (salaAttiva) saveSalaElementi(salaAttiva.id, current); resizeERef.current = null; window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up)
   }
 
   function aggiungiElemento(t: typeof TIPI_ELEMENTO[0]) {
@@ -565,10 +565,10 @@ const VistaMappa = forwardRef<VistaMappHandle, {
 
       {/* Canvas */}
       <div ref={viewportRef} className="rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden"
-        style={{ width: '100%', height: 680, backgroundColor: '#ffffff', cursor: selectMode ? 'default' : 'grab', position: 'relative', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}
-        onMouseDown={selectMode ? undefined : startPan}>
+        style={{ width: '100%', height: 680, backgroundColor: '#ffffff', cursor: selectMode ? 'default' : 'grab', position: 'relative', touchAction: 'none', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}
+        onPointerDown={selectMode ? undefined : startPan}>
         {/* Zoom sovrapposto all'angolo della mappa: compatto, non ruba spazio */}
-        <div onMouseDown={e => e.stopPropagation()}
+        <div onPointerDown={e => e.stopPropagation()}
           className="absolute top-2 left-2 z-40 flex items-center gap-1 bg-white/95 border border-ink-navy/10 rounded-xl px-2 py-1 shadow-sm">
           <button onClick={() => setZoomSync(Math.max(0.2, +(zoomRef.current - 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">−</button>
           <span className="text-xs font-semibold text-ink-navy/60 w-10 text-center">{Math.round(zoom * 100)}%</span>
@@ -580,17 +580,17 @@ const VistaMappa = forwardRef<VistaMappHandle, {
 
           {/* Elementi decorativi */}
           {elementi.map(el => (
-            <div key={el.id} data-drag={editMode ? "1" : undefined} onMouseDown={editMode ? e => startDragEl(e, el.id) : undefined}
+            <div key={el.id} data-drag={editMode ? "1" : undefined} onPointerDown={editMode ? e => startDragEl(e, el.id) : undefined}
               style={{ position: 'absolute', left: el.x, top: el.y, width: el.w, height: el.h, cursor: editMode ? 'grab' : 'default', userSelect: 'none' }}
               className="group">
               <div style={{ width: '100%', height: '100%', backgroundColor: el.colore, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(0,0,0,0.1)' }}>
                 <span style={{ fontSize: el.h < 30 ? 9 : 11, fontWeight: 600, color: '#374151', textAlign: 'center', padding: '0 4px', pointerEvents: 'none' }}>{el.label}</span>
               </div>
-              {editMode && <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => rimuoviElemento(el.id)}
+              {editMode && <button data-drag="1" onPointerDown={e => e.stopPropagation()} onClick={() => rimuoviElemento(el.id)}
                 className="absolute -top-2 -right-2 hidden group-hover:flex w-5 h-5 bg-white border border-red-200 rounded-full items-center justify-center text-red-400 text-xs font-bold shadow z-10">✕</button>}
-              {editMode && <div data-drag="1" onMouseDown={e => startResizeEl(e, el.id)} style={{ position: 'absolute', right: -5, bottom: -5, width: 12, height: 12, backgroundColor: '#6366f1', borderRadius: 3, cursor: 'se-resize', opacity: .7, zIndex: 10 }} />}
-              {editMode && <div data-drag="1" onMouseDown={e => startResizeEl(e, el.id)} style={hS('ew-resize', { right: -4, top: 6, bottom: 6, width: 8 })} />}
-              {editMode && <div data-drag="1" onMouseDown={e => startResizeEl(e, el.id)} style={hS('ns-resize', { bottom: -4, left: 6, right: 6, height: 8 })} />}
+              {editMode && <div data-drag="1" onPointerDown={e => startResizeEl(e, el.id)} style={{ position: 'absolute', right: -5, bottom: -5, width: 12, height: 12, backgroundColor: '#6366f1', borderRadius: 3, cursor: 'se-resize', opacity: .7, zIndex: 10 }} />}
+              {editMode && <div data-drag="1" onPointerDown={e => startResizeEl(e, el.id)} style={hS('ew-resize', { right: -4, top: 6, bottom: 6, width: 8 })} />}
+              {editMode && <div data-drag="1" onPointerDown={e => startResizeEl(e, el.id)} style={hS('ns-resize', { bottom: -4, left: 6, right: 6, height: 8 })} />}
             </div>
           ))}
 
@@ -649,7 +649,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                     <div title="Ordine pronto" style={{ position: 'absolute', top: 6, right: 6, zIndex: 6, width: 22, height: 22, borderRadius: '50%', backgroundColor: '#dc2626', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, lineHeight: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.45)', border: '1.5px solid #fff', pointerEvents: 'none' }}>!</div>
                   )}
                   <div data-drag={editMode && !selectMode ? "1" : undefined}
-                    onMouseDown={editMode && !selectMode ? e => startDragT(e, t.id) : selectMode ? e => { e.stopPropagation(); onToggleSelect(t.id) } : separaMode ? e => e.stopPropagation() : undefined}
+                    onPointerDown={editMode && !selectMode ? e => startDragT(e, t.id) : selectMode ? e => { e.stopPropagation(); onToggleSelect(t.id) } : separaMode ? e => e.stopPropagation() : undefined}
                     onClick={separaMode ? () => { if (gruppo) onSciogliGruppo(gruppo.id) } : !editMode && !selectMode ? () => onTavoloClick?.(t.id, gruppo?.id ?? null, label) : undefined}
                     style={{ width: w, height: h, backgroundColor: colore, borderRadius: isC ? '50%' : 10, cursor: selectMode ? 'pointer' : editMode ? 'grab' : separaMode ? (gruppo ? 'pointer' : 'default') : 'pointer', position: 'absolute', top: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: isSelected ? `0 0 0 3px #6366f1, 0 3px 12px rgba(0,0,0,0.15)` : '0 3px 12px rgba(0,0,0,0.15)', opacity: selectMode && !isSelected ? 0.75 : separaMode && !gruppo ? 0.45 : 1 }}>
                     <span style={{ color: '#fff', fontWeight: 700, fontSize: Math.min(w, h) < 80 ? 10 : 13, textAlign: 'center', padding: '0 6px', lineHeight: 1.3, pointerEvents: 'none' }}>{label}</span>
@@ -658,14 +658,14 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                   {/* Azioni al passaggio del mouse: solo in modifica (scollegamento ora via "Separa tavoli") */}
                   {editMode && !selectMode && hoveredTavoloId === t.id && (
                     <div style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 4, zIndex: 30, paddingBottom: 4 }}>
-                      <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => onModifica(t)} className="w-6 h-6 p-1.5 bg-white border border-ink-navy/15 rounded-full text-ink-navy/50 flex items-center justify-center hover:bg-electric-blue/10 shadow"><IconPencil /></button>
-                      <button data-drag="1" onMouseDown={e => e.stopPropagation()} onClick={() => onElimina(t.id)} className="w-6 h-6 p-1.5 bg-white border border-red-200 rounded-full flex items-center justify-center hover:bg-red-50 shadow text-red-500"><IconTrash /></button>
+                      <button data-drag="1" onPointerDown={e => e.stopPropagation()} onClick={() => onModifica(t)} className="w-6 h-6 p-1.5 bg-white border border-ink-navy/15 rounded-full text-ink-navy/50 flex items-center justify-center hover:bg-electric-blue/10 shadow"><IconPencil /></button>
+                      <button data-drag="1" onPointerDown={e => e.stopPropagation()} onClick={() => onElimina(t.id)} className="w-6 h-6 p-1.5 bg-white border border-red-200 rounded-full flex items-center justify-center hover:bg-red-50 shadow text-red-500"><IconTrash /></button>
                     </div>
                   )}
-                  {editMode && !selectMode && !isC && <div data-drag="1" onMouseDown={e => startResizeT(e, t.id, 'r')} style={hS('ew-resize', { right: -5, top: 8, bottom: 8, width: 10 })} />}
-                  {editMode && !selectMode && !isC && <div data-drag="1" onMouseDown={e => startResizeT(e, t.id, 'b')} style={hS('ns-resize', { bottom: -5, left: 8, right: 8, height: 10 })} />}
+                  {editMode && !selectMode && !isC && <div data-drag="1" onPointerDown={e => startResizeT(e, t.id, 'r')} style={hS('ew-resize', { right: -5, top: 8, bottom: 8, width: 10 })} />}
+                  {editMode && !selectMode && !isC && <div data-drag="1" onPointerDown={e => startResizeT(e, t.id, 'b')} style={hS('ns-resize', { bottom: -5, left: 8, right: 8, height: 10 })} />}
                   {editMode && !selectMode && (
-                    <div data-drag="1" onMouseDown={e => startResizeT(e, t.id, 'rb')}
+                    <div data-drag="1" onPointerDown={e => startResizeT(e, t.id, 'rb')}
                       style={{ position: 'absolute', right: isC ? 2 : -6, bottom: isC ? 2 : -6, width: 14, height: 14, backgroundColor: '#fff', border: `2.5px solid ${colore}`, borderRadius: isC ? '50%' : 4, cursor: 'se-resize', zIndex: 25 }} />
                   )}
                 </div>
