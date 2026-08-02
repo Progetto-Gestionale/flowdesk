@@ -1,9 +1,11 @@
 import { Resend } from 'resend'
+import { getBaseUrl } from '@/lib/baseUrl'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const EMAIL_DISABLED = process.env.DISABLE_EMAIL === 'true'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+// URL di base per i link nelle email (es. Accetto/Rifiuto della prenotazione). Vedi lib/baseUrl.ts.
+const BASE_URL = getBaseUrl()
 
 export async function sendEmailAccessoDipendente(email: string, nome: string, username: string, loginUrl: string) {
   if (EMAIL_DISABLED || !process.env.RESEND_API_KEY) {

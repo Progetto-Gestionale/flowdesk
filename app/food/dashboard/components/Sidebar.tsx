@@ -113,16 +113,16 @@ export default function Sidebar() {
 
       {/* Piano attivo */}
       <div className="p-4 border-t border-white/10">
-        <div className="bg-white/5 rounded-lg p-3">
-          <p className="text-xs font-semibold text-zest-lime">
-            Trial gratuito
-          </p>
-          <p className="text-xs text-white/40 mt-0.5">
-            30 giorni rimanenti
-          </p>
-          <button className="mt-2 w-full text-xs bg-zest-lime hover:bg-zest-lime/90 text-ink-navy rounded-md py-1.5 font-semibold transition-colors">
-            Passa a Pro
-          </button>
+        <div className="bg-white/5 rounded-lg p-3 flex items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full bg-zest-lime shrink-0" />
+          <div>
+            <p className="text-xs font-semibold text-zest-lime">
+              Piano Pro
+            </p>
+            <p className="text-xs text-white/40 mt-0.5">
+              Attivo
+            </p>
+          </div>
         </div>
       </div>
     </aside>

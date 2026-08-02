@@ -448,10 +448,10 @@ export default function StaffPage() {
       {/* Tab */}
       <div className="flex gap-2 flex-wrap">
         {([
-          ['presenze', 'Presenze'],
           ['dipendenti', 'Dipendenti'],
           ['turni', 'Turni'],
           ['richieste', `Richieste${richiesteInAttesa.length > 0 ? ` (${richiesteInAttesa.length})` : ''}`],
+          ['presenze', 'Presenze'],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${tab === id ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>

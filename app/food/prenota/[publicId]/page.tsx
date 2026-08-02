@@ -59,7 +59,7 @@ export default function PrenotaPage() {
   const [errore, setErrore] = useState('')
   const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
   const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
-  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; durataMedia?: number; fasceOrdini?: string; bloccoAutoTavoli?: boolean; modalitaOrario?: 'libero' | 'turni'; tempoMinimoArrivoMinuti?: number; capConsegna?: string; raggioConsegnaKm?: number; latLocale?: number; lonLocale?: number }>({})
+  const [regole, setRegole] = useState<{ preavvisoMinMinuti?: number; preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; copertiMin?: number; copertiMax?: number; durataMedia?: number; fasceOrdini?: string; bloccoAutoTavoli?: boolean; prenotazioniSospese?: boolean; modalitaOrario?: 'libero' | 'turni'; tempoMinimoArrivoMinuti?: number; capConsegna?: string; raggioConsegnaKm?: number; latLocale?: number; lonLocale?: number }>({})
   const [disponibilitaTurni, setDisponibilitaTurni] = useState<Record<string, boolean> | null>(null)
   const [slotDisponibile, setSlotDisponibile] = useState<boolean | null>(null) // null = non ancora verificato
 
@@ -123,6 +123,7 @@ export default function PrenotaPage() {
             fasceOrdini: r.fasceOrdini || undefined,
             durataMedia: r.durataMedia ? Number(r.durataMedia) : undefined,
             bloccoAutoTavoli: r.bloccoAutoTavoli ?? false,
+            prenotazioniSospese: r.prenotazioniSospese ?? false,
             modalitaOrario: r.modalitaOrario ?? 'libero',
             tempoMinimoArrivoMinuti: r.tempoMinimoArrivoMinuti ? Number(r.tempoMinimoArrivoMinuti) : undefined,
             capConsegna: r.capConsegna || undefined,
@@ -524,7 +525,20 @@ export default function PrenotaPage() {
       {/* ── SEZIONE TAVOLO ────────────────────────────────────────────────── */}
       {tab === 'tavolo' && (
         <div className="max-w-lg mx-auto px-4 py-6 pb-10">
-          {okTavolo ? (
+          {regole.prenotazioniSospese ? (
+            <div className="bg-white rounded-3xl border border-gray-100 shadow p-8 text-center">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: `${coloreP}1a` }}>
+                <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" style={{ color: coloreP }}>
+                  <path d="M12 8v4m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-bold text-gray-800 mb-2">Prenotazioni non disponibili</h2>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Al momento non accettiamo prenotazioni tavolo online.<br />
+                Puoi contattarci direttamente per informazioni.
+              </p>
+            </div>
+          ) : okTavolo ? (
             <div className="bg-white rounded-3xl border border-gray-100 shadow p-8 text-center">
               <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: `${coloreP}1a` }}>
                 <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" style={{ color: coloreP }}>

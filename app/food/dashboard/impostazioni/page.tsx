@@ -84,6 +84,7 @@ interface Regole {
   fasceOrdini: string
   noteAggiuntive: string
   bloccoAutoTavoli: boolean
+  prenotazioniSospese: boolean   // true = il locale non accetta prenotazioni tavolo (pagina pubblica disabilitata)
   modalitaOrario: 'libero' | 'turni'
   tempoMinimoArrivoMinuti: string // minuti prima della fine turno entro cui il cliente deve presentarsi
   capConsegna: string            // CAP serviti per il delivery, separati da virgola (vuoto = nessun filtro CAP)
@@ -507,7 +508,7 @@ export default function Impostazioni() {
   const [sitoWeb, setSitoWeb] = useState('')
   const [orari, setOrari] = useState<Orari>({})
   const [servizi, setServizi] = useState<Servizi>({})
-  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '', capConsegna: '', raggioConsegnaKm: '' })
+  const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, prenotazioniSospese: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '', capConsegna: '', raggioConsegnaKm: '' })
   const [geoZona, setGeoZona] = useState<{ loading: boolean; msg: string; ok: boolean }>({ loading: false, msg: '', ok: false })
   const [menu, setMenu] = useState<Menu>({ tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' })
   const [info, setInfo] = useState<InfoPratiche>({ parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' })
@@ -552,7 +553,7 @@ export default function Impostazioni() {
       setSitoWeb(s.sitoWeb ?? '')
       setOrari(jp(s.orariApertura, {}))
       setServizi(jp(s.serviziOfferti, {}))
-      const defaults: Regole = { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '', capConsegna: '', raggioConsegnaKm: '' }
+      const defaults: Regole = { preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, prenotazioniSospese: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '', capConsegna: '', raggioConsegnaKm: '' }
       setRegole({ ...defaults, ...jp(s.regolePrenotazione, {}) })
       setMenu(jp(s.menuOfferta, { tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' }))
       setInfo(jp(s.infoPratiche, { parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' }))
@@ -775,6 +776,16 @@ export default function Impostazioni() {
             <Section title="Prenotazione tavoli" subtitle="Regole per la pagina pubblica di prenotazione."
               onSave={() => saveSezione('prenotazioni', { regolePrenotazione: JSON.stringify(regole) })}
               status={st('prenotazioni')}>
+              {/* Accetta / sospendi prenotazioni tavolo online */}
+              <Toggle
+                label="Accetta prenotazioni tavolo online"
+                checked={!regole.prenotazioniSospese}
+                onChange={v => { setRegole(r => ({ ...r, prenotazioniSospese: !v })); dirty('prenotazioni') }}
+              />
+              {regole.prenotazioniSospese && (
+                <p className="text-xs text-amber-600 -mt-1">Le prenotazioni tavolo sono <strong>sospese</strong>: nella pagina pubblica il cliente vedrà che al momento non accetti prenotazioni (asporto e delivery, se attivi, restano disponibili).</p>
+              )}
+
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
                 Per gli orari consentiti vengono usati i <strong>Turni di servizio</strong> (se impostati), altrimenti gli <strong>Orari di apertura</strong>. Configurali nella rispettiva sezione.
               </div>

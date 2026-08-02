@@ -987,6 +987,11 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
         <p className="text-ink-navy/50 text-sm mt-0.5">Statistiche sull&apos;andamento del tuo locale</p>
       </div>
 
+      <div className="flex items-start gap-2 rounded-xl bg-electric-blue/5 border border-electric-blue/15 px-3.5 py-2.5 text-sm text-ink-navy/70">
+        <span className="text-electric-blue mt-px shrink-0">ⓘ</span>
+        <p>I dati di oggi non sono ancora inclusi: le statistiche di una giornata diventano visibili a partire dal giorno successivo.</p>
+      </div>
+
       <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTabAnalytics(t.key)}

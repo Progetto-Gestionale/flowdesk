@@ -315,15 +315,20 @@ const VistaMappa = forwardRef<VistaMappHandle, {
   })
   const panRef = useRef(pan)
 
-  // Vista salvata quando si chiude la modalità modifica (feature 3)
-  const [savedEditView, setSavedEditView] = useState<{ zoom: number; pan: { x: number; y: number } } | null>(() => {
+  // Vista predefinita PER SALA: si imposta uscendo dalla modalità Modifica (opzione 2) e viene
+  // riproposta all'apertura, al cambio sala e dal tasto "Adatta". Salvata in localStorage per sala,
+  // così resta anche se si sposta/zooma la mappa, si cambia pagina e si rientra.
+  const salaViewKey = (salaId: string | null | undefined) => `mappa-vista-${salaId ?? 'default'}`
+  function getVistaSala(salaId: string | null | undefined): { zoom: number; pan: { x: number; y: number } } | null {
     try {
-      const z = parseFloat(localStorage.getItem('mappa-edit-zoom') ?? '')
-      const p = JSON.parse(localStorage.getItem('mappa-edit-pan') ?? 'null')
-      if (!isNaN(z) && p) return { zoom: z, pan: p }
+      const v = JSON.parse(localStorage.getItem(salaViewKey(salaId)) ?? 'null')
+      if (v && typeof v.zoom === 'number' && v.pan && typeof v.pan.x === 'number' && typeof v.pan.y === 'number') return v
     } catch {}
     return null
-  })
+  }
+  function setVistaSala(salaId: string | null | undefined, view: { zoom: number; pan: { x: number; y: number } }) {
+    try { localStorage.setItem(salaViewKey(salaId), JSON.stringify(view)) } catch {}
+  }
 
   const [mapData, setMapData] = useState<Record<string, MapData>>({})
   const mdRef = useRef<Record<string, MapData>>({})
@@ -351,24 +356,20 @@ const VistaMappa = forwardRef<VistaMappHandle, {
 
   function toggleEditMode() {
     if (editMode) {
-      // Uscita da modifica: salva la vista corrente come punto di ripristino
-      const view = { zoom: zoomRef.current, pan: { ...panRef.current } }
-      setSavedEditView(view)
-      try { localStorage.setItem('mappa-edit-zoom', String(view.zoom)); localStorage.setItem('mappa-edit-pan', JSON.stringify(view.pan)) } catch {}
+      // Uscita da modifica: la posizione/zoom attuali diventano la vista predefinita di QUESTA sala.
+      setVistaSala(salaAttiva?.id ?? null, { zoom: zoomRef.current, pan: { ...panRef.current } })
     }
     setEditMode(v => !v)
   }
 
-  function handleReset() {
-    if (!editMode && savedEditView) {
-      // Fuori modifica: torna alla vista di quando si è chiuso modifica
-      setZoomSync(savedEditView.zoom)
-      setPanSync(savedEditView.pan)
-    } else {
-      setZoomSync(1)
-      setPanSync({ x: 0, y: 0 })
-    }
+  // Riporta alla vista predefinita della sala (se impostata), altrimenti fa un fit automatico ai tavoli.
+  function vistaPredefinita() {
+    const v = getVistaSala(salaAttiva?.id ?? null)
+    if (v) { setZoomSync(v.zoom); setPanSync(v.pan) }
+    else fitTutti()
   }
+
+  function handleReset() { setZoomSync(1); setPanSync({ x: 0, y: 0 }) }
 
   // Adatta la vista in modo che i tavoli della SALA ATTIVA entrino nella mappa, centrati.
   // Usiamo solo i tavoli passati via prop (già filtrati per sala), non tutto mdRef,
@@ -398,10 +399,10 @@ const VistaMappa = forwardRef<VistaMappHandle, {
   const didAutoFit = useRef(false)
   useEffect(() => {
     if (didAutoFit.current || tavoli.length === 0) return
-    let hasSaved = false
-    try { hasSaved = !!localStorage.getItem('mappa-pan') } catch {}
     didAutoFit.current = true
-    if (!hasSaved) requestAnimationFrame(() => fitTutti())
+    // All'apertura riproponi sempre la vista predefinita della sala (o fit automatico se non impostata),
+    // ignorando l'eventuale pan/zoom transitorio dell'ultima sessione.
+    requestAnimationFrame(() => vistaPredefinita())
   }, [tavoli])
 
   // Cambiando sala, ricentra la vista sui tavoli di quella sala (ogni sala ha il suo fit).
@@ -411,7 +412,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     if (prevSalaRef.current === undefined) { prevSalaRef.current = sid; return } // primo mount: lo gestisce l'auto-fit iniziale
     if (prevSalaRef.current !== sid) {
       prevSalaRef.current = sid
-      requestAnimationFrame(() => fitTutti())
+      requestAnimationFrame(() => vistaPredefinita())
     }
   }, [salaAttiva?.id])
 
@@ -563,6 +564,14 @@ const VistaMappa = forwardRef<VistaMappHandle, {
         </div>
       )}
 
+      {/* Disclaimer: uscendo da Modifica la vista corrente diventa la predefinita della sala */}
+      {canEdit && editMode && (
+        <div className="flex items-start gap-2 rounded-xl bg-electric-blue/5 border border-electric-blue/15 px-3.5 py-2.5 text-xs text-ink-navy/70">
+          <span className="text-electric-blue mt-px shrink-0">ⓘ</span>
+          <p>Posiziona e ingrandisci la mappa come vuoi: quando esci dalla modifica, la vista attuale diventa la <strong>vista predefinita di questa sala</strong>. Verrà riproposta all&apos;apertura, al rientro nella pagina e con il tasto <strong>⤢ Adatta</strong>. Ogni sala ha la sua vista.</p>
+        </div>
+      )}
+
       {/* Canvas */}
       <div ref={viewportRef} className="rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden"
         style={{ width: '100%', height: 680, backgroundColor: '#ffffff', cursor: selectMode ? 'default' : 'grab', position: 'relative', touchAction: 'none', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}
@@ -573,7 +582,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
           <button onClick={() => setZoomSync(Math.max(0.2, +(zoomRef.current - 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">−</button>
           <span className="text-xs font-semibold text-ink-navy/60 w-10 text-center">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoomSync(Math.min(3, +(zoomRef.current + 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">+</button>
-          <button onClick={fitTutti} title="Fai entrare tutti i tavoli nella mappa" className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1 whitespace-nowrap">⤢ Adatta</button>
+          <button onClick={vistaPredefinita} title="Vai alla vista predefinita di questa sala" className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1 whitespace-nowrap">⤢ Adatta</button>
           <button onClick={handleReset} className="text-xs text-electric-blue hover:text-ink-navy font-medium px-1">Reset</button>
         </div>
         <div style={{ position: 'absolute', top: 0, left: 0, transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', width: CANVAS_W, height: CANVAS_H, backgroundColor: '#ffffff', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}>

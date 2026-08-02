@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendEmailAccessoDipendente } from '@/lib/email'
 import { getAuthUser } from '@/lib/getAuthUser'
+import { getBaseUrl } from '@/lib/baseUrl'
 
 export async function POST(req: Request) {
   const user = await getAuthUser()
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Credenziali non ancora impostate. Usa "Imposta accesso" prima.' }, { status: 400 })
   }
 
-  const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const BASE_URL = getBaseUrl()
   const slug = user.publicId
   const loginUrl = slug ? `${BASE_URL}/food/dipendente/login/${slug}` : `${BASE_URL}/food/dipendente/login`
 

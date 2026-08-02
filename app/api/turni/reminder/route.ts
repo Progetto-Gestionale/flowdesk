@@ -2,10 +2,11 @@ import { getAuthUser } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { Resend } from 'resend'
+import { getBaseUrl } from '@/lib/baseUrl'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const EMAIL_DISABLED = process.env.DISABLE_EMAIL === 'true'
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+const BASE_URL = getBaseUrl()
 
 const GIORNI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
 

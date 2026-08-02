@@ -11,6 +11,12 @@ export async function POST(req: Request) {
   const user = await prisma.user.findUnique({ where: { publicId } })
   if (!user) return NextResponse.json({ error: 'Locale non trovato' }, { status: 404 })
 
+  // Prenotazioni tavolo sospese dal locale → rifiuta (difesa lato server, oltre al blocco in UI)
+  const regole = (() => { try { return JSON.parse(user.regolePrenotazione ?? '{}') } catch { return {} } })()
+  if (regole.prenotazioniSospese) {
+    return NextResponse.json({ error: 'Il locale non accetta prenotazioni al momento.' }, { status: 403 })
+  }
+
   // Trova o crea Lead
   const leadEsistente = email
     ? await prisma.lead.findFirst({ where: { userId: user.id, email }, orderBy: { createdAt: 'desc' } })

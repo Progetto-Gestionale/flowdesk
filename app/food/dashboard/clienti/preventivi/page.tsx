@@ -261,7 +261,8 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
   onInvia: (messaggio: string, note: string) => void
 }) {
   const [messaggio, setMessaggio] = useState('')
-  const [note, setNote] = useState(richiesta.note ?? '')
+  // Le note interne non sono più modificabili da questo form: si preserva il valore esistente.
+  const note = richiesta.note ?? ''
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -274,9 +275,9 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
           <button onClick={onClose} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
         </div>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">
+        <div className="bg-electric-blue/5 border border-electric-blue/15 rounded-lg px-3 py-2 text-sm text-ink-navy/70">
           Richiesta di: <strong>{richiesta.clienteName}</strong>
-          {richiesta.clienteEmail && <span className="text-amber-600"> · {richiesta.clienteEmail}</span>}
+          {richiesta.clienteEmail && <span className="text-electric-blue"> · {richiesta.clienteEmail}</span>}
         </div>
 
         <div>
@@ -286,20 +287,9 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
             onChange={e => setMessaggio(e.target.value)}
             rows={3}
             placeholder="Es: L'orario delle 20:00 non è disponibile, possiamo offrirti le 19:30 o le 21:00. Il tavolo sarebbe in sala interna."
-            className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+            className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none"
           />
           <p className="text-xs text-ink-navy/35 mt-1">Spiega cosa cambia rispetto alla richiesta originale.</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note interne (non visibili al cliente)</label>
-          <textarea
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            rows={2}
-            placeholder="Note per uso interno..."
-            className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-          />
         </div>
 
         <div className="flex gap-3 pt-1">
@@ -309,7 +299,7 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
           <button
             onClick={() => onInvia(messaggio, note)}
             disabled={!messaggio.trim()}
-            className="flex-1 bg-amber-500 text-white font-semibold py-2.5 rounded-lg hover:bg-amber-600 disabled:opacity-40">
+            className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">
             Invia proposta
           </button>
         </div>
@@ -686,6 +676,20 @@ function Richieste() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'chiuso', cancellato: false }),
           })
+        }
+
+        // Evita doppie prenotazioni: se esiste già un appuntamento a calendario per questa
+        // richiesta (es. accettata una seconda volta dopo aver proposto una modifica), non ricrearlo.
+        // Si rilegge la lista aggiornata dal server per non basarsi su uno stato locale non aggiornato.
+        const numStr = `#${String(corrente.numero).padStart(3, '0')}`
+        const appAggiornati: { note?: string | null }[] = await fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' })
+          .then(r => r.json()).then(d => d.appuntamenti ?? []).catch(() => appuntamenti)
+        if (appAggiornati.some(a => a.note?.includes(numStr))) {
+          setAppuntamenti(appAggiornati as typeof appuntamenti)
+          setSelected(null)
+          await fetchRichieste()
+          window.dispatchEvent(new Event('refresh-richieste-count'))
+          return
         }
 
         const isTavolo = corrente.tipo === 'tavolo'
