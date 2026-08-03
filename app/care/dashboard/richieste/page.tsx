@@ -15,6 +15,10 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> 
   cancellato: { bg: 'bg-red-100', text: 'text-red-500', label: 'Cancellato' },
 }
 
+// Proposta mandata al paziente: non è ancora né confermata né rifiutata
+const PROPOSTA = 'proposta_inviata'
+const TIPO_ALTRO = '__altro'
+
 interface Appuntamento {
   id: string
   clienteNome?: string
@@ -25,6 +29,7 @@ interface Appuntamento {
   status: string
   note?: string
   pazienteId?: string | null
+  messaggioProposta?: string | null
 }
 
 interface TipoSeduta { id: string; nome: string; durata: number }
@@ -172,6 +177,120 @@ function NuovaModal({ tipi, onClose, onSave }: {
   )
 }
 
+// ── Proposta di un altro orario ─────────────────────────────────────────────
+function PropostaModal({ app, tipi, invio, errore, onClose, onInvia }: {
+  app: Appuntamento
+  tipi: TipoSeduta[]
+  invio: boolean
+  errore: string
+  onClose: () => void
+  onInvia: (dati: Record<string, unknown>) => void
+}) {
+  const iniziale = new Date(app.data)
+  const [form, setForm] = useState({
+    data: toDateStr(iniziale),
+    ora: `${String(iniziale.getHours()).padStart(2, '0')}:${String(iniziale.getMinutes()).padStart(2, '0')}`,
+    tipoSedutaId: tipi.find(t => t.nome === app.servizio)?.id ?? '',
+    servizioAltro: tipi.some(t => t.nome === app.servizio) ? '' : (app.servizio ?? ''),
+    durata: String(app.durata),
+    messaggio: '',
+  })
+
+  function selezionaTipo(id: string) {
+    const tipo = tipi.find(t => t.id === id)
+    setForm(f => ({
+      ...f,
+      tipoSedutaId: id,
+      servizioAltro: id === TIPO_ALTRO ? f.servizioAltro : '',
+      durata: tipo ? String(tipo.durata) : f.durata,
+    }))
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 overflow-y-auto"
+        style={{ maxHeight: '88vh' }} onClick={e => e.stopPropagation()}>
+        <div>
+          <h2 className="text-lg font-bold text-ink-navy">Proponi un altro orario</h2>
+          <p className="text-xs text-ink-navy/50 mt-0.5">
+            {app.clienteNome || 'Paziente'}{app.clienteEmail ? ` · ${app.clienteEmail}` : ''}
+          </p>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+          Il paziente riceve una email e risponde con un click. Se accetta, l&apos;appuntamento
+          si sposta da solo e tu ricevi la notifica.
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data</label>
+            <input type="date" value={form.data} onChange={e => setForm({ ...form, data: e.target.value })}
+              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora</label>
+            <OrarioSelect value={form.ora} onChange={v => setForm({ ...form, ora: v })}
+              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo di seduta</label>
+            <select value={form.tipoSedutaId} onChange={e => selezionaTipo(e.target.value)}
+              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
+              <option value="">— Seleziona —</option>
+              {tipi.map(t => <option key={t.id} value={t.id}>{t.nome} · {t.durata} min</option>)}
+              <option value={TIPO_ALTRO}>Altro</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Durata</label>
+            <input type="number" value={form.durata} onChange={e => setForm({ ...form, durata: e.target.value })}
+              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+          </div>
+        </div>
+
+        {form.tipoSedutaId === TIPO_ALTRO && (
+          <div>
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Specifica il trattamento</label>
+            <input value={form.servizioAltro} onChange={e => setForm({ ...form, servizioAltro: e.target.value })}
+              placeholder="Es. Valutazione posturale"
+              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-ink-navy/70 mb-1">Messaggio per il paziente *</label>
+          <textarea value={form.messaggio} onChange={e => setForm({ ...form, messaggio: e.target.value })} rows={3}
+            placeholder="Es. Alle 17:00 sono già occupato, ma posso alle 18:30 dello stesso giorno."
+            className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
+        </div>
+
+        {errore && <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{errore}</p>}
+
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
+          <button
+            onClick={() => onInvia({
+              data: form.data,
+              ora: form.ora,
+              durata: parseInt(form.durata) || app.durata,
+              tipoSedutaId: form.tipoSedutaId && form.tipoSedutaId !== TIPO_ALTRO ? form.tipoSedutaId : null,
+              tipoSeduta: form.servizioAltro.trim() || null,
+              messaggio: form.messaggio,
+            })}
+            disabled={invio || !form.messaggio.trim()}
+            className="flex-1 bg-amber-500 text-white font-semibold py-2.5 rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-40">
+            {invio ? 'Invio...' : 'Invia proposta'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Pagina ──────────────────────────────────────────────────────────────────
 export default function RichiestePage() {
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([])
@@ -182,6 +301,9 @@ export default function RichiestePage() {
   const [prenotazioniAperte, setPrenotazioniAperte] = useState(true)
   const [giorno, setGiorno] = useState(() => toDateStr(new Date()))
   const [calOpen, setCalOpen] = useState(false)
+  const [proposta, setProposta] = useState<Appuntamento | null>(null)
+  const [invio, setInvio] = useState(false)
+  const [errore, setErrore] = useState('')
 
   async function fetchAll() {
     const [aRes, tRes] = await Promise.all([
@@ -201,21 +323,33 @@ export default function RichiestePage() {
     return () => clearInterval(interval)
   }, [])
 
-  async function accetta(id: string) {
-    await fetch(`/api/appuntamenti/${id}`, {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'confermato' }),
-    })
-    setSelected(null)
-    fetchAll()
+  // Conferma / rifiuto / proposta passano dall'API di Care, che è quella che
+  // manda le email al paziente. Una PATCH diretta su /api/appuntamenti no.
+  async function rispondi(id: string, azione: 'conferma' | 'rifiuta' | 'proposta', extra: Record<string, unknown> = {}) {
+    setInvio(true)
+    setErrore('')
+    try {
+      const res = await fetch(`/api/care/richieste/${id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ azione, ...extra }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setErrore(d.error ?? 'Operazione non riuscita, riprova.')
+        return false
+      }
+      setSelected(null)
+      setProposta(null)
+      fetchAll()
+      return true
+    } finally {
+      setInvio(false)
+    }
   }
 
-  async function rifiuta(id: string) {
-    await fetch(`/api/appuntamenti/${id}`, { method: 'DELETE', credentials: 'include' })
-    setSelected(null)
-    fetchAll()
-  }
+  const accetta = (id: string) => rispondi(id, 'conferma')
+  const rifiuta = (id: string) => rispondi(id, 'rifiuta')
 
   async function cambiaStato(id: string, status: string) {
     setAppuntamenti(prev => prev.map(a => a.id === id ? { ...a, status } : a))
@@ -253,11 +387,12 @@ export default function RichiestePage() {
     fetchAll()
   }
 
+  // In attesa di una risposta: quelle nuove e quelle a cui abbiamo proposto un altro orario
   const daVerificare = appuntamenti
-    .filter(a => a.status === 'in_attesa')
+    .filter(a => a.status === 'in_attesa' || a.status === PROPOSTA)
     .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
   const delGiorno = appuntamenti
-    .filter(a => a.status !== 'in_attesa' && toDateStr(new Date(a.data)) === giorno)
+    .filter(a => a.status !== 'in_attesa' && a.status !== PROPOSTA && toDateStr(new Date(a.data)) === giorno)
     .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
 
   const oggi = toDateStr(new Date())
@@ -302,7 +437,14 @@ export default function RichiestePage() {
                     {daVerificare.map(a => (
                       <tr key={a.id} onClick={() => setSelected(a)} className="hover:bg-electric-blue/5 cursor-pointer transition-colors">
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-ink-navy">{a.clienteNome || 'Paziente'}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-ink-navy">{a.clienteNome || 'Paziente'}</p>
+                            {a.status === PROPOSTA && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide shrink-0">
+                                Proposta inviata
+                              </span>
+                            )}
+                          </div>
                           {a.clienteEmail && <p className="text-xs text-ink-navy/40">{a.clienteEmail}</p>}
                         </td>
                         <td className="px-4 py-3"><span className="text-base font-bold text-ink-navy capitalize">{fmtGiornoLungo(a.data)}</span></td>
@@ -396,8 +538,16 @@ export default function RichiestePage() {
       {showNuovo && <NuovaModal tipi={tipi} onClose={() => setShowNuovo(false)} onSave={creaManuale} />}
 
       {/* ── DETTAGLIO ── */}
+      {proposta && (
+        <PropostaModal
+          app={proposta} tipi={tipi} invio={invio} errore={errore}
+          onClose={() => { setProposta(null); setErrore('') }}
+          onInvia={(dati) => rispondi(proposta.id, 'proposta', dati)}
+        />
+      )}
+
       {selected && (() => {
-        const isAttesa = selected.status === 'in_attesa'
+        const isAttesa = selected.status === 'in_attesa' || selected.status === PROPOSTA
         const st = STATUS_STYLE[selected.status] ?? STATUS_STYLE.confermato
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
@@ -454,14 +604,32 @@ export default function RichiestePage() {
                 <div className="px-6 py-5">
                   {isAttesa ? (
                     <div className="space-y-2">
-                      <button onClick={() => accetta(selected.id)}
-                        className="w-full bg-green-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-green-700 transition-colors">
-                        Accetta
+                      {selected.status === PROPOSTA && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 mb-3">
+                          <p className="text-xs font-semibold text-amber-800">In attesa della risposta del paziente</p>
+                          {selected.messaggioProposta && (
+                            <p className="text-xs text-amber-700/80 mt-1">“{selected.messaggioProposta}”</p>
+                          )}
+                          <p className="text-xs text-amber-700/70 mt-1">
+                            Se accetta dall&apos;email, l&apos;appuntamento si conferma da solo.
+                          </p>
+                        </div>
+                      )}
+                      <button onClick={() => accetta(selected.id)} disabled={invio}
+                        className="w-full bg-electric-blue text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 transition-colors disabled:opacity-40">
+                        {invio ? 'Invio...' : 'Conferma e avvisa'}
                       </button>
-                      <button onClick={() => rifiuta(selected.id)}
-                        className="w-full text-red-500 text-sm font-medium py-2 rounded-lg hover:bg-red-50 transition-colors">
+                      <button onClick={() => { setProposta(selected); setSelected(null) }}
+                        disabled={!selected.clienteEmail}
+                        title={selected.clienteEmail ? undefined : 'Serve l\'email del paziente'}
+                        className="w-full border border-amber-300 text-amber-700 text-sm font-semibold py-2.5 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent">
+                        Proponi un altro orario
+                      </button>
+                      <button onClick={() => rifiuta(selected.id)} disabled={invio}
+                        className="w-full text-red-500 text-sm font-medium py-2 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">
                         Rifiuta
                       </button>
+                      {errore && <p className="text-xs text-red-500 text-center pt-1">{errore}</p>}
                     </div>
                   ) : (
                     <>

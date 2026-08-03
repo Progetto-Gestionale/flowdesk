@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   IconPencil, IconTrash, IconCalendar, IconClipboard, IconFolder, IconArrowRight,
+  IconUpload, IconFile, IconLink,
 } from '@/app/components/icons'
+
+const MAX_BYTE = 3 * 1024 * 1024
 
 interface Paziente {
   id: string
@@ -27,9 +30,27 @@ interface Seduta {
 interface Documento {
   id: string
   nome: string
-  url: string
+  url?: string | null      // valorizzato solo per i documenti aggiunti come link
+  mimeType?: string | null // valorizzato solo per i file caricati
+  dimensione?: number | null
   tipo?: string
   createdAt: string
+}
+
+function fmtPeso(byte?: number | null) {
+  if (!byte) return null
+  return byte < 1024 * 1024
+    ? `${Math.max(1, Math.round(byte / 1024))} KB`
+    : `${(byte / 1024 / 1024).toFixed(1)} MB`
+}
+
+function leggiFile(file: File): Promise<string> {
+  return new Promise((risolvi, rifiuta) => {
+    const reader = new FileReader()
+    reader.onload = () => risolvi(String(reader.result))
+    reader.onerror = () => rifiuta(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 interface Appuntamento {
@@ -60,7 +81,13 @@ export default function PazienteDetailPage() {
   const [formSeduta, setFormSeduta] = useState({ data: '', tipo: '', note: '' })
 
   const [modalDoc, setModalDoc] = useState(false)
+  const [modoDoc, setModoDoc] = useState<'file' | 'link'>('file')
   const [formDoc, setFormDoc] = useState({ nome: '', url: '', tipo: '' })
+  const [fileDoc, setFileDoc] = useState<File | null>(null)
+  const [caricando, setCaricando] = useState(false)
+  const [erroreDoc, setErroreDoc] = useState('')
+  const [dropAttivo, setDropAttivo] = useState(false)
+  const inputFileRef = useRef<HTMLInputElement>(null)
 
   const [confermaElimina, setConfermaElimina] = useState(false)
 
@@ -105,15 +132,79 @@ export default function PazienteDetailPage() {
     fetchAll()
   }
 
-  async function handleAddDoc() {
-    await fetch(`/api/pazienti/${id}/documenti`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formDoc),
-    })
-    setModalDoc(false)
+  function apriModalDoc(modo: 'file' | 'link') {
+    setModoDoc(modo)
     setFormDoc({ nome: '', url: '', tipo: '' })
-    fetchAll()
+    setFileDoc(null)
+    setErroreDoc('')
+    setModalDoc(true)
+  }
+
+  function chiudiModalDoc() {
+    setModalDoc(false)
+    setFileDoc(null)
+    setErroreDoc('')
+    setFormDoc({ nome: '', url: '', tipo: '' })
+  }
+
+  /** Accetta il file scelto o trascinato e propone il suo nome come titolo. */
+  function selezionaFile(file: File | null | undefined) {
+    if (!file) return
+    if (file.size > MAX_BYTE) {
+      setErroreDoc('Il file supera i 3 MB. Per file più pesanti usa un link esterno.')
+      return
+    }
+    setErroreDoc('')
+    setFileDoc(file)
+    setModoDoc('file')
+    setFormDoc(f => ({ ...f, nome: f.nome || file.name.replace(/\.[^.]+$/, '') }))
+  }
+
+  /** File trascinato direttamente sulla card documenti: apre il modal già pronto. */
+  function handleDropSuCard(e: React.DragEvent) {
+    e.preventDefault()
+    setDropAttivo(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    setModoDoc('file')
+    setFormDoc({ nome: file.name.replace(/\.[^.]+$/, ''), url: '', tipo: '' })
+    setFileDoc(file.size > MAX_BYTE ? null : file)
+    setErroreDoc(file.size > MAX_BYTE ? 'Il file supera i 3 MB. Per file più pesanti usa un link esterno.' : '')
+    setModalDoc(true)
+  }
+
+  async function handleAddDoc() {
+    if (caricando) return
+    setCaricando(true)
+    setErroreDoc('')
+    try {
+      const payload = modoDoc === 'file' && fileDoc
+        ? {
+            nome: formDoc.nome,
+            tipo: formDoc.tipo,
+            contenuto: await leggiFile(fileDoc),
+            mimeType: fileDoc.type || 'application/octet-stream',
+            dimensione: fileDoc.size,
+          }
+        : { nome: formDoc.nome, tipo: formDoc.tipo, url: formDoc.url }
+
+      const res = await fetch(`/api/pazienti/${id}/documenti`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setErroreDoc(data.error ?? 'Caricamento non riuscito, riprova.')
+        return
+      }
+      chiudiModalDoc()
+      fetchAll()
+    } catch {
+      setErroreDoc('Caricamento non riuscito, riprova.')
+    } finally {
+      setCaricando(false)
+    }
   }
 
   async function handleDeleteSeduta(sedutaId: string) {
@@ -134,7 +225,11 @@ export default function PazienteDetailPage() {
   if (loading) return <div className="text-center text-ink-navy/35 py-16">Caricamento...</div>
   if (!paziente) return <div className="text-center text-ink-navy/35 py-16">Paziente non trovato</div>
 
-  const prossimi = appuntamenti.filter(a => new Date(a.data) >= new Date() && a.status !== 'cancellato' && a.status !== 'in_attesa')
+  // Solo appuntamenti fissati davvero: le richieste in attesa e le proposte non ancora
+  // accettate dal paziente non sono "prossimi appuntamenti"
+  const prossimi = appuntamenti.filter(a =>
+    new Date(a.data) >= new Date() &&
+    !['cancellato', 'in_attesa', 'proposta_inviata'].includes(a.status))
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -267,33 +362,68 @@ export default function PazienteDetailPage() {
       </div>
 
       {/* Documenti */}
-      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-6">
+      <div
+        onDragOver={e => { e.preventDefault(); setDropAttivo(true) }}
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropAttivo(false) }}
+        onDrop={handleDropSuCard}
+        className={`relative bg-white rounded-2xl border shadow-sm p-6 transition-colors ${dropAttivo ? 'border-electric-blue border-dashed bg-electric-blue/[0.03]' : 'border-ink-navy/10'}`}>
+
+        {dropAttivo && (
+          <div className="absolute inset-0 z-10 rounded-2xl bg-white/85 flex flex-col items-center justify-center pointer-events-none">
+            <span className="w-8 h-8 text-electric-blue mb-2"><IconUpload /></span>
+            <p className="text-sm font-semibold text-electric-blue">Rilascia il file per caricarlo</p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-ink-navy flex items-center gap-2">
             <span className="w-4 h-4 text-electric-blue"><IconFolder /></span>
             Documenti
           </h2>
-          <button onClick={() => setModalDoc(true)}
-            className="text-xs bg-electric-blue/10 text-electric-blue font-semibold px-3 py-1.5 rounded-lg hover:bg-electric-blue/15 transition-colors">
-            + Aggiungi documento
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => apriModalDoc('link')}
+              className="text-xs border border-ink-navy/10 text-ink-navy/55 font-semibold px-3 py-1.5 rounded-lg hover:bg-mist transition-colors inline-flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5"><IconLink /></span>
+              Link
+            </button>
+            <button onClick={() => apriModalDoc('file')}
+              className="text-xs bg-electric-blue/10 text-electric-blue font-semibold px-3 py-1.5 rounded-lg hover:bg-electric-blue/15 transition-colors inline-flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5"><IconUpload /></span>
+              Carica file
+            </button>
+          </div>
         </div>
+
         {documenti.length === 0 ? (
-          <p className="text-sm text-ink-navy/35 text-center py-6">Nessun documento caricato</p>
+          <button onClick={() => apriModalDoc('file')}
+            className="w-full border border-dashed border-ink-navy/15 rounded-xl py-8 text-center hover:border-electric-blue hover:bg-electric-blue/[0.03] transition-colors group">
+            <span className="w-7 h-7 text-ink-navy/25 group-hover:text-electric-blue mx-auto block mb-2 transition-colors"><IconUpload /></span>
+            <p className="text-sm font-medium text-ink-navy/50">Trascina qui un referto o clicca per caricarlo</p>
+            <p className="text-xs text-ink-navy/30 mt-1">PDF, immagini o documenti fino a 3 MB</p>
+          </button>
         ) : (
           <div className="space-y-2">
-            {documenti.map(d => (
-              <div key={d.id} className="flex items-center justify-between gap-3 bg-mist rounded-xl px-4 py-3 group">
-                <a href={d.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 hover:text-electric-blue">
-                  <p className="text-sm font-semibold text-ink-navy truncate">{d.nome}</p>
-                  <p className="text-xs text-ink-navy/40">{d.tipo || 'Documento'} · {fmtData(d.createdAt)}</p>
-                </a>
-                <button onClick={() => handleDeleteDoc(d.id)}
-                  className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center text-ink-navy/25 hover:text-red-400 transition-all">
-                  <span className="w-3 h-3"><IconTrash /></span>
-                </button>
-              </div>
-            ))}
+            {documenti.map(d => {
+              const href = d.url ?? `/api/documenti-paziente/${d.id}/file`
+              const peso = fmtPeso(d.dimensione)
+              return (
+                <div key={d.id} className="flex items-center gap-3 bg-mist rounded-xl px-4 py-3 group">
+                  <span className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center p-2 ${d.url ? 'bg-white text-ink-navy/40' : 'bg-electric-blue/10 text-electric-blue'}`}>
+                    {d.url ? <IconLink /> : <IconFile />}
+                  </span>
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 hover:text-electric-blue">
+                    <p className="text-sm font-semibold text-ink-navy truncate">{d.nome}</p>
+                    <p className="text-xs text-ink-navy/40">
+                      {[d.tipo || (d.url ? 'Link esterno' : 'File'), peso, fmtData(d.createdAt)].filter(Boolean).join(' · ')}
+                    </p>
+                  </a>
+                  <button onClick={() => handleDeleteDoc(d.id)}
+                    className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center text-ink-navy/25 hover:text-red-400 transition-all">
+                    <span className="w-3 h-3"><IconTrash /></span>
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -335,17 +465,60 @@ export default function PazienteDetailPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
             <h2 className="text-lg font-bold text-ink-navy">Nuovo documento</h2>
+
+            <div className="flex gap-1 bg-mist rounded-xl p-1">
+              {([['file', 'Carica file'], ['link', 'Link esterno']] as const).map(([modo, label]) => (
+                <button key={modo} onClick={() => { setModoDoc(modo); setErroreDoc('') }}
+                  className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-colors ${modoDoc === modo ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/45 hover:text-ink-navy/70'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {modoDoc === 'file' ? (
+              <div
+                onDragOver={e => { e.preventDefault(); setDropAttivo(true) }}
+                onDragLeave={() => setDropAttivo(false)}
+                onDrop={e => { e.preventDefault(); setDropAttivo(false); selezionaFile(e.dataTransfer.files?.[0]) }}
+                onClick={() => inputFileRef.current?.click()}
+                className={`border border-dashed rounded-xl px-4 py-7 text-center cursor-pointer transition-colors ${
+                  dropAttivo ? 'border-electric-blue bg-electric-blue/[0.06]'
+                  : fileDoc ? 'border-electric-blue/40 bg-electric-blue/[0.03]'
+                  : 'border-ink-navy/15 hover:border-electric-blue hover:bg-electric-blue/[0.03]'}`}>
+                <input ref={inputFileRef} type="file" className="hidden"
+                  onChange={e => { selezionaFile(e.target.files?.[0]); e.target.value = '' }} />
+                {fileDoc ? (
+                  <>
+                    <span className="w-7 h-7 text-electric-blue mx-auto block mb-2"><IconFile /></span>
+                    <p className="text-sm font-semibold text-ink-navy truncate">{fileDoc.name}</p>
+                    <p className="text-xs text-ink-navy/40 mt-0.5">{fmtPeso(fileDoc.size)} · clicca per cambiare</p>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-7 h-7 text-ink-navy/25 mx-auto block mb-2"><IconUpload /></span>
+                    <p className="text-sm font-medium text-ink-navy/60">Trascina il file qui o clicca per sceglierlo</p>
+                    <p className="text-xs text-ink-navy/30 mt-1">PDF, immagini o documenti fino a 3 MB</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Link *</label>
+                <input value={formDoc.url} onChange={e => setFormDoc({ ...formDoc, url: e.target.value })}
+                  placeholder="Link a Drive, Dropbox o file online"
+                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+              </div>
+            )}
+
+            {erroreDoc && (
+              <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erroreDoc}</p>
+            )}
+
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome documento *</label>
                 <input value={formDoc.nome} onChange={e => setFormDoc({ ...formDoc, nome: e.target.value })}
                   placeholder="Es. Referto RX ginocchio"
-                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Link *</label>
-                <input value={formDoc.url} onChange={e => setFormDoc({ ...formDoc, url: e.target.value })}
-                  placeholder="Link a Drive, Dropbox o file online"
                   className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
               <div>
@@ -355,10 +528,14 @@ export default function PazienteDetailPage() {
                   className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
             </div>
+
             <div className="flex gap-3">
-              <button onClick={() => setModalDoc(false)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
-              <button onClick={handleAddDoc} disabled={!formDoc.nome.trim() || !formDoc.url.trim()}
-                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">Salva</button>
+              <button onClick={chiudiModalDoc} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
+              <button onClick={handleAddDoc}
+                disabled={caricando || !formDoc.nome.trim() || (modoDoc === 'file' ? !fileDoc : !formDoc.url.trim())}
+                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">
+                {caricando ? 'Caricamento...' : 'Salva'}
+              </button>
             </div>
           </div>
         </div>
