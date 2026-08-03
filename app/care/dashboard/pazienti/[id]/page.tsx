@@ -134,7 +134,7 @@ export default function PazienteDetailPage() {
   if (loading) return <div className="text-center text-ink-navy/35 py-16">Caricamento...</div>
   if (!paziente) return <div className="text-center text-ink-navy/35 py-16">Paziente non trovato</div>
 
-  const prossimi = appuntamenti.filter(a => new Date(a.data) >= new Date() && a.status !== 'cancellato')
+  const prossimi = appuntamenti.filter(a => new Date(a.data) >= new Date() && a.status !== 'cancellato' && a.status !== 'in_attesa')
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

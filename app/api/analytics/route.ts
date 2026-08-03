@@ -49,7 +49,9 @@ export async function GET(req: Request) {
 
   const [appuntamenti, ordini] = await Promise.all([
     prisma.appuntamento.findMany({
-      where: { userId: user.id, data: { gte: inizio, lt: limiteSuperiore } },
+      // Escludiamo le prenotazioni online ancora in attesa: non sono appuntamenti
+      // reali finché non vengono accettate, quindi non devono falsare le statistiche.
+      where: { userId: user.id, status: { not: 'in_attesa' }, data: { gte: inizio, lt: limiteSuperiore } },
       select: { data: true, status: true },
     }),
     prisma.ordine.findMany({

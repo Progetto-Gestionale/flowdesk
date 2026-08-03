@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import Link from 'next/link'
 import { IconTrash, IconArrowRight, IconClock } from '@/app/components/icons'
@@ -66,11 +66,71 @@ interface Override {
   slots: string
 }
 
+// Mini calendario a comparsa per saltare velocemente a una data lontana.
+function MiniCalDropdown({ selectedDay, onSelect, onClose }: {
+  selectedDay: Date; onSelect: (d: Date) => void; onClose: () => void
+}) {
+  const [viewYear, setViewYear] = useState(selectedDay.getFullYear())
+  const [viewMonth, setViewMonth] = useState(selectedDay.getMonth())
+  const ref = useRef<HTMLDivElement>(null)
+  const GIORNI = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  const firstDay = new Date(viewYear, viewMonth, 1)
+  const lastDay = new Date(viewYear, viewMonth + 1, 0)
+  let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6
+  const cells: (number | null)[] = Array(startDow).fill(null)
+  for (let d = 1; d <= lastDay.getDate(); d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  function prevMonth() { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) } else setViewMonth(m => m - 1) }
+  function nextMonth() { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) } else setViewMonth(m => m + 1) }
+  const today = new Date()
+
+  return (
+    <div ref={ref} className="absolute z-50 top-full mt-2 left-0 bg-white rounded-2xl border border-ink-navy/10 shadow-xl p-3 w-64">
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-sm">‹</button>
+        <span className="text-xs font-bold text-ink-navy">{MESI[viewMonth]} {viewYear}</span>
+        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-sm">›</button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {GIORNI.map((g, i) => <span key={i} className="text-center text-[10px] font-semibold text-ink-navy/30 py-0.5">{g}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((day, i) => {
+          if (!day) return <span key={i} />
+          const d = new Date(viewYear, viewMonth, day)
+          const isSelected = isSameDay(d, selectedDay)
+          const isToday = isSameDay(d, today)
+          return (
+            <button key={i} onClick={() => { onSelect(d); onClose() }}
+              className={`h-8 w-full rounded-lg text-xs font-medium transition-colors
+                ${isSelected ? 'bg-electric-blue text-white font-bold' : isToday ? 'bg-electric-blue/10 text-electric-blue font-bold' : 'hover:bg-mist text-ink-navy'}`}>
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function CalendarioPage() {
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([])
   const [pazienti, setPazienti] = useState<Paziente[]>([])
   const [loading, setLoading] = useState(true)
+  const [vista, setVista] = useState<'settimana' | 'mese'>('settimana')
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
+  const [currentMonth, setCurrentMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d })
+  const [calDropOpen, setCalDropOpen] = useState(false)
   const [selected, setSelected] = useState<Appuntamento | null>(null)
   const [seduteStorico, setSeduteStorico] = useState<Seduta[]>([])
   const [showNuovo, setShowNuovo] = useState<Date | null>(null)
@@ -209,32 +269,152 @@ export default function CalendarioPage() {
     ? `${weekStart.getDate()} – ${weekEnd.getDate()} ${MESI[weekStart.getMonth()]} ${weekStart.getFullYear()}`
     : `${weekStart.getDate()} ${MESI[weekStart.getMonth()]} – ${weekEnd.getDate()} ${MESI[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`
 
+  const today = new Date()
+  const monthLabel = `${MESI[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`
+
+  // Appuntamenti mostrati in calendario: escluse le prenotazioni cancellate e
+  // quelle ancora "in attesa" (che vivono nella pagina Richieste finché non le accetti).
+  function appsPerGiorno(day: Date) {
+    return appuntamenti
+      .filter(a => isSameDay(new Date(a.data), day) && a.status !== 'in_attesa')
+      .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+  }
+
+  // Celle del mese: caselle vuote iniziali per allineare al lunedì, poi i giorni.
+  const monthCells = (() => {
+    const anno = currentMonth.getFullYear(), mese = currentMonth.getMonth()
+    const primoGiorno = new Date(anno, mese, 1)
+    const ultimoGiorno = new Date(anno, mese + 1, 0)
+    const startOffset = (primoGiorno.getDay() + 6) % 7
+    const cells: (Date | null)[] = []
+    for (let i = 0; i < startOffset; i++) cells.push(null)
+    for (let d = 1; d <= ultimoGiorno.getDate(); d++) cells.push(new Date(anno, mese, d))
+    while (cells.length % 7 !== 0) cells.push(null)
+    return cells
+  })()
+
+  function vaiIndietro() {
+    if (vista === 'mese') setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))
+    else setWeekStart(addDays(weekStart, -7))
+  }
+  function vaiAvanti() {
+    if (vista === 'mese') setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))
+    else setWeekStart(addDays(weekStart, 7))
+  }
+  function vaiOggi() {
+    setWeekStart(startOfWeek(new Date()))
+    setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1))
+  }
+  function scegliData(d: Date) {
+    setWeekStart(startOfWeek(d))
+    setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1))
+  }
+  function apriGiorno(d: Date) {
+    setWeekStart(startOfWeek(d))
+    setVista('settimana')
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-ink-navy">Calendario</h1>
-          <p className="text-ink-navy/50 mt-0.5 capitalize">{label}</p>
+          <div className="relative inline-block">
+            <button onClick={() => setCalDropOpen(v => !v)}
+              className="text-ink-navy/50 mt-0.5 capitalize inline-flex items-center gap-1.5 hover:text-ink-navy transition-colors">
+              {vista === 'mese' ? monthLabel : label}
+              <span className="text-[10px] text-ink-navy/30">▾</span>
+            </button>
+            {calDropOpen && (
+              <MiniCalDropdown
+                selectedDay={vista === 'mese' ? currentMonth : weekStart}
+                onSelect={scegliData}
+                onClose={() => setCalDropOpen(false)}
+              />
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setWeekStart(addDays(weekStart, -7))}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex gap-1 bg-mist rounded-xl p-1">
+            {(['settimana', 'mese'] as const).map(v => (
+              <button key={v} onClick={() => setVista(v)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${vista === v ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                {v}
+              </button>
+            ))}
+          </div>
+          <button onClick={vaiIndietro}
             className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 text-ink-navy/50 hover:bg-mist">‹</button>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))}
+          <button onClick={vaiOggi}
             className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist">Oggi</button>
-          <button onClick={() => setWeekStart(addDays(weekStart, 7))}
+          <button onClick={vaiAvanti}
             className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 text-ink-navy/50 hover:bg-mist">›</button>
         </div>
       </div>
 
       {loading ? (
         <div className="text-center text-ink-navy/35 py-12">Caricamento...</div>
+      ) : vista === 'mese' ? (
+        <div>
+          <div className="grid grid-cols-7 mb-2">
+            {GIORNI_BREVI.map(g => (
+              <div key={g} className="text-center text-xs font-semibold text-ink-navy/35 py-1">{g}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1.5">
+            {monthCells.map((day, i) => {
+              if (!day) return <div key={i} />
+              const dayApps = appsPerGiorno(day)
+              const isT = isSameDay(day, today)
+              const isPast = day < today && !isT
+              const confermatiN = dayApps.filter(a => a.status === 'confermato').length
+              const completatiN = dayApps.filter(a => a.status === 'completato').length
+              const noShowN = dayApps.filter(a => a.status === 'no_show').length
+              const cancellatiN = dayApps.filter(a => a.status === 'cancellato').length
+              return (
+                <button key={i} onClick={() => apriGiorno(day)}
+                  className={`min-h-24 rounded-xl text-left transition-colors border flex flex-col overflow-hidden ${
+                    isT ? 'bg-electric-blue border-electric-blue' :
+                    isPast ? 'bg-mist/60 border-ink-navy/8' :
+                    dayApps.length > 0 ? 'bg-white border-electric-blue/20 hover:border-electric-blue/50 hover:bg-electric-blue/5' :
+                    'bg-white border-ink-navy/8 hover:bg-mist'
+                  }`}>
+                  <div className={`px-2 pt-2 pb-1 flex items-baseline justify-between border-b ${isT ? 'border-white/20' : 'border-ink-navy/8'}`}>
+                    <p className={`text-sm font-bold leading-tight ${isT ? 'text-white' : isPast ? 'text-ink-navy/30' : 'text-ink-navy'}`}>{day.getDate()}</p>
+                    {dayApps.length > 0 && (
+                      <span className={`text-[10px] font-bold ${isT ? 'text-white/70' : 'text-ink-navy/40'}`}>{dayApps.length}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-0.5 p-1.5 flex-1">
+                    {dayApps.length === 0
+                      ? <p className={`text-[10px] text-center mt-1 ${isT ? 'text-white/30' : 'text-ink-navy/15'}`}>—</p>
+                      : ([
+                          ['confermato', 'Confermati', confermatiN] as const,
+                          ['completato', 'Completati', completatiN] as const,
+                          ['no_show', 'No-show', noShowN] as const,
+                          ['cancellato', 'Cancellati', cancellatiN] as const,
+                        ]).filter(([, , n]) => n > 0).map(([st, etichetta, n]) => {
+                          const sc = STATUS_STYLE[st] ?? STATUS_STYLE.confermato
+                          return (
+                            <span key={st}
+                              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${isT ? 'bg-white/20 text-white' : `${sc.bg} ${sc.text}`}`}>
+                              <span className="truncate">{etichetta}</span>
+                              <span className="ml-auto font-bold">{n}</span>
+                            </span>
+                          )
+                        })
+                    }
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-7 gap-3">
           {days.map((day, i) => {
             const isToday = isSameDay(day, new Date())
-            const dayApps = appuntamenti
-              .filter(a => isSameDay(new Date(a.data), day) && a.status !== 'cancellato')
-              .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+            const dayApps = appsPerGiorno(day)
             return (
               <div key={i} className="min-h-[280px]">
                 <div className={`text-center pb-2 mb-2 border-b-2 ${isToday ? 'border-electric-blue' : 'border-ink-navy/10'}`}>
@@ -321,7 +501,7 @@ export default function CalendarioPage() {
                 <div>
                   <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Stato</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(STATUS_STYLE).filter(([k]) => k !== 'cancellato').map(([key, s]) => (
+                    {Object.entries(STATUS_STYLE).map(([key, s]) => (
                       <button key={key} onClick={() => handleStatusChange(selected.id, key)}
                         className={`text-sm py-2 rounded-lg font-medium transition-colors ${selected.status === key ? `${s.bg} ${s.text}` : 'bg-mist text-ink-navy/60 hover:bg-ink-navy/10'}`}>
                         {s.label}
@@ -331,14 +511,10 @@ export default function CalendarioPage() {
                 </div>
               </div>
 
-              <div className="px-5 py-3 border-t border-ink-navy/8 flex gap-2">
-                <button onClick={() => handleStatusChange(selected.id, 'cancellato')}
-                  className="flex-1 text-sm text-ink-navy/60 font-medium py-2 border border-ink-navy/10 rounded-lg hover:bg-mist">
-                  Annulla appuntamento
-                </button>
+              <div className="px-5 py-3 border-t border-ink-navy/8">
                 <button onClick={() => handleDelete(selected.id)}
-                  className="w-10 flex items-center justify-center text-ink-navy/35 py-2 border border-ink-navy/10 rounded-lg hover:bg-red-50 hover:text-red-500">
-                  <span className="w-3.5 h-3.5"><IconTrash /></span>
+                  className="inline-flex items-center gap-2 text-sm text-ink-navy/50 font-medium py-2 px-3 border border-ink-navy/10 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors">
+                  <span className="w-3.5 h-3.5"><IconTrash /></span> Elimina definitivamente
                 </button>
               </div>
             </div>
