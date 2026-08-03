@@ -76,7 +76,7 @@ const inp = 'w-full border border-ink-navy/15 rounded-xl px-3 py-2.5 text-sm tex
 
 const NAV_ITEMS: { key: Sezione; label: string; emoji: string; desc: string; color: string }[] = [
   { key: 'timbra',       label: 'Timbra',        emoji: '📷', desc: 'Registra entrata o uscita', color: 'bg-electric-blue' },
-  { key: 'delivery',     label: 'Delivery',      emoji: '🛵', desc: 'Ordini da consegnare',      color: 'bg-electric-blue' },
+  { key: 'delivery',     label: 'Delivery',      emoji: '',   desc: 'Ordini da consegnare',      color: 'bg-electric-blue' },
   { key: 'turni',        label: 'I miei turni',  emoji: '📅', desc: 'Vedi i turni assegnati',    color: 'bg-violet-500' },
   { key: 'disponibilita',label: 'Disponibilità', emoji: '✅', desc: 'Indica quando sei libero',  color: 'bg-emerald-500' },
   { key: 'richieste',    label: 'Richieste',     emoji: '📋', desc: 'Ferie, permessi, assenze',  color: 'bg-amber-500' },
@@ -590,11 +590,11 @@ export default function DipendenteDashboard() {
                     <div key={o.id} className="bg-white rounded-2xl border border-electric-blue/25 shadow-sm overflow-hidden">
                       <div className="bg-electric-blue/5 px-4 py-3 border-b border-electric-blue/25 flex items-center justify-between gap-2">
                         <p className="font-bold text-electric-blue truncate">{ci.nome || 'Cliente'}</p>
-                        {ci.ora && <span className="text-base font-bold text-ink-navy shrink-0">🕐 {ci.ora}</span>}
+                        {ci.ora && <span className="text-base font-bold text-ink-navy shrink-0">{ci.ora}</span>}
                       </div>
                       <div className="px-4 py-3 space-y-1.5">
-                        {ci.indirizzo && <p className="text-base font-bold text-ink-navy">📍 {ci.indirizzo}</p>}
-                        {ci.telefono && <a href={`tel:${ci.telefono}`} className="inline-block text-sm text-electric-blue font-semibold">📞 {ci.telefono}</a>}
+                        {ci.indirizzo && <p className="text-base font-bold text-ink-navy">{ci.indirizzo}</p>}
+                        {ci.telefono && <a href={`tel:${ci.telefono}`} className="inline-block text-sm text-electric-blue font-semibold">{ci.telefono}</a>}
                         <div className="pt-1">
                           {o.righe.map(r => <p key={r.id} className="text-sm text-ink-navy/60">{r.quantita}× {r.nome}</p>)}
                         </div>

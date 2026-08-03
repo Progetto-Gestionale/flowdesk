@@ -175,8 +175,8 @@ function VistaConto({ ordiniAperti, ordiniChiusi, onChiudi, chiudendo, onRiapri,
 }
 
 // ── Vista LISTA ───────────────────────────────────────────────────────────────
-function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap }: {
-  tavoli: Tavolo[]; gruppi: Gruppo[]; publicId: string | null
+function VistaLista({ tavoli, sale, gruppi, publicId, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap }: {
+  tavoli: Tavolo[]; sale?: Sala[]; gruppi: Gruppo[]; publicId: string | null
   onModifica: (t: Tavolo) => void; onElimina: (id: string) => void
   selectMode: boolean; selectedIds: string[]; onToggleSelect: (id: string) => void
   onSciogliGruppo: (gruppoId: string) => void
@@ -208,78 +208,103 @@ function VistaLista({ tavoli, gruppi, publicId, onModifica, onElimina, selectMod
     count.forEach((n, id) => { if (n >= 2) appConPiuTavoli.add(id) })
   }
 
+  const renderRiga = (t: Tavolo) => {
+    const label = t.etichetta ?? `Tavolo ${t.numero}`
+    const url = publicId ? `${base}/food/ordina/${publicId}/${t.numero}` : ''
+    const gruppo = gruppoByTavoloId.get(t.id)
+    const isSelected = selectedIds.includes(t.id)
+    const appsDelTavolo = tavoloAppsMap?.get(t.id) ?? []
+    const appAssegnato = appsDelTavolo[0] ?? tavoloAppMap?.get(t.id)
+    const isFusoPerTurno = appAssegnato ? appConPiuTavoli.has(appAssegnato.id) : false
+    const labelFusoTurno = isFusoPerTurno && tavoloAppMap
+      ? `T${Array.from(tavoloAppMap.entries()).filter(([,a]) => a.id === appAssegnato!.id).map(([tid]) => tavoli.find(tv=>tv.id===tid)?.numero).filter(Boolean).sort((a,b)=>(a as number)-(b as number)).join('+')}`
+      : null
+    return (
+      <div key={t.id} className={isSelected ? 'bg-electric-blue/10' : appsDelTavolo.length > 0 ? 'bg-red-50/40' : ''}>
+        <div className="flex items-center gap-4 px-5 py-4">
+          {selectMode && (
+            <button onClick={() => onToggleSelect(t.id)}
+              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-electric-blue border-electric-blue text-white' : 'border-ink-navy/15'}`}>
+              {isSelected && <span className="w-3 h-3 text-white"><IconCheck /></span>}
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-semibold text-ink-navy">{label}</p>
+              {isFusoPerTurno && labelFusoTurno && <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">{labelFusoTurno} (turno)</span>}
+              {gruppo && !isFusoPerTurno && <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">T{gruppo.label}</span>}
+              {appsDelTavolo.map((a, i) => (
+                <span key={a.id} className="flex items-center gap-1">
+                  <span className="text-xs bg-red-100 text-red-700 font-semibold px-2 py-0.5 rounded-full">
+                    {a.clienteNome?.split(' ')[0] ?? 'Occupato'}{a.coperti ? ` · ${a.coperti}` : ''}
+                  </span>
+                  {a.carryIn && <span className="text-xs bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full">← prec.</span>}
+                  {a.carryOut && <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-1.5 py-0.5 rounded-full">→ cont.</span>}
+                  {i < appsDelTavolo.length - 1 && <span className="text-xs text-ink-navy/30 font-bold">→</span>}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-ink-navy/35">{t.posti} posti{t.note ? ` · ${t.note}` : ''}</p>
+          </div>
+          <div className="flex gap-2 items-center flex-wrap">
+            {gruppo && !isFusoPerTurno && (
+              <button onClick={() => onSciogliGruppo(gruppo.id)} className="text-xs px-3 py-1.5 rounded-lg border border-orange-200 text-orange-600 hover:bg-orange-50">Sciogli</button>
+            )}
+            {publicId && (
+              <button onClick={() => setQrAperto(qrAperto === t.id ? null : t.id)} className="text-xs px-3 py-1.5 rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist">QR</button>
+            )}
+            <button onClick={() => onModifica(t)} className="text-xs px-3 py-1.5 rounded-lg border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/10">Modifica</button>
+            <button onClick={() => onElimina(t.id)} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Elimina</button>
+          </div>
+        </div>
+        {qrAperto === t.id && publicId && (
+          <div className="px-5 pb-4 flex items-start gap-6 bg-mist border-t border-ink-navy/8">
+            <QRCanvas url={url} id={`qr-${t.id}`} />
+            <div className="space-y-2 pt-2">
+              <p className="text-xs text-ink-navy/50 break-all max-w-xs">{url}</p>
+              <button onClick={() => scarica(t.id, t.numero)} className="block text-xs px-3 py-1.5 rounded-lg bg-electric-blue text-white font-medium hover:bg-electric-blue/90">Scarica PNG</button>
+              <button onClick={() => stampa(t.id, label)} className="block text-xs px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/70 hover:bg-mist">Stampa</button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderCard = (items: Tavolo[]) => (
+    <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
+      <div className="divide-y divide-gray-100">{items.map(renderRiga)}</div>
+    </div>
+  )
+
   if (!tavoli.length) return (
     <div className="bg-white rounded-2xl border border-ink-navy/10 p-16 text-center shadow-sm">
       <div className="w-12 h-12 rounded-xl bg-electric-blue/10 text-electric-blue flex items-center justify-center p-3 mx-auto mb-4"><IconTable /></div>
       <p className="text-ink-navy/50 text-sm">Nessun tavolo ancora</p>
     </div>
   )
+
+  // Raggruppa i tavoli per sala quando ce n'è più di una. I tavoli senza sala (o di sale
+  // rimosse) ricadono nella prima. Con una sola sala (o nessuna) resta la lista piatta.
+  const saleOrdinate = [...(sale ?? [])].sort((a, b) => a.ordine - b.ordine)
+  if (saleOrdinate.length <= 1) return renderCard(tavoli)
+
+  const primaId = saleOrdinate[0]?.id
+  const gruppiSala = saleOrdinate
+    .map(s => ({
+      sala: s,
+      tavoliSala: tavoli.filter(t => t.salaId === s.id || (s.id === primaId && !saleOrdinate.some(x => x.id === t.salaId))),
+    }))
+    .filter(g => g.tavoliSala.length > 0)
+
   return (
-    <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
-      <div className="divide-y divide-gray-100">
-        {tavoli.map(t => {
-          const label = t.etichetta ?? `Tavolo ${t.numero}`
-          const url = publicId ? `${base}/food/ordina/${publicId}/${t.numero}` : ''
-          const gruppo = gruppoByTavoloId.get(t.id)
-          const isSelected = selectedIds.includes(t.id)
-          const appsDelTavolo = tavoloAppsMap?.get(t.id) ?? []
-          const appAssegnato = appsDelTavolo[0] ?? tavoloAppMap?.get(t.id)
-          const isFusoPerTurno = appAssegnato ? appConPiuTavoli.has(appAssegnato.id) : false
-          const labelFusoTurno = isFusoPerTurno && tavoloAppMap
-            ? `T${Array.from(tavoloAppMap.entries()).filter(([,a]) => a.id === appAssegnato!.id).map(([tid]) => tavoli.find(tv=>tv.id===tid)?.numero).filter(Boolean).sort((a,b)=>(a as number)-(b as number)).join('+')}`
-            : null
-          return (
-            <div key={t.id} className={isSelected ? 'bg-electric-blue/10' : appsDelTavolo.length > 0 ? 'bg-red-50/40' : ''}>
-              <div className="flex items-center gap-4 px-5 py-4">
-                {selectMode && (
-                  <button onClick={() => onToggleSelect(t.id)}
-                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-electric-blue border-electric-blue text-white' : 'border-ink-navy/15'}`}>
-                    {isSelected && <span className="w-3 h-3 text-white"><IconCheck /></span>}
-                  </button>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-ink-navy">{label}</p>
-                    {isFusoPerTurno && labelFusoTurno && <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">{labelFusoTurno} (turno)</span>}
-                    {gruppo && !isFusoPerTurno && <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">T{gruppo.label}</span>}
-                    {appsDelTavolo.map((a, i) => (
-                      <span key={a.id} className="flex items-center gap-1">
-                        <span className="text-xs bg-red-100 text-red-700 font-semibold px-2 py-0.5 rounded-full">
-                          {a.clienteNome?.split(' ')[0] ?? 'Occupato'}{a.coperti ? ` · ${a.coperti}` : ''}
-                        </span>
-                        {a.carryIn && <span className="text-xs bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full">← prec.</span>}
-                        {a.carryOut && <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-1.5 py-0.5 rounded-full">→ cont.</span>}
-                        {i < appsDelTavolo.length - 1 && <span className="text-xs text-ink-navy/30 font-bold">→</span>}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-xs text-ink-navy/35">{t.posti} posti{t.note ? ` · ${t.note}` : ''}</p>
-                </div>
-                <div className="flex gap-2 items-center flex-wrap">
-                  {gruppo && !isFusoPerTurno && (
-                    <button onClick={() => onSciogliGruppo(gruppo.id)} className="text-xs px-3 py-1.5 rounded-lg border border-orange-200 text-orange-600 hover:bg-orange-50">Sciogli</button>
-                  )}
-                  {publicId && (
-                    <button onClick={() => setQrAperto(qrAperto === t.id ? null : t.id)} className="text-xs px-3 py-1.5 rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist">QR</button>
-                  )}
-                  <button onClick={() => onModifica(t)} className="text-xs px-3 py-1.5 rounded-lg border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/10">Modifica</button>
-                  <button onClick={() => onElimina(t.id)} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50">Elimina</button>
-                </div>
-              </div>
-              {qrAperto === t.id && publicId && (
-                <div className="px-5 pb-4 flex items-start gap-6 bg-mist border-t border-ink-navy/8">
-                  <QRCanvas url={url} id={`qr-${t.id}`} />
-                  <div className="space-y-2 pt-2">
-                    <p className="text-xs text-ink-navy/50 break-all max-w-xs">{url}</p>
-                    <button onClick={() => scarica(t.id, t.numero)} className="block text-xs px-3 py-1.5 rounded-lg bg-electric-blue text-white font-medium hover:bg-electric-blue/90">Scarica PNG</button>
-                    <button onClick={() => stampa(t.id, label)} className="block text-xs px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/70 hover:bg-mist">Stampa</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
+    <div className="space-y-5">
+      {gruppiSala.map(g => (
+        <div key={g.sala.id}>
+          <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider mb-2 px-1">{g.sala.nome}</p>
+          {renderCard(g.tavoliSala)}
+        </div>
+      ))}
     </div>
   )
 }
@@ -368,8 +393,6 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     if (v) { setZoomSync(v.zoom); setPanSync(v.pan) }
     else fitTutti()
   }
-
-  function handleReset() { setZoomSync(1); setPanSync({ x: 0, y: 0 }) }
 
   // Adatta la vista in modo che i tavoli della SALA ATTIVA entrino nella mappa, centrati.
   // Usiamo solo i tavoli passati via prop (già filtrati per sala), non tutto mdRef,
@@ -583,7 +606,6 @@ const VistaMappa = forwardRef<VistaMappHandle, {
           <span className="text-xs font-semibold text-ink-navy/60 w-10 text-center">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoomSync(Math.min(3, +(zoomRef.current + 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">+</button>
           <button onClick={vistaPredefinita} title="Vai alla vista predefinita di questa sala" className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1 whitespace-nowrap">⤢ Adatta</button>
-          <button onClick={handleReset} className="text-xs text-electric-blue hover:text-ink-navy font-medium px-1">Reset</button>
         </div>
         <div style={{ position: 'absolute', top: 0, left: 0, transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', width: CANVAS_W, height: CANVAS_H, backgroundColor: '#ffffff', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}>
 
@@ -762,6 +784,16 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   const turnoSelRef = useRef(turnoSel)
   useEffect(() => { giornoSelRef.current = giornoSel }, [giornoSel])
   useEffect(() => { turnoSelRef.current = turnoSel }, [turnoSel])
+
+  // Mappa live: all'ingresso porta la vista direttamente sulla mappa (non sul margine in alto),
+  // così il cameriere vede subito la piantina completa senza dover scorrere. Solo una volta al mount.
+  const mapScrollRef = useRef<HTMLDivElement>(null)
+  const didScrollToMap = useRef(false)
+  useEffect(() => {
+    if (gestione || loading || didScrollToMap.current) return
+    didScrollToMap.current = true
+    requestAnimationFrame(() => mapScrollRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' }))
+  }, [gestione, loading])
 
   const salaAttiva = sale.find(s => s.id === salaAttivaId) ?? null
   // Con più sale: filtra per sala attiva; include anche salaId=null nella prima sala (retrocompatibilità)
@@ -970,15 +1002,19 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
           <p className="text-ink-navy/50 text-sm mt-0.5">{gestione ? 'Disegna la piantina, gestisci QR e unione tavoli' : 'Situazione live delle sale'}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {/* Unisci / Separa: disponibili sia in visualizzazione che in gestione */}
-          <button onClick={avviaUnisci}
-            className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${selectMode ? 'bg-electric-blue/15 border-electric-blue/40 text-electric-blue' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
-            {selectMode ? '✕ Esci' : 'Unisci tavoli'}
-          </button>
-          <button onClick={avviaSepara}
-            className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${separaMode ? 'bg-orange-100 border-orange-300 text-orange-600' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
-            {separaMode ? '✕ Esci' : 'Separa tavoli'}
-          </button>
+          {/* Unisci / Separa: solo nella mappa live (in gestione si disegna soltanto la piantina) */}
+          {!gestione && (
+            <>
+              <button onClick={avviaUnisci}
+                className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${selectMode ? 'bg-electric-blue/15 border-electric-blue/40 text-electric-blue' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
+                {selectMode ? '✕ Esci' : 'Unisci tavoli'}
+              </button>
+              <button onClick={avviaSepara}
+                className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${separaMode ? 'bg-orange-100 border-orange-300 text-orange-600' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
+                {separaMode ? '✕ Esci' : 'Separa tavoli'}
+              </button>
+            </>
+          )}
           {gestione ? (
             <>
               <Link href="/food/dashboard/tavoli"
@@ -1003,7 +1039,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
       {selBanner}
 
       {/* Tab Mappa/Lista (solo gestione) + switch sale (entrambe le pagine) */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div ref={mapScrollRef} className="flex items-center gap-2 flex-wrap scroll-mt-4">
         {gestione && [{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }].map(t => (
           <button key={t.k} onClick={() => setVista(t.k as 'mappa' | 'lista')}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
@@ -1063,7 +1099,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
           </div>
           {gestione && (
             <div className={vista !== 'lista' ? 'hidden' : ''}>
-              <VistaLista tavoli={tavoli} gruppi={gruppi} publicId={publicId}
+              <VistaLista tavoli={tavoli} sale={sale} gruppi={gruppi} publicId={publicId}
                 onModifica={apriModifica} onElimina={eliminaTavolo}
                 selectMode={selectMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
                 onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap} />

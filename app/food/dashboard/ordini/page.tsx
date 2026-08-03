@@ -259,7 +259,7 @@ export default function OrdiniPage() {
             {!isDone && (
               <button onClick={() => avanzaOrdine(o)}
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
-                {o.tipo === 'delivery' ? 'Segna pronto' : 'Pronto'}
+                Pronto
               </button>
             )}
             {isDone && (

@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
 
+// Una prenotazione "tavolo" del calendario (stessa classificazione di inferTipo lato calendario):
+// esclude asporto/delivery, così i coperti su prenotazione non vengono gonfiati dagli ordini.
+function isPrenotazioneTavolo(servizio?: string | null): boolean {
+  const s = (servizio ?? '').toLowerCase()
+  if (/delivery|consegna|domicilio/.test(s)) return false
+  if (/asporto|take away|takeaway|ordine/.test(s)) return false
+  return /tavolo|prenotazione|cena|pranzo|sala|ristorazione/.test(s)
+}
+
 function bucketKey(date: Date, byMonth: boolean): string {
   const d = new Date(date)
   if (d.getUTCHours() < 4) d.setUTCDate(d.getUTCDate() - 1)
@@ -87,10 +96,12 @@ export async function GET(req: Request) {
     prisma.appuntamento.findMany({
       where: {
         userId: user.id,
-        status: { in: ['confermato', 'no_show'] },
+        // 'completato' incluso: le prenotazioni passate vengono spostate da 'confermato' a
+        // 'completato' dal cleanup notturno; senza includerlo i coperti su prenotazione risultavano ~0.
+        status: { in: ['confermato', 'completato', 'no_show'] },
         data: { gte: from, lt: toEffettivo },
       },
-      select: { status: true, coperti: true },
+      select: { status: true, coperti: true, servizio: true },
     }),
   ])
 
@@ -135,14 +146,16 @@ export async function GET(req: Request) {
   let copertiConfermati = 0
   for (const v of copertiConto.values()) copertiConfermati += v
 
-  // Coperti su prenotazione = somma coperti appuntamenti confermati
+  // Coperti su prenotazione = somma coperti delle PRENOTAZIONI TAVOLO del calendario
+  // effettivamente avvenute (confermate o completate); no-show e cancellate non occupano tavoli.
   const copertiPrenotazione = appuntamenti
-    .filter(a => a.status === 'confermato')
-    .reduce((s, a) => s + a.coperti, 0)
+    .filter(a => isPrenotazioneTavolo(a.servizio) && (a.status === 'confermato' || a.status === 'completato'))
+    .reduce((s, a) => s + (a.coperti ?? 0), 0)
 
+  // Walk-in = coperti totali dai conti − coperti su prenotazione tavolo.
   const copertiWalkIn = Math.max(0, copertiConfermati - copertiPrenotazione)
 
-  const noShow = appuntamenti.filter(a => a.status === 'no_show').length
+  const noShow = appuntamenti.filter(a => a.status === 'no_show' && isPrenotazioneTavolo(a.servizio)).length
 
   const spesaMediaPersona = copertiConfermati > 0 ? totaleIncasso / copertiConfermati : 0
 
