@@ -26,16 +26,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       })
     }
 
-    // Fix 2: email di conferma con i dati aggiornati dalla proposta
-    if (preventivo.clienteEmail) {
-      const items = JSON.parse(preventivo.items ?? '[]') as Array<{ descrizione?: string; coperti?: number; allergie?: string; occasione?: string }>
-      const note = preventivo.note ?? ''
-      const dataMatch = note.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
-      const oraMatch = note.match(/ORA_ISO:(\d{2}:\d{2})/)
-      const copertiNote = note.match(/Coperti:\s*(\d+)/)
-      const allergieNote = note.match(/Allergie:\s*([^.]+)/)
-      const occasioneNote = note.match(/Occasione:\s*([^.]+)/)
+    // Dati della proposta ricavati dalle note/righe del preventivo (usati sia per il calendario che per l'email)
+    const items = JSON.parse(preventivo.items ?? '[]') as Array<{ descrizione?: string; coperti?: number; allergie?: string; occasione?: string; durata?: number }>
+    const note = preventivo.note ?? ''
+    const dataMatch = note.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
+    const oraMatch = note.match(/ORA_ISO:(\d{2}:\d{2})/)
+    const copertiNote = note.match(/Coperti:\s*(\d+)/)
+    const allergieNote = note.match(/Allergie:\s*([^.]+)/)
+    const occasioneNote = note.match(/Occasione:\s*([^.]+)/)
 
+    // Inserisci la prenotazione in calendario, come quando il titolare accetta dal gestionale.
+    // Solo se ha una data e se non c'è già un appuntamento per questa richiesta (evita duplicati).
+    if (dataMatch?.[1]) {
+      const numStr = `#${String(preventivo.numero).padStart(3, '0')}`
+      const giaInCalendario = await prisma.appuntamento.findFirst({
+        where: { userId: user.id, note: { contains: `Da richiesta ${numStr}` } },
+        select: { id: true },
+      })
+      if (!giaInCalendario) {
+        const isTavolo = preventivo.tipo === 'tavolo'
+        const ora = oraMatch?.[1] ?? (isTavolo ? '20:00' : '12:00')
+        await prisma.appuntamento.create({
+          data: {
+            userId: user.id,
+            clienteNome: preventivo.clienteName,
+            clienteEmail: preventivo.clienteEmail,
+            servizio: isTavolo ? 'Prenotazione tavolo' : (items[0]?.descrizione ?? preventivo.tipo),
+            data: new Date(`${dataMatch[1]}T${ora}:00`),
+            durata: items[0]?.durata ?? (isTavolo ? 90 : 15),
+            coperti: items[0]?.coperti ?? (copertiNote ? parseInt(copertiNote[1]) : 1),
+            allergie: items[0]?.allergie ?? allergieNote?.[1]?.trim() ?? null,
+            occasione: items[0]?.occasione ?? occasioneNote?.[1]?.trim() ?? null,
+            note: `Da richiesta ${numStr}`,
+          },
+        })
+      }
+    }
+
+    // Email di conferma con i dati aggiornati dalla proposta
+    if (preventivo.clienteEmail) {
       await sendEmailConferma({
         clienteEmail: preventivo.clienteEmail,
         clienteNome: preventivo.clienteName,
