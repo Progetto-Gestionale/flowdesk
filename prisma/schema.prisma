@@ -202,6 +202,8 @@ model TipoSeduta {
   prezzo       Float          @default(0)
   durata       Int            @default(45) // minuti
   attivo       Boolean        @default(true)
+  giorni       String?        // JSON array di codici giorno (es. ["lun","mer"]); vuoto/null = tutti i giorni di apertura
+  orari        String?        // fasce orarie consentite (es. "09:00-13:00, 15:00-18:00"); vuoto/null = tutti gli orari di apertura
   ordine       Int            @default(0)
   createdAt    DateTime       @default(now())
   user         User           @relation(fields: [userId], references: [id])

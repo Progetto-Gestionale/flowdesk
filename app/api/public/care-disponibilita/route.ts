@@ -20,6 +20,16 @@ function parseRanges(raw: string | undefined | null): [number, number][] {
     return [toMin(ini), toMin(fine)] as [number, number]
   }).filter(([ini, fine]) => !isNaN(ini) && !isNaN(fine) && fine > ini)
 }
+// Interseca due elenchi di fasce [inizio, fine] in minuti (usato per limitare
+// un tipo di seduta agli orari consentiti, sempre entro l'apertura).
+function intersectRanges(a: [number, number][], b: [number, number][]): [number, number][] {
+  const out: [number, number][] = []
+  for (const [as, ae] of a) for (const [bs, be] of b) {
+    const s = Math.max(as, bs), e = Math.min(ae, be)
+    if (e > s) out.push([s, e])
+  }
+  return out
+}
 
 // GET /api/public/care-disponibilita?publicId=xxx&data=YYYY-MM-DD&durata=45
 export async function GET(req: Request) {
@@ -49,6 +59,21 @@ export async function GET(req: Request) {
     const orari = (() => { try { return JSON.parse(user.orariApertura ?? '{}') } catch { return {} } })() as Record<string, string>
     const giorno = GIORNI[new Date(`${data}T12:00:00Z`).getUTCDay()]
     ranges = parseRanges(orari[giorno])
+  }
+
+  // Restrizione per tipo di seduta: giorni/orari specifici, sempre dentro l'apertura.
+  const tipoSedutaId = searchParams.get('tipoSedutaId')
+  if (tipoSedutaId) {
+    const tipo = await prisma.tipoSeduta.findFirst({ where: { id: tipoSedutaId, userId: user.id } })
+    if (tipo) {
+      const giorniAmmessi: string[] = (() => { try { return tipo.giorni ? JSON.parse(tipo.giorni) : [] } catch { return [] } })()
+      const giornoData = GIORNI[new Date(`${data}T12:00:00Z`).getUTCDay()]
+      if (giorniAmmessi.length > 0 && !giorniAmmessi.includes(giornoData)) {
+        return NextResponse.json({ slots: [] })
+      }
+      const orariConsentiti = parseRanges(tipo.orari)
+      if (orariConsentiti.length > 0) ranges = intersectRanges(ranges, orariConsentiti)
+    }
   }
 
   // Appuntamenti già presenti quel giorno

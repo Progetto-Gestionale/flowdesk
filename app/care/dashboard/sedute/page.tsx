@@ -10,12 +10,19 @@ interface TipoSeduta {
   prezzo: number
   durata: number
   attivo: boolean
+  giorni?: string | null
+  orari?: string | null
 }
+
+const GIORNI_SETT: { code: string; label: string }[] = [
+  { code: 'lun', label: 'Lun' }, { code: 'mar', label: 'Mar' }, { code: 'mer', label: 'Mer' },
+  { code: 'gio', label: 'Gio' }, { code: 'ven', label: 'Ven' }, { code: 'sab', label: 'Sab' }, { code: 'dom', label: 'Dom' },
+]
 
 function Modal({ initial, onClose, onSave }: {
   initial?: TipoSeduta | null
   onClose: () => void
-  onSave: (data: { nome: string; descrizione: string; prezzo: number; durata: number }) => void
+  onSave: (data: { nome: string; descrizione: string; prezzo: number; durata: number; giorni: string | null; orari: string | null }) => void
 }) {
   const [form, setForm] = useState({
     nome: initial?.nome ?? '',
@@ -23,6 +30,14 @@ function Modal({ initial, onClose, onSave }: {
     prezzo: initial?.prezzo?.toString() ?? '',
     durata: initial?.durata?.toString() ?? '45',
   })
+  const [giorni, setGiorni] = useState<string[]>(() => {
+    try { return initial?.giorni ? JSON.parse(initial.giorni) : [] } catch { return [] }
+  })
+  const [orari, setOrari] = useState(initial?.orari ?? '')
+
+  function toggleGiorno(code: string) {
+    setGiorni(prev => prev.includes(code) ? prev.filter(g => g !== code) : [...prev, code])
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -55,11 +70,42 @@ function Modal({ initial, onClose, onSave }: {
                 className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
             </div>
           </div>
+
+          {/* Disponibilità specifica (opzionale) */}
+          <div className="border-t border-ink-navy/8 pt-4 space-y-3">
+            <div>
+              <p className="text-sm font-medium text-ink-navy/70">Disponibilità specifica <span className="text-ink-navy/35 font-normal">(opzionale)</span></p>
+              <p className="text-xs text-ink-navy/40 mt-0.5">Limita questa seduta a certi giorni/orari. Sempre entro gli orari di apertura. Lascia vuoto per renderla disponibile quando sei aperto.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-navy/50 mb-1.5">Giorni</label>
+              <div className="flex flex-wrap gap-1.5">
+                {GIORNI_SETT.map(g => (
+                  <button key={g.code} type="button" onClick={() => toggleGiorno(g.code)}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${giorni.includes(g.code) ? 'bg-electric-blue text-white' : 'bg-mist text-ink-navy/50 hover:bg-ink-navy/10'}`}>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+              {giorni.length === 0 && <p className="text-[11px] text-ink-navy/35 mt-1">Tutti i giorni di apertura</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-navy/50 mb-1">Fasce orarie</label>
+              <input value={orari} onChange={e => setOrari(e.target.value)}
+                placeholder="Es. 09:00-13:00, 15:00-18:00"
+                className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+              <p className="text-[11px] text-ink-navy/35 mt-1">Vuoto = tutti gli orari di apertura. Separa più fasce con una virgola.</p>
+            </div>
+          </div>
         </div>
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
           <button
-            onClick={() => onSave({ nome: form.nome, descrizione: form.descrizione, prezzo: parseFloat(form.prezzo) || 0, durata: parseInt(form.durata) || 45 })}
+            onClick={() => onSave({
+              nome: form.nome, descrizione: form.descrizione, prezzo: parseFloat(form.prezzo) || 0, durata: parseInt(form.durata) || 45,
+              giorni: giorni.length > 0 ? JSON.stringify(giorni) : null,
+              orari: orari.trim() || null,
+            })}
             disabled={!form.nome.trim()}
             className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">
             Salva
@@ -84,7 +130,7 @@ export default function SedutePage() {
 
   useEffect(() => { fetchTipi() }, [])
 
-  async function handleSave(form: { nome: string; descrizione: string; prezzo: number; durata: number }) {
+  async function handleSave(form: { nome: string; descrizione: string; prezzo: number; durata: number; giorni: string | null; orari: string | null }) {
     if (modal && modal !== 'new') {
       await fetch(`/api/tipi-seduta/${modal.id}`, {
         method: 'PATCH', credentials: 'include',
@@ -153,6 +199,17 @@ export default function SedutePage() {
                   <span className="flex items-center gap-1"><span className="w-3 h-3"><IconCalendar /></span>{t.durata} min</span>
                   {t.prezzo > 0 && <span className="font-semibold text-electric-blue">€{t.prezzo.toFixed(2)}</span>}
                 </div>
+                {(() => {
+                  const gg: string[] = (() => { try { return t.giorni ? JSON.parse(t.giorni) : [] } catch { return [] } })()
+                  if (gg.length === 0 && !t.orari) return null
+                  const gLabel = gg.length > 0 ? gg.map(c => GIORNI_SETT.find(x => x.code === c)?.label ?? c).join(', ') : null
+                  return (
+                    <p className="text-xs text-electric-blue/80 mt-1 flex items-center gap-1">
+                      <span className="w-3 h-3"><IconClock /></span>
+                      Solo {[gLabel, t.orari].filter(Boolean).join(' · ')}
+                    </p>
+                  )
+                })()}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button onClick={() => handleToggleAttivo(t)}

@@ -1,59 +1,170 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import OrarioSelect from '@/app/components/OrarioSelect'
-import { IconClipboard, IconCheck } from '@/app/components/icons'
+import { IconArrowRight } from '@/app/components/icons'
+
+const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+const GIORNI_INIZIALE = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
-  bozza: { bg: 'bg-mist', text: 'text-ink-navy/60', label: 'Nuova' },
-  inviato: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'In attesa' },
-  accettato: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Accettata' },
-  rifiutato: { bg: 'bg-red-100', text: 'text-red-600', label: 'Rifiutata' },
+  confermato: { bg: 'bg-electric-blue/15', text: 'text-electric-blue', label: 'Confermato' },
+  completato: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Completato' },
+  no_show: { bg: 'bg-orange-100', text: 'text-orange-600', label: 'No-show' },
+  cancellato: { bg: 'bg-red-100', text: 'text-red-500', label: 'Cancellato' },
 }
 
-interface Richiesta {
+interface Appuntamento {
   id: string
-  numero: number
-  clienteName: string
+  clienteNome?: string
   clienteEmail?: string
-  note?: string
+  servizio?: string
+  data: string
+  durata: number
   status: string
-  createdAt: string
+  note?: string
+  pazienteId?: string | null
 }
 
-function NuovaRichiestaModal({ onClose, onSave }: {
-  onClose: () => void
-  onSave: (data: { clienteName: string; clienteEmail: string; note: string }) => void
+interface TipoSeduta { id: string; nome: string; durata: number }
+
+// ── Helpers data ────────────────────────────────────────────────────────────
+function toDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function shiftDay(k: string, n: number) {
+  const d = new Date(`${k}T12:00:00`); d.setDate(d.getDate() + n); return toDateStr(d)
+}
+function fmtGiornoLabel(k: string) {
+  const oggi = toDateStr(new Date())
+  if (k === oggi) return 'Oggi'
+  if (k === shiftDay(oggi, -1)) return 'Ieri'
+  if (k === shiftDay(oggi, 1)) return 'Domani'
+  return new Date(`${k}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+function fmtGiornoLungo(iso: string) {
+  return new Date(iso).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+function fmtOra(iso: string) {
+  return new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+}
+
+// ── Mini calendario a comparsa ──────────────────────────────────────────────
+function MiniCal({ value, onChange, onClose }: {
+  value: string; onChange: (d: string) => void; onClose: () => void
 }) {
-  const [form, setForm] = useState({ clienteName: '', clienteEmail: '', note: '' })
+  const [viewYear, setViewYear] = useState(() => parseInt(value.slice(0, 4)))
+  const [viewMonth, setViewMonth] = useState(() => parseInt(value.slice(5, 7)) - 1)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [onClose])
+
+  const firstDay = new Date(viewYear, viewMonth, 1)
+  const lastDay = new Date(viewYear, viewMonth + 1, 0)
+  let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6
+  const cells: (number | null)[] = Array(startDow).fill(null)
+  for (let d = 1; d <= lastDay.getDate(); d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null)
+  function prevM() { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) } else setViewMonth(m => m - 1) }
+  function nextM() { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) } else setViewMonth(m => m + 1) }
+  const oggi = toDateStr(new Date())
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
-        <h2 className="text-lg font-bold text-ink-navy">Nuova richiesta</h2>
+    <div ref={ref} className="absolute z-50 top-full mt-1 left-1/2 -translate-x-1/2 bg-white rounded-2xl border border-ink-navy/10 shadow-xl p-3 w-64">
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={prevM} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-sm">‹</button>
+        <span className="text-xs font-bold text-ink-navy">{MESI[viewMonth]} {viewYear}</span>
+        <button onClick={nextM} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-sm">›</button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">{GIORNI_INIZIALE.map((g, i) => <span key={i} className="text-center text-[10px] font-semibold text-ink-navy/30 py-0.5">{g}</span>)}</div>
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((day, i) => {
+          if (!day) return <span key={i} />
+          const k = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const isSel = k === value
+          const isToday = k === oggi
+          return (
+            <button key={i} onClick={() => { onChange(k); onClose() }}
+              className={`h-8 w-full rounded-lg text-xs font-medium transition-colors ${isSel ? 'bg-electric-blue text-white font-bold' : isToday ? 'bg-electric-blue/10 text-electric-blue font-bold' : 'hover:bg-mist text-ink-navy'}`}>
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Modal nuova richiesta manuale ───────────────────────────────────────────
+function NuovaModal({ tipi, onClose, onSave }: {
+  tipi: TipoSeduta[]
+  onClose: () => void
+  onSave: (data: { clienteNome: string; clienteEmail: string; servizio: string; data: string; ora: string; durata: number; note: string }) => void
+}) {
+  const [form, setForm] = useState({ clienteNome: '', clienteEmail: '', servizio: '', data: toDateStr(new Date()), ora: '09:00', durata: 45, note: '' })
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 my-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-ink-navy">Nuova richiesta</h2>
+          <button onClick={onClose} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
+        </div>
         <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome e cognome *</label>
-            <input value={form.clienteName} onChange={e => setForm({ ...form, clienteName: e.target.value })}
-              placeholder="Mario Rossi" autoFocus
-              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome paziente *</label>
+              <input value={form.clienteNome} onChange={e => setForm({ ...form, clienteNome: e.target.value })} placeholder="Mario Rossi" autoFocus
+                className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email</label>
+              <input value={form.clienteEmail} onChange={e => setForm({ ...form, clienteEmail: e.target.value })} placeholder="paziente@email.com"
+                className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email</label>
-            <input value={form.clienteEmail} onChange={e => setForm({ ...form, clienteEmail: e.target.value })}
-              placeholder="paziente@email.com"
-              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo di seduta</label>
+            <select value={form.servizio}
+              onChange={e => {
+                const t = tipi.find(x => x.nome === e.target.value)
+                setForm({ ...form, servizio: e.target.value, durata: t?.durata ?? form.durata })
+              }}
+              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
+              <option value="">— Seleziona —</option>
+              {tipi.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data</label>
+              <input type="date" value={form.data} onChange={e => setForm({ ...form, data: e.target.value })}
+                className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora</label>
+              <OrarioSelect value={form.ora} onChange={v => setForm({ ...form, ora: v })}
+                className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-ink-navy/70 mb-1">Durata</label>
+              <input type="number" value={form.durata} onChange={e => setForm({ ...form, durata: Number(e.target.value) })}
+                className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Richiesta</label>
-            <textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} rows={3}
-              placeholder="Cosa ha chiesto il paziente..."
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note</label>
+            <textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} rows={2}
               className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
           </div>
         </div>
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
-          <button onClick={() => onSave(form)} disabled={!form.clienteName.trim()}
+          <button onClick={() => onSave(form)} disabled={!form.clienteNome.trim()}
             className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">Salva</button>
         </div>
       </div>
@@ -61,214 +172,320 @@ function NuovaRichiestaModal({ onClose, onSave }: {
   )
 }
 
+// ── Pagina ──────────────────────────────────────────────────────────────────
 export default function RichiestePage() {
-  const [richieste, setRichieste] = useState<Richiesta[]>([])
+  const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([])
+  const [tipi, setTipi] = useState<TipoSeduta[]>([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [accettando, setAccettando] = useState<Richiesta | null>(null)
-  const [dataApp, setDataApp] = useState('')
-  const [oraApp, setOraApp] = useState('09:00')
+  const [selected, setSelected] = useState<Appuntamento | null>(null)
+  const [showNuovo, setShowNuovo] = useState(false)
+  const [prenotazioniAperte, setPrenotazioniAperte] = useState(true)
+  const [giorno, setGiorno] = useState(() => toDateStr(new Date()))
+  const [calOpen, setCalOpen] = useState(false)
 
-  async function fetchRichieste() {
-    const res = await fetch('/api/preventivi', { credentials: 'include', cache: 'no-store' })
-    const data = await res.json()
-    setRichieste(data.preventivi ?? [])
+  async function fetchAll() {
+    const [aRes, tRes] = await Promise.all([
+      fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }),
+      fetch('/api/tipi-seduta', { credentials: 'include', cache: 'no-store' }),
+    ])
+    const aData = await aRes.json()
+    const tData = await tRes.json()
+    setAppuntamenti(aData.appuntamenti ?? [])
+    setTipi(tData.tipiSeduta ?? [])
     setLoading(false)
   }
 
   useEffect(() => {
-    fetchRichieste()
-    const interval = setInterval(fetchRichieste, 15000)
+    fetchAll()
+    const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
   }, [])
 
-  async function handleAdd(form: { clienteName: string; clienteEmail: string; note: string }) {
-    try {
-      await fetch('/api/preventivi', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, items: [] }),
-      })
-      await fetchRichieste()
-    } finally {
-      setShowModal(false)
-    }
-  }
-
-  async function handleRifiuta(id: string) {
-    await fetch(`/api/preventivi/${id}`, {
+  async function accetta(id: string) {
+    await fetch(`/api/appuntamenti/${id}`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'rifiutato' }),
+      body: JSON.stringify({ status: 'confermato' }),
     })
-    fetchRichieste()
+    setSelected(null)
+    fetchAll()
   }
 
-  function apriAccetta(r: Richiesta) {
-    setAccettando(r)
-    setDataApp(new Date().toISOString().slice(0, 10))
-    setOraApp('09:00')
+  async function rifiuta(id: string) {
+    await fetch(`/api/appuntamenti/${id}`, { method: 'DELETE', credentials: 'include' })
+    setSelected(null)
+    fetchAll()
   }
 
-  async function confermaAccetta() {
-    if (!accettando) return
+  async function cambiaStato(id: string, status: string) {
+    setAppuntamenti(prev => prev.map(a => a.id === id ? { ...a, status } : a))
+    setSelected(prev => prev && prev.id === id ? { ...prev, status } : prev)
+    await fetch(`/api/appuntamenti/${id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+  }
 
-    // Trova o crea il paziente in base all'email
-    let pazienteId: string | null = null
-    if (accettando.clienteEmail) {
-      const res = await fetch('/api/pazienti', { credentials: 'include', cache: 'no-store' })
-      const data = await res.json()
-      const esistente = (data.pazienti ?? []).find((p: { email?: string }) => p.email?.toLowerCase() === accettando.clienteEmail!.toLowerCase())
-      pazienteId = esistente?.id ?? null
-    }
-    if (!pazienteId) {
-      const res = await fetch('/api/pazienti', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: accettando.clienteName, email: accettando.clienteEmail }),
-      })
-      const data = await res.json()
-      pazienteId = data.paziente.id
-    }
+  async function eliminaApp(id: string) {
+    await fetch(`/api/appuntamenti/${id}`, { method: 'DELETE', credentials: 'include' })
+    setSelected(null)
+    fetchAll()
+  }
 
-    const [h, m] = oraApp.split(':').map(Number)
-    const data = new Date(dataApp)
-    data.setHours(h, m, 0, 0)
-
+  async function creaManuale(form: { clienteNome: string; clienteEmail: string; servizio: string; data: string; ora: string; durata: number; note: string }) {
+    const [h, m] = form.ora.split(':').map(Number)
+    const d = new Date(form.data); d.setHours(h, m, 0, 0)
     await fetch('/api/appuntamenti', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        clienteNome: accettando.clienteName,
-        clienteEmail: accettando.clienteEmail,
-        note: accettando.note,
-        data: data.toISOString(),
-        durata: 45,
-        pazienteId,
+        clienteNome: form.clienteNome,
+        clienteEmail: form.clienteEmail || null,
+        servizio: form.servizio || null,
+        data: d.toISOString(),
+        durata: form.durata || 45,
+        note: form.note || null,
+        status: 'in_attesa',
       }),
     })
-
-    await fetch(`/api/preventivi/${accettando.id}`, {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'accettato' }),
-    })
-
-    setAccettando(null)
-    fetchRichieste()
+    setShowNuovo(false)
+    fetchAll()
   }
 
-  const attive = richieste.filter(r => r.status === 'bozza' || r.status === 'inviato')
-  const evase = richieste.filter(r => r.status === 'accettato' || r.status === 'rifiutato')
+  const daVerificare = appuntamenti
+    .filter(a => a.status === 'in_attesa')
+    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+  const delGiorno = appuntamenti
+    .filter(a => a.status !== 'in_attesa' && toDateStr(new Date(a.data)) === giorno)
+    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+
+  const oggi = toDateStr(new Date())
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-extrabold text-ink-navy">Richieste</h1>
-          <p className="text-ink-navy/50 mt-0.5">{attive.length} in attesa</p>
         </div>
-        <button onClick={() => setShowModal(true)}
+        <button onClick={() => setShowNuovo(true)}
           className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90 transition-colors">
-          + Nuova richiesta
+          + Nuova
         </button>
       </div>
 
       {loading ? (
         <div className="text-center text-ink-navy/35 py-12">Caricamento...</div>
-      ) : richieste.length === 0 ? (
-        <div className="bg-white border border-dashed border-ink-navy/15 rounded-xl p-12 text-center text-ink-navy/35">
-          <div className="w-11 h-11 rounded-xl bg-mist flex items-center justify-center p-2.5 mx-auto mb-4">
-            <IconClipboard />
-          </div>
-          <p className="font-medium">Nessuna richiesta ancora</p>
-          <p className="text-sm mt-1">Le richieste arrivano dal chatbot o puoi crearne una manualmente</p>
-        </div>
       ) : (
         <div className="space-y-6">
-          {attive.length > 0 && (
-            <div className="space-y-2">
-              {attive.map(r => {
-                const st = STATUS_STYLE[r.status] ?? STATUS_STYLE.bozza
-                return (
-                  <div key={r.id} className="bg-white rounded-xl border border-ink-navy/10 shadow-sm p-4 flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-ink-navy">{r.clienteName}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.bg} ${st.text}`}>{st.label}</span>
-                      </div>
-                      {r.clienteEmail && <p className="text-xs text-ink-navy/40 mt-0.5">{r.clienteEmail}</p>}
-                      {r.note && <p className="text-sm text-ink-navy/60 mt-1.5">{r.note}</p>}
-                      <p className="text-xs text-ink-navy/30 mt-1.5">Ricevuta il {new Date(r.createdAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}</p>
+
+          {/* ── DA VERIFICARE ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm font-semibold text-electric-blue uppercase tracking-wider">Da verificare</span>
+              {daVerificare.length > 0 && <span className="bg-electric-blue/10 text-electric-blue text-xs font-bold px-2 py-0.5 rounded-full">{daVerificare.length}</span>}
+            </div>
+            {daVerificare.length === 0 ? (
+              <p className="text-sm text-ink-navy/30 py-3">Nessuna richiesta da verificare</p>
+            ) : (
+              <div className="bg-white border-2 border-electric-blue/25 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-electric-blue/5 border-b border-electric-blue/15">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Paziente</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Data</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Orario</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-electric-blue uppercase tracking-wider">Seduta</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-electric-blue/10">
+                    {daVerificare.map(a => (
+                      <tr key={a.id} onClick={() => setSelected(a)} className="hover:bg-electric-blue/5 cursor-pointer transition-colors">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-ink-navy">{a.clienteNome || 'Paziente'}</p>
+                          {a.clienteEmail && <p className="text-xs text-ink-navy/40">{a.clienteEmail}</p>}
+                        </td>
+                        <td className="px-4 py-3"><span className="text-base font-bold text-ink-navy capitalize">{fmtGiornoLungo(a.data)}</span></td>
+                        <td className="px-4 py-3"><span className="text-base font-bold text-ink-navy">{fmtOra(a.data)}</span></td>
+                        <td className="px-4 py-3 text-ink-navy/60">{a.servizio || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ── PRENOTAZIONI PER GIORNO ── */}
+          <div>
+            <button onClick={() => setPrenotazioniAperte(v => !v)} className="w-full flex items-center gap-3 py-2 text-left group">
+              <div className="h-px flex-1 bg-ink-navy/8" />
+              <span className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider group-hover:text-ink-navy/60 transition-colors flex items-center gap-1.5">
+                Prenotazioni
+                <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{delGiorno.length}</span>
+                <span className="text-ink-navy/30">{prenotazioniAperte ? '▲' : '▼'}</span>
+              </span>
+              <div className="h-px flex-1 bg-ink-navy/8" />
+            </button>
+
+            {prenotazioniAperte && (
+              <div className="mt-3 space-y-3">
+                {/* Navigazione data */}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setGiorno(shiftDay(giorno, -1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/15 text-ink-navy/50 hover:bg-mist transition-colors text-sm">‹</button>
+                  <div className="flex-1 flex justify-center relative">
+                    <button onClick={() => setCalOpen(v => !v)}
+                      className="text-sm font-semibold text-ink-navy py-1 px-3 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors select-none whitespace-nowrap capitalize">
+                      {fmtGiornoLabel(giorno)}
+                      <span className="ml-1.5 text-ink-navy/30 text-xs">▾</span>
+                    </button>
+                    {calOpen && <MiniCal value={giorno} onChange={setGiorno} onClose={() => setCalOpen(false)} />}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {giorno !== oggi && (
+                      <button onClick={() => setGiorno(oggi)}
+                        className="text-xs text-electric-blue font-semibold px-2.5 py-1.5 rounded-lg border border-electric-blue/25 hover:bg-electric-blue/10 transition-colors">Oggi</button>
+                    )}
+                    <button onClick={() => setGiorno(shiftDay(giorno, 1))}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/15 text-ink-navy/50 hover:bg-mist transition-colors text-sm">›</button>
+                  </div>
+                </div>
+
+                {delGiorno.length === 0 ? (
+                  <p className="text-sm text-ink-navy/30 text-center py-4">Nessuna prenotazione per {fmtGiornoLabel(giorno).toLowerCase()}</p>
+                ) : (
+                  <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-mist border-b border-ink-navy/10">
+                        <tr>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Paziente</th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Ora</th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Seduta</th>
+                          <th className="text-center px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Stato</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {delGiorno.map(a => {
+                          const st = STATUS_STYLE[a.status] ?? STATUS_STYLE.confermato
+                          return (
+                            <tr key={a.id} onClick={() => setSelected(a)} className="hover:bg-mist cursor-pointer transition-colors">
+                              <td className="px-4 py-3">
+                                <p className="font-semibold text-ink-navy">{a.clienteNome || 'Paziente'}</p>
+                                {a.clienteEmail && <p className="text-xs text-ink-navy/40">{a.clienteEmail}</p>}
+                              </td>
+                              <td className="px-4 py-3"><span className="text-base font-bold text-ink-navy">{fmtOra(a.data)}</span></td>
+                              <td className="px-4 py-3 text-ink-navy/60">{a.servizio || '—'}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${st.bg} ${st.text}`}>{st.label}</span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {showNuovo && <NuovaModal tipi={tipi} onClose={() => setShowNuovo(false)} onSave={creaManuale} />}
+
+      {/* ── DETTAGLIO ── */}
+      {selected && (() => {
+        const isAttesa = selected.status === 'in_attesa'
+        const st = STATUS_STYLE[selected.status] ?? STATUS_STYLE.confermato
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden" style={{ maxHeight: '88vh' }} onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="px-6 pt-5 pb-4">
+                <div className="flex items-start justify-between">
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-md ${isAttesa ? 'bg-blue-100 text-blue-700' : `${st.bg} ${st.text}`}`}>
+                    {isAttesa ? 'In attesa' : st.label}
+                  </span>
+                  <button onClick={() => setSelected(null)} className="text-ink-navy/25 hover:text-ink-navy/60 transition-colors p-1 -mr-1 -mt-1">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  </button>
+                </div>
+                <h2 className="text-xl font-bold text-ink-navy mt-3">{selected.clienteNome || 'Paziente'}</h2>
+                {selected.clienteEmail && <p className="text-sm text-ink-navy/40 mt-0.5">{selected.clienteEmail}</p>}
+              </div>
+
+              <div className="overflow-y-auto flex-1">
+                {/* Dettagli */}
+                <div className="px-6 pb-2">
+                  <div className="divide-y divide-ink-navy/6">
+                    <div className="flex gap-3 py-2.5">
+                      <span className="text-xs text-ink-navy/40 w-20 shrink-0 pt-0.5">Data</span>
+                      <span className="text-sm font-bold text-ink-navy capitalize">{new Date(selected.data).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button onClick={() => handleRifiuta(r.id)}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                        Rifiuta
-                      </button>
-                      <button onClick={() => apriAccetta(r)}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue text-white hover:bg-electric-blue/90 transition-colors">
+                    <div className="flex gap-3 py-2.5">
+                      <span className="text-xs text-ink-navy/40 w-20 shrink-0 pt-0.5">Orario</span>
+                      <span className="text-sm font-bold text-ink-navy">{fmtOra(selected.data)} · {selected.durata} min</span>
+                    </div>
+                    {selected.servizio && (
+                      <div className="flex gap-3 py-2.5">
+                        <span className="text-xs text-ink-navy/40 w-20 shrink-0 pt-0.5">Seduta</span>
+                        <span className="text-sm font-medium text-ink-navy">{selected.servizio}</span>
+                      </div>
+                    )}
+                    {selected.note && (
+                      <div className="flex gap-3 py-2.5">
+                        <span className="text-xs text-ink-navy/40 w-20 shrink-0 pt-0.5">Note</span>
+                        <span className="text-sm font-medium text-ink-navy">{selected.note}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {selected.pazienteId && (
+                    <Link href={`/care/dashboard/pazienti/${selected.pazienteId}`}
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-electric-blue hover:underline">
+                      Apri cartella clinica <span className="w-3 h-3"><IconArrowRight /></span>
+                    </Link>
+                  )}
+                </div>
+
+                {/* Azioni */}
+                <div className="px-6 py-5">
+                  {isAttesa ? (
+                    <div className="space-y-2">
+                      <button onClick={() => accetta(selected.id)}
+                        className="w-full bg-green-600 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-green-700 transition-colors">
                         Accetta
                       </button>
+                      <button onClick={() => rifiuta(selected.id)}
+                        className="w-full text-red-500 text-sm font-medium py-2 rounded-lg hover:bg-red-50 transition-colors">
+                        Rifiuta
+                      </button>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {evase.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Evase</p>
-              <div className="space-y-1.5">
-                {evase.map(r => {
-                  const st = STATUS_STYLE[r.status] ?? STATUS_STYLE.bozza
-                  return (
-                    <div key={r.id} className="flex items-center justify-between bg-mist rounded-lg px-4 py-2.5">
-                      <p className="text-sm text-ink-navy/60">{r.clienteName}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.bg} ${st.text}`}>{st.label}</span>
-                    </div>
-                  )
-                })}
+                  ) : (
+                    <>
+                      <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Stato</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(STATUS_STYLE).map(([key, s]) => (
+                          <button key={key} onClick={() => cambiaStato(selected.id, key)}
+                            className={`text-sm py-2 rounded-lg font-medium transition-colors ${selected.status === key ? `${s.bg} ${s.text}` : 'bg-mist text-ink-navy/60 hover:bg-ink-navy/10'}`}>
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => eliminaApp(selected.id)}
+                        className="mt-3 text-xs text-ink-navy/40 font-medium hover:text-red-500 transition-colors">
+                        Elimina definitivamente
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {showModal && <NuovaRichiestaModal onClose={() => setShowModal(false)} onSave={handleAdd} />}
-
-      {/* Modal accetta → crea appuntamento */}
-      {accettando && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <span className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center p-2 shrink-0"><IconCheck /></span>
-              <div>
-                <h2 className="text-lg font-bold text-ink-navy">Conferma appuntamento</h2>
-                <p className="text-xs text-ink-navy/40">per {accettando.clienteName}</p>
-              </div>
-            </div>
-            <p className="text-sm text-ink-navy/60">Fissa data e ora della prima seduta. Il paziente verrà aggiunto automaticamente alla lista pazienti.</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data</label>
-                <input type="date" value={dataApp} onChange={e => setDataApp(e.target.value)}
-                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Ora</label>
-                <OrarioSelect value={oraApp} onChange={setOraApp}
-                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setAccettando(null)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
-              <button onClick={confermaAccetta} className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90">Conferma</button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

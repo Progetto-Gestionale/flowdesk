@@ -5,6 +5,60 @@ import { useParams } from 'next/navigation'
 import Logo from '@/app/components/Logo'
 import { IconArrowRight, IconCheck, IconClock } from '@/app/components/icons'
 
+const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+const GIORNI_INIZIALE = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
+
+// Calendario mensile inline per scegliere il giorno della prenotazione.
+function CalendarioMese({ selected, min, onSelect }: {
+  selected: string; min: string; onSelect: (d: string) => void
+}) {
+  const [viewYear, setViewYear] = useState(() => parseInt(selected.slice(0, 4)))
+  const [viewMonth, setViewMonth] = useState(() => parseInt(selected.slice(5, 7)) - 1)
+
+  const firstDay = new Date(viewYear, viewMonth, 1)
+  const lastDay = new Date(viewYear, viewMonth + 1, 0)
+  let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6
+  const cells: (number | null)[] = Array(startDow).fill(null)
+  for (let d = 1; d <= lastDay.getDate(); d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const minMese = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}` <= min.slice(0, 7)
+  function prevM() { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) } else setViewMonth(m => m - 1) }
+  function nextM() { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) } else setViewMonth(m => m + 1) }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={prevM} disabled={minMese}
+          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 disabled:opacity-25 disabled:hover:bg-transparent">‹</button>
+        <span className="text-sm font-bold text-ink-navy">{MESI[viewMonth]} {viewYear}</span>
+        <button type="button" onClick={nextM}
+          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50">›</button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {GIORNI_INIZIALE.map((g, i) => <span key={i} className="text-center text-[10px] font-semibold text-ink-navy/30 py-1">{g}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((day, i) => {
+          if (!day) return <span key={i} />
+          const k = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const isSel = k === selected
+          const isPast = k < min
+          return (
+            <button key={i} type="button" disabled={isPast} onClick={() => onSelect(k)}
+              className={`h-9 w-full rounded-lg text-sm font-medium transition-colors
+                ${isSel ? 'bg-electric-blue text-white font-bold'
+                  : isPast ? 'text-ink-navy/20 cursor-not-allowed'
+                  : 'hover:bg-electric-blue/10 text-ink-navy'}`}>
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 interface TipoSeduta {
   id: string
   nome: string
@@ -15,11 +69,6 @@ interface TipoSeduta {
 
 function oggiStr() {
   const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-function addGiorni(dateStr: string, n: number) {
-  const d = new Date(`${dateStr}T12:00:00`)
-  d.setDate(d.getDate() + n)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 function fmtGiorno(dateStr: string) {
@@ -62,7 +111,7 @@ export default function PrenotaCarePage() {
     if (step !== 2 || !tipoScelto) return
     setLoadingSlots(true)
     setOraScelta(null)
-    fetch(`/api/public/care-disponibilita?publicId=${publicId}&data=${dataScelta}&durata=${tipoScelto.durata}`)
+    fetch(`/api/public/care-disponibilita?publicId=${publicId}&data=${dataScelta}&durata=${tipoScelto.durata}&tipoSedutaId=${tipoScelto.id}`)
       .then(r => r.json())
       .then(d => { setSlots(d.slots ?? []); setLoadingSlots(false) })
   }, [step, tipoScelto, dataScelta, publicId])
@@ -85,8 +134,6 @@ export default function PrenotaCarePage() {
     setConfermato(true)
   }
 
-  const giorni = Array.from({ length: 14 }, (_, i) => addGiorni(oggiStr(), i))
-
   if (loading) return <main className="min-h-screen bg-mist flex items-center justify-center text-ink-navy/35 text-sm">Caricamento...</main>
   if (notFound) return <main className="min-h-screen bg-mist flex items-center justify-center text-ink-navy/50 text-sm">Pagina non trovata</main>
 
@@ -107,11 +154,11 @@ export default function PrenotaCarePage() {
             <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center p-3.5 mx-auto mb-4">
               <IconCheck />
             </div>
-            <h2 className="text-xl font-bold text-ink-navy">Prenotazione confermata</h2>
+            <h2 className="text-xl font-bold text-ink-navy">Richiesta inviata</h2>
             <p className="text-ink-navy/50 mt-2">
               {tipoScelto?.nome} — {fmtGiorno(dataScelta)} alle {oraScelta}
             </p>
-            <p className="text-sm text-ink-navy/40 mt-4">Riceverai una conferma via email a breve.</p>
+            <p className="text-sm text-ink-navy/40 mt-4">La tua richiesta è in attesa di conferma. Riceverai una email non appena verrà confermata.</p>
           </div>
         ) : (
           <div className="mt-8 space-y-5">
@@ -141,14 +188,7 @@ export default function PrenotaCarePage() {
             {step >= 2 && tipoScelto && (
               <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5">
                 <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-3">2 — Data e ora</p>
-                <div className="flex gap-1.5 overflow-x-auto pb-2">
-                  {giorni.map(g => (
-                    <button key={g} onClick={() => setDataScelta(g)}
-                      className={`shrink-0 text-xs font-semibold px-3 py-2 rounded-lg capitalize transition-colors ${dataScelta === g ? 'bg-electric-blue text-white' : 'bg-mist text-ink-navy/60 hover:bg-ink-navy/10'}`}>
-                      {fmtGiorno(g)}
-                    </button>
-                  ))}
-                </div>
+                <CalendarioMese selected={dataScelta} min={oggiStr()} onSelect={setDataScelta} />
                 <div className="mt-3">
                   {loadingSlots ? (
                     <p className="text-sm text-ink-navy/35 py-4 text-center">Caricamento orari...</p>
@@ -197,7 +237,7 @@ export default function PrenotaCarePage() {
 
                 <button onClick={handleConferma} disabled={!form.nome.trim() || inviando}
                   className="mt-4 w-full inline-flex items-center justify-center gap-2 bg-electric-blue text-white font-bold text-sm py-3 rounded-lg hover:bg-electric-blue/90 transition-colors disabled:opacity-40">
-                  {inviando ? 'Invio...' : 'Conferma prenotazione'}
+                  {inviando ? 'Invio...' : 'Invia richiesta'}
                   <span className="w-4 h-4"><IconArrowRight /></span>
                 </button>
               </div>

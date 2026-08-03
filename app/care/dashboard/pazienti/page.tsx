@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { IconStethoscope, IconTrash } from '@/app/components/icons'
 
 interface Paziente {
@@ -94,6 +95,7 @@ function esportaCSV(pazienti: Paziente[]) {
 }
 
 export default function PazientiPage() {
+  const router = useRouter()
   const [pazienti, setPazienti] = useState<Paziente[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -193,9 +195,11 @@ export default function PazientiPage() {
             </thead>
             <tbody>
               {filtrati.map(p => (
-                <tr key={p.id} className="border-b border-ink-navy/8 last:border-0 hover:bg-mist/60 transition-colors group">
+                <tr key={p.id} onClick={() => router.push(`/care/dashboard/pazienti/${p.id}`)}
+                  className="border-b border-ink-navy/8 last:border-0 hover:bg-mist/60 transition-colors group cursor-pointer">
                   <td className="px-4 py-3">
-                    <Link href={`/care/dashboard/pazienti/${p.id}`} className="font-semibold text-ink-navy hover:text-electric-blue">
+                    <Link href={`/care/dashboard/pazienti/${p.id}`} onClick={e => e.stopPropagation()}
+                      className="font-semibold text-ink-navy group-hover:text-electric-blue">
                       {p.nome}
                     </Link>
                   </td>
@@ -204,7 +208,7 @@ export default function PazientiPage() {
                   <td className="px-4 py-3 text-ink-navy/60">{p.email || '—'}</td>
                   <td className="px-4 py-3 text-ink-navy/60">{p.telefono || '—'}</td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => setConfermaElimina(p)}
+                    <button onClick={e => { e.stopPropagation(); setConfermaElimina(p) }}
                       className="opacity-0 group-hover:opacity-100 w-7 h-7 inline-flex items-center justify-center text-ink-navy/25 hover:text-red-400 transition-all">
                       <span className="w-3.5 h-3.5"><IconTrash /></span>
                     </button>

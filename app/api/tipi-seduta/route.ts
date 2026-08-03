@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
 
-  const { nome, descrizione, prezzo, durata } = await req.json()
+  const { nome, descrizione, prezzo, durata, giorni, orari } = await req.json()
   if (!nome) return NextResponse.json({ error: 'Nome richiesto' }, { status: 400 })
 
   const count = await prisma.tipoSeduta.count({ where: { userId: user.id } })
@@ -36,6 +36,8 @@ export async function POST(req: Request) {
       descrizione,
       prezzo: prezzo ?? 0,
       durata: durata ?? 45,
+      giorni: giorni ?? null,
+      orari: orari ?? null,
       ordine: count,
     },
   })
