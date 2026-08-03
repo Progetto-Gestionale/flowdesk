@@ -369,8 +369,6 @@ const VistaMappa = forwardRef<VistaMappHandle, {
     else fitTutti()
   }
 
-  function handleReset() { setZoomSync(1); setPanSync({ x: 0, y: 0 }) }
-
   // Adatta la vista in modo che i tavoli della SALA ATTIVA entrino nella mappa, centrati.
   // Usiamo solo i tavoli passati via prop (già filtrati per sala), non tutto mdRef,
   // così il fit funziona per singola sala e non viene sbilanciato da altre sale.
@@ -583,7 +581,6 @@ const VistaMappa = forwardRef<VistaMappHandle, {
           <span className="text-xs font-semibold text-ink-navy/60 w-10 text-center">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoomSync(Math.min(3, +(zoomRef.current + 0.1).toFixed(1)))} className="w-7 h-7 flex items-center justify-center text-ink-navy/60 hover:bg-mist rounded-lg font-bold text-lg">+</button>
           <button onClick={vistaPredefinita} title="Vai alla vista predefinita di questa sala" className="ml-1 text-xs text-electric-blue hover:text-ink-navy font-medium px-1 whitespace-nowrap">⤢ Adatta</button>
-          <button onClick={handleReset} className="text-xs text-electric-blue hover:text-ink-navy font-medium px-1">Reset</button>
         </div>
         <div style={{ position: 'absolute', top: 0, left: 0, transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', width: CANVAS_W, height: CANVAS_H, backgroundColor: '#ffffff', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}>
 
@@ -762,6 +759,16 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   const turnoSelRef = useRef(turnoSel)
   useEffect(() => { giornoSelRef.current = giornoSel }, [giornoSel])
   useEffect(() => { turnoSelRef.current = turnoSel }, [turnoSel])
+
+  // Mappa live: all'ingresso porta la vista direttamente sulla mappa (non sul margine in alto),
+  // così il cameriere vede subito la piantina completa senza dover scorrere. Solo una volta al mount.
+  const mapScrollRef = useRef<HTMLDivElement>(null)
+  const didScrollToMap = useRef(false)
+  useEffect(() => {
+    if (gestione || loading || didScrollToMap.current) return
+    didScrollToMap.current = true
+    requestAnimationFrame(() => mapScrollRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' }))
+  }, [gestione, loading])
 
   const salaAttiva = sale.find(s => s.id === salaAttivaId) ?? null
   // Con più sale: filtra per sala attiva; include anche salaId=null nella prima sala (retrocompatibilità)
@@ -970,15 +977,19 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
           <p className="text-ink-navy/50 text-sm mt-0.5">{gestione ? 'Disegna la piantina, gestisci QR e unione tavoli' : 'Situazione live delle sale'}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {/* Unisci / Separa: disponibili sia in visualizzazione che in gestione */}
-          <button onClick={avviaUnisci}
-            className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${selectMode ? 'bg-electric-blue/15 border-electric-blue/40 text-electric-blue' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
-            {selectMode ? '✕ Esci' : 'Unisci tavoli'}
-          </button>
-          <button onClick={avviaSepara}
-            className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${separaMode ? 'bg-orange-100 border-orange-300 text-orange-600' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
-            {separaMode ? '✕ Esci' : 'Separa tavoli'}
-          </button>
+          {/* Unisci / Separa: solo nella mappa live (in gestione si disegna soltanto la piantina) */}
+          {!gestione && (
+            <>
+              <button onClick={avviaUnisci}
+                className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${selectMode ? 'bg-electric-blue/15 border-electric-blue/40 text-electric-blue' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
+                {selectMode ? '✕ Esci' : 'Unisci tavoli'}
+              </button>
+              <button onClick={avviaSepara}
+                className={`font-semibold px-4 py-2 rounded-xl text-sm border transition-colors ${separaMode ? 'bg-orange-100 border-orange-300 text-orange-600' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
+                {separaMode ? '✕ Esci' : 'Separa tavoli'}
+              </button>
+            </>
+          )}
           {gestione ? (
             <>
               <Link href="/food/dashboard/tavoli"
@@ -1003,7 +1014,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
       {selBanner}
 
       {/* Tab Mappa/Lista (solo gestione) + switch sale (entrambe le pagine) */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div ref={mapScrollRef} className="flex items-center gap-2 flex-wrap scroll-mt-4">
         {gestione && [{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }].map(t => (
           <button key={t.k} onClick={() => setVista(t.k as 'mappa' | 'lista')}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
