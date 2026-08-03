@@ -218,7 +218,7 @@ export default function PrenotaCarePage() {
                     className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                   <div className="grid grid-cols-2 gap-3">
                     <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      placeholder="Email" type="email"
+                      placeholder="Email *" type="email"
                       className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                     <input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })}
                       placeholder="Telefono" type="tel"
@@ -235,11 +235,14 @@ export default function PrenotaCarePage() {
                   <strong>{tipoScelto?.nome}</strong> — {fmtGiorno(dataScelta)} alle {oraScelta} ({tipoScelto?.durata} min)
                 </div>
 
-                <button onClick={handleConferma} disabled={!form.nome.trim() || inviando}
+                <button onClick={handleConferma} disabled={!form.nome.trim() || !form.email.trim() || inviando}
                   className="mt-4 w-full inline-flex items-center justify-center gap-2 bg-electric-blue text-white font-bold text-sm py-3 rounded-lg hover:bg-electric-blue/90 transition-colors disabled:opacity-40">
                   {inviando ? 'Invio...' : 'Invia richiesta'}
                   <span className="w-4 h-4"><IconArrowRight /></span>
                 </button>
+                <p className="mt-2 text-xs text-ink-navy/35 text-center">
+                  Serve l&apos;email: è lì che ricevi il riepilogo e la conferma dello studio.
+                </p>
               </div>
             )}
           </div>

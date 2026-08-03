@@ -123,6 +123,23 @@ function MiniCalDropdown({ selectedDay, onSelect, onClose }: {
   )
 }
 
+const NUOVO_PAZIENTE = '__nuovo'
+const TIPO_ALTRO = '__altro'
+
+const FORM_VUOTO = {
+  pazienteId: '',
+  clienteNome: '',
+  nuovoEmail: '',
+  nuovoTelefono: '',
+  tipoSedutaId: '',
+  servizio: '',
+  ora: '09:00',
+  durata: '45',
+  note: '',
+}
+
+interface TipoSeduta { id: string; nome: string; durata: number; attivo: boolean }
+
 export default function CalendarioPage() {
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([])
   const [pazienti, setPazienti] = useState<Paziente[]>([])
@@ -134,23 +151,29 @@ export default function CalendarioPage() {
   const [selected, setSelected] = useState<Appuntamento | null>(null)
   const [seduteStorico, setSeduteStorico] = useState<Seduta[]>([])
   const [showNuovo, setShowNuovo] = useState<Date | null>(null)
-  const [form, setForm] = useState({ pazienteId: '', clienteNome: '', servizio: '', ora: '09:00', durata: '45', note: '' })
+  const [form, setForm] = useState(FORM_VUOTO)
+  const [tipiSeduta, setTipiSeduta] = useState<TipoSeduta[]>([])
+  const [salvando, setSalvando] = useState(false)
+  const [erroreNuovo, setErroreNuovo] = useState('')
   const [orariSettimanali, setOrariSettimanali] = useState<Record<string, string>>({})
   const [overrides, setOverrides] = useState<Override[]>([])
   const [modalOrari, setModalOrari] = useState<Date | null>(null)
   const [formOrariGiorno, setFormOrariGiorno] = useState('')
 
   async function fetchAll() {
-    const [aRes, pRes, sRes] = await Promise.all([
+    const [aRes, pRes, sRes, tRes] = await Promise.all([
       fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }),
       fetch('/api/pazienti', { credentials: 'include', cache: 'no-store' }),
       fetch('/api/settings', { credentials: 'include', cache: 'no-store' }),
+      fetch('/api/tipi-seduta', { credentials: 'include', cache: 'no-store' }),
     ])
     const aData = await aRes.json()
     const pData = await pRes.json()
     const sData = await sRes.json()
+    const tData = await tRes.json()
     setAppuntamenti(aData.appuntamenti ?? [])
     setPazienti(pData.pazienti ?? [])
+    setTipiSeduta((tData.tipiSeduta ?? []).filter((t: TipoSeduta) => t.attivo))
     try { setOrariSettimanali(JSON.parse(sData.orariApertura ?? '{}')) } catch { setOrariSettimanali({}) }
     setLoading(false)
   }
@@ -235,33 +258,87 @@ export default function CalendarioPage() {
   }
 
   function openNuovo(day: Date) {
-    setForm({ pazienteId: '', clienteNome: '', servizio: '', ora: '09:00', durata: '45', note: '' })
+    setForm(FORM_VUOTO)
+    setErroreNuovo('')
     setShowNuovo(day)
   }
 
-  async function handleCreate() {
-    if (!showNuovo) return
-    const paziente = pazienti.find(p => p.id === form.pazienteId)
-    const [h, m] = form.ora.split(':').map(Number)
-    const data = new Date(showNuovo)
-    data.setHours(h, m, 0, 0)
-
-    await fetch('/api/appuntamenti', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clienteNome: paziente?.nome ?? form.clienteNome,
-        clienteEmail: paziente?.email,
-        servizio: form.servizio,
-        data: data.toISOString(),
-        durata: parseInt(form.durata) || 45,
-        note: form.note,
-        pazienteId: form.pazienteId || null,
-      }),
-    })
-    setShowNuovo(null)
-    fetchAll()
+  /** Scegliere un tipo di seduta porta con sé la sua durata standard. */
+  function selezionaTipoSeduta(id: string) {
+    const tipo = tipiSeduta.find(t => t.id === id)
+    setForm(f => ({
+      ...f,
+      tipoSedutaId: id,
+      servizio: id === TIPO_ALTRO ? f.servizio : '',
+      durata: tipo ? String(tipo.durata) : f.durata,
+    }))
   }
+
+  async function handleCreate() {
+    if (!showNuovo || salvando) return
+    setSalvando(true)
+    setErroreNuovo('')
+    try {
+      const nuovo = form.pazienteId === NUOVO_PAZIENTE
+      let pazienteId = nuovo ? null : (form.pazienteId || null)
+      const esistente = pazienti.find(p => p.id === form.pazienteId)
+      let nome = esistente?.nome ?? ''
+      let email = esistente?.email
+
+      // Un paziente nuovo entra subito in anagrafica, con i suoi contatti
+      if (nuovo) {
+        const res = await fetch('/api/pazienti', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome: form.clienteNome.trim(),
+            email: form.nuovoEmail.trim() || null,
+            telefono: form.nuovoTelefono.trim() || null,
+          }),
+        })
+        if (!res.ok) {
+          setErroreNuovo('Non è stato possibile creare il paziente. Riprova.')
+          return
+        }
+        const d = await res.json()
+        pazienteId = d.paziente.id
+        nome = d.paziente.nome
+        email = d.paziente.email
+      }
+
+      const tipo = tipiSeduta.find(t => t.id === form.tipoSedutaId)
+      const [h, m] = form.ora.split(':').map(Number)
+      const data = new Date(showNuovo)
+      data.setHours(h, m, 0, 0)
+
+      const res = await fetch('/api/appuntamenti', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteNome: nome,
+          clienteEmail: email,
+          servizio: tipo?.nome || form.servizio.trim() || null,
+          tipoSedutaId: tipo?.id ?? null,
+          data: data.toISOString(),
+          durata: parseInt(form.durata) || 45,
+          note: form.note,
+          pazienteId,
+        }),
+      })
+      if (!res.ok) {
+        setErroreNuovo('Non è stato possibile salvare l\'appuntamento. Riprova.')
+        return
+      }
+      setShowNuovo(null)
+      fetchAll()
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const formValido = form.pazienteId === NUOVO_PAZIENTE
+    ? Boolean(form.clienteNome.trim() && form.nuovoEmail.trim() && form.nuovoTelefono.trim())
+    : Boolean(form.pazienteId)
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekEnd = addDays(weekStart, 6)
@@ -525,7 +602,7 @@ export default function CalendarioPage() {
       {/* Modal nuovo appuntamento */}
       {showNuovo && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 overflow-y-auto" style={{ maxHeight: '90vh' }}>
             <h2 className="text-lg font-bold text-ink-navy">
               Nuovo appuntamento — {showNuovo.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
             </h2>
@@ -534,16 +611,35 @@ export default function CalendarioPage() {
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Paziente</label>
                 <select value={form.pazienteId} onChange={e => setForm({ ...form, pazienteId: e.target.value })}
                   className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
-                  <option value="">— Seleziona paziente esistente —</option>
+                  <option value="">— Seleziona paziente —</option>
                   {pazienti.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  <option value={NUOVO_PAZIENTE}>+ Nuovo paziente</option>
                 </select>
               </div>
-              {!form.pazienteId && (
-                <div>
-                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Oppure nome (paziente non censito)</label>
-                  <input value={form.clienteNome} onChange={e => setForm({ ...form, clienteNome: e.target.value })}
-                    placeholder="Mario Rossi"
-                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+              {form.pazienteId === NUOVO_PAZIENTE && (
+                <div className="bg-mist rounded-xl p-3 space-y-3">
+                  <p className="text-xs font-semibold text-ink-navy/45 uppercase tracking-wider">Nuovo paziente</p>
+                  <div>
+                    <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome e cognome *</label>
+                    <input value={form.clienteNome} onChange={e => setForm({ ...form, clienteNome: e.target.value })}
+                      placeholder="Mario Rossi" autoFocus
+                      className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">Email *</label>
+                      <input type="email" value={form.nuovoEmail} onChange={e => setForm({ ...form, nuovoEmail: e.target.value })}
+                        placeholder="mario@email.com"
+                        className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">Telefono *</label>
+                      <input type="tel" value={form.nuovoTelefono} onChange={e => setForm({ ...form, nuovoTelefono: e.target.value })}
+                        placeholder="333 1234567"
+                        className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                    </div>
+                  </div>
+                  <p className="text-xs text-ink-navy/40">Verrà aggiunto automaticamente alla lista pazienti.</p>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
@@ -560,20 +656,41 @@ export default function CalendarioPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo di seduta</label>
-                <input value={form.servizio} onChange={e => setForm({ ...form, servizio: e.target.value })}
-                  placeholder="Es. Terapia manuale, Valutazione..."
-                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                <select value={form.tipoSedutaId} onChange={e => selezionaTipoSeduta(e.target.value)}
+                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
+                  <option value="">— Seleziona —</option>
+                  {tipiSeduta.map(t => <option key={t.id} value={t.id}>{t.nome} · {t.durata} min</option>)}
+                  <option value={TIPO_ALTRO}>Altro</option>
+                </select>
+                {tipiSeduta.length === 0 && (
+                  <p className="text-xs text-ink-navy/40 mt-1">
+                    Non hai ancora tipi di seduta. <Link href="/care/dashboard/sedute" className="text-electric-blue font-semibold hover:underline">Creane uno</Link>.
+                  </p>
+                )}
               </div>
+              {form.tipoSedutaId === TIPO_ALTRO && (
+                <div>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Specifica il trattamento</label>
+                  <input value={form.servizio} onChange={e => setForm({ ...form, servizio: e.target.value })}
+                    placeholder="Es. Valutazione posturale"
+                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Note</label>
                 <textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} rows={2}
                   className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
               </div>
             </div>
+            {erroreNuovo && (
+              <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erroreNuovo}</p>
+            )}
             <div className="flex gap-3">
               <button onClick={() => setShowNuovo(null)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-lg hover:bg-mist">Annulla</button>
-              <button onClick={handleCreate} disabled={!form.pazienteId && !form.clienteNome.trim()}
-                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">Salva</button>
+              <button onClick={handleCreate} disabled={salvando || !formValido}
+                className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">
+                {salvando ? 'Salvataggio...' : 'Salva'}
+              </button>
             </div>
           </div>
         </div>

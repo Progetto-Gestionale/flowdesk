@@ -169,6 +169,9 @@ model Appuntamento {
   tavoliIds    String?
   pazienteId   String?      // Flowest Care: collega l'appuntamento a un paziente
   tipoSedutaId String?      // Flowest Care: collega l'appuntamento a un tipo di seduta
+  // Flowest Care — proposta di un orario diverso, che il paziente accetta via email
+  tokenRisposta     String? @unique
+  messaggioProposta String?
   createdAt    DateTime     @default(now())
   tavolo       Tavolo?      @relation(fields: [tavoloId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
@@ -239,7 +242,12 @@ model DocumentoPaziente {
   userId     String
   pazienteId String
   nome       String
-  url        String
+  url        String?  // link esterno (Drive, Dropbox…) — alternativo al file caricato
+  // I referti restano nel DB e si scaricano da una route protetta da auth: sono dati
+  // sanitari, non possono finire nel bucket pubblico usato per le foto dei piatti.
+  contenuto  String?  // file caricato, in base64
+  mimeType   String?
+  dimensione Int?     // byte del file originale
   tipo       String?  // referto | prescrizione | radiografia | altro
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
