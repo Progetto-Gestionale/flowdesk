@@ -341,8 +341,6 @@ function PrenotazioniStrumenti({ publicId }: { publicId: string }) {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const prenotaUrl = `${origin}/food/prenota/${publicId}`
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(prenotaUrl)}&size=400x400`
-  const buttonCode = `<a href="${prenotaUrl}" target="_blank" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:#fff;border-radius:8px;text-decoration:none;font-family:sans-serif;font-weight:600">Prenota ora</a>`
-  const iframeCode = `<iframe src="${prenotaUrl}" width="100%" height="700" frameborder="0" style="border-radius:12px"></iframe>`
 
   return (
     <div className="space-y-4 mb-4">
@@ -383,33 +381,6 @@ function PrenotazioniStrumenti({ publicId }: { publicId: string }) {
         </div>
       </div>
 
-      {/* Pulsante per sito */}
-      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
-        <p className="font-medium text-ink-navy text-sm">Pulsante &ldquo;Prenota ora&rdquo; per il sito</p>
-        <p className="text-xs text-ink-navy/50">Incolla questo codice HTML nel tuo sito web per aggiungere un pulsante di prenotazione.</p>
-        <div className="bg-mist rounded-xl p-3 font-mono text-xs text-ink-navy/70 break-all">{buttonCode}</div>
-        <div className="flex gap-2">
-          <button onClick={() => copia('btn', buttonCode)}
-            className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
-            {copiato === 'btn' ? '✓ Copiato' : 'Copia codice'}
-          </button>
-          <a href={prenotaUrl} target="_blank" rel="noopener noreferrer"
-            className="px-4 py-2 rounded-xl border border-ink-navy/15 text-ink-navy/70 text-sm font-medium hover:bg-mist">
-            Anteprima →
-          </a>
-        </div>
-      </div>
-
-      {/* iframe embed */}
-      <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
-        <p className="font-medium text-ink-navy text-sm">Incorpora pagina intera nel sito</p>
-        <p className="text-xs text-ink-navy/50">La pagina di prenotazione comparirà direttamente all&apos;interno del tuo sito.</p>
-        <div className="bg-mist rounded-xl p-3 font-mono text-xs text-ink-navy/70 break-all">{iframeCode}</div>
-        <button onClick={() => copia('iframe', iframeCode)}
-          className="px-4 py-2 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
-          {copiato === 'iframe' ? '✓ Copiato' : 'Copia codice'}
-        </button>
-      </div>
     </div>
   )
 }
