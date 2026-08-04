@@ -667,14 +667,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                   {!isSelected && tavoliOccupati?.has(t.id) && (
                     <div style={{ position: 'absolute', inset: -4, borderRadius: isC ? '50%' : 13, border: '2.5px solid #22c55e', pointerEvents: 'none', zIndex: 4, opacity: 0.95 }} />
                   )}
-                  {gruppo && !isSelected && (() => {
-                    // Se il tavolo è anche occupato (bordo verde a inset -4), spingo il tratteggio
-                    // arancione dei tavoli legati verso l'esterno così restano visibili entrambi.
-                    const occ = tavoliOccupati?.has(t.id)
-                    const off = occ ? -9 : -4
-                    const rad = isC ? '50%' : (occ ? 16 : 13)
-                    return <div style={{ position: 'absolute', inset: off, borderRadius: rad, border: '2.5px dashed #f97316', pointerEvents: 'none', zIndex: 3 }} />
-                  })()}
+                  {/* Riquadro tratteggiato dei tavoli uniti rimosso: l'unione si capisce già dall'etichetta (es. T2+3). */}
                   {/* Segnale "ordine pronto" dentro il riquadro (sparisce una volta aperto il tavolo) */}
                   {tavoliPronti?.has(t.id) && (
                     <div title="Ordine pronto" style={{ position: 'absolute', top: 6, right: 6, zIndex: 6, width: 22, height: 22, borderRadius: '50%', backgroundColor: '#dc2626', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, lineHeight: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.45)', border: '1.5px solid #fff', pointerEvents: 'none' }}>!</div>

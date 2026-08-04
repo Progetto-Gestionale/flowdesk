@@ -26,7 +26,7 @@ export async function GET() {
   const end = new Date(start)
   end.setUTCDate(end.getUTCDate() + 1)
 
-  const [ordiniTavolo, ordiniAspDel, appuntamenti] = await Promise.all([
+  const [ordiniTavolo, ordiniAspDel, appuntamenti, tavoli, ordiniAperti] = await Promise.all([
     prisma.ordine.findMany({
       where: { userId: user.id, tipo: 'tavolo', status: 'chiuso', createdAt: { gte: start, lt: end } },
       select: { id: true, totale: true, coperti: true, gruppoId: true, tavoloId: true, tavolo: true, createdAt: true, closedAt: true },
@@ -39,6 +39,9 @@ export async function GET() {
       where: { userId: user.id, data: { gte: start, lt: end }, status: { in: ['confermato', 'completato', 'pronto'] } },
       select: { coperti: true, servizio: true },
     }),
+    // Tavoli/coperti liberi ORA: tutti i tavoli e i conti attualmente aperti (indipendenti dalla serata).
+    prisma.tavolo.findMany({ where: { userId: user.id }, select: { id: true, posti: true, gruppoId: true } }),
+    prisma.ordine.findMany({ where: { userId: user.id, status: { not: 'chiuso' } }, select: { tavoloId: true, gruppoId: true } }),
   ])
 
   // Coperti dai conti chiusi = una entry per conto (gruppo di tavoli uniti o singolo tavolo),
@@ -66,6 +69,17 @@ export async function GET() {
   const prenotazioniNum = prenTavolo.length
   const prenotazioniCoperti = prenTavolo.reduce((s, a) => s + (a.coperti ?? 0), 0)
 
+  // Tavoli liberi ORA = tavoli senza un conto aperto. Un conto aperto (ordine non chiuso)
+  // occupa il tavolo direttamente (tavoloId) o tutti i tavoli del suo gruppo (gruppoId).
+  const occupati = new Set<string>()
+  for (const o of ordiniAperti) {
+    if (o.tavoloId) occupati.add(o.tavoloId)
+    if (o.gruppoId) tavoli.filter(t => t.gruppoId === o.gruppoId).forEach(t => occupati.add(t.id))
+  }
+  const liberi = tavoli.filter(t => !occupati.has(t.id))
+  const tavoliLiberi = liberi.length
+  const copertiLiberi = liberi.reduce((s, t) => s + (t.posti ?? 0), 0)
+
   return NextResponse.json({
     prenotazioniNum,
     prenotazioniCoperti,
@@ -73,5 +87,8 @@ export async function GET() {
     incassoTavoli,
     incassoOrdiniDelivery,
     incassoTotale: incassoTavoli + incassoOrdiniDelivery,
+    tavoliLiberi,
+    copertiLiberi,
+    tavoliTotali: tavoli.length,
   })
 }
