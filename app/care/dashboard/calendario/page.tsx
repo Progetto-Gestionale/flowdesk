@@ -353,7 +353,8 @@ export default function CalendarioPage() {
   // quelle ancora "in attesa" (che vivono nella pagina Richieste finché non le accetti).
   function appsPerGiorno(day: Date) {
     return appuntamenti
-      .filter(a => isSameDay(new Date(a.data), day) && a.status !== 'in_attesa')
+      // Fuori anche quelle con una proposta in sospeso: il paziente non ha ancora risposto
+      .filter(a => isSameDay(new Date(a.data), day) && a.status !== 'in_attesa' && a.status !== 'proposta_inviata')
       .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
   }
 

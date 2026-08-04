@@ -9,6 +9,7 @@ const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Lug
 const GIORNI_INIZIALE = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
+  proposta_inviata: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Proposta inviata' },
   confermato: { bg: 'bg-electric-blue/15', text: 'text-electric-blue', label: 'Confermato' },
   completato: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Completato' },
   no_show: { bg: 'bg-orange-100', text: 'text-orange-600', label: 'No-show' },
@@ -192,17 +193,17 @@ function PropostaModal({ app, tipi, invio, errore, onClose, onInvia }: {
     ora: `${String(iniziale.getHours()).padStart(2, '0')}:${String(iniziale.getMinutes()).padStart(2, '0')}`,
     tipoSedutaId: tipi.find(t => t.nome === app.servizio)?.id ?? '',
     servizioAltro: tipi.some(t => t.nome === app.servizio) ? '' : (app.servizio ?? ''),
-    durata: String(app.durata),
     messaggio: '',
   })
 
+  // La durata segue il tipo di seduta scelto; se è "Altro" resta quella della richiesta
+  const durataProposta = tipi.find(t => t.id === form.tipoSedutaId)?.durata ?? app.durata
+
   function selezionaTipo(id: string) {
-    const tipo = tipi.find(t => t.id === id)
     setForm(f => ({
       ...f,
       tipoSedutaId: id,
       servizioAltro: id === TIPO_ALTRO ? f.servizioAltro : '',
-      durata: tipo ? String(tipo.durata) : f.durata,
     }))
   }
 
@@ -235,21 +236,16 @@ function PropostaModal({ app, tipi, invio, errore, onClose, onInvia }: {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo di seduta</label>
-            <select value={form.tipoSedutaId} onChange={e => selezionaTipo(e.target.value)}
-              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
-              <option value="">— Seleziona —</option>
-              {tipi.map(t => <option key={t.id} value={t.id}>{t.nome} · {t.durata} min</option>)}
-              <option value={TIPO_ALTRO}>Altro</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Durata</label>
-            <input type="number" value={form.durata} onChange={e => setForm({ ...form, durata: e.target.value })}
-              className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-ink-navy/70 mb-1">Tipo di seduta</label>
+          <select value={form.tipoSedutaId} onChange={e => selezionaTipo(e.target.value)}
+            className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
+            <option value="">— Seleziona —</option>
+            {tipi.map(t => <option key={t.id} value={t.id}>{t.nome} · {t.durata} min</option>)}
+            <option value={TIPO_ALTRO}>Altro</option>
+          </select>
+          {/* La durata arriva dal tipo di seduta: non si imposta a mano */}
+          <p className="text-xs text-ink-navy/35 mt-1">Durata: {durataProposta} minuti</p>
         </div>
 
         {form.tipoSedutaId === TIPO_ALTRO && (
@@ -276,7 +272,7 @@ function PropostaModal({ app, tipi, invio, errore, onClose, onInvia }: {
             onClick={() => onInvia({
               data: form.data,
               ora: form.ora,
-              durata: parseInt(form.durata) || app.durata,
+              durata: durataProposta,
               tipoSedutaId: form.tipoSedutaId && form.tipoSedutaId !== TIPO_ALTRO ? form.tipoSedutaId : null,
               tipoSeduta: form.servizioAltro.trim() || null,
               messaggio: form.messaggio,
@@ -387,12 +383,13 @@ export default function RichiestePage() {
     fetchAll()
   }
 
-  // In attesa di una risposta: quelle nuove e quelle a cui abbiamo proposto un altro orario
+  // Da verificare: solo quelle a cui non abbiamo ancora risposto
   const daVerificare = appuntamenti
-    .filter(a => a.status === 'in_attesa' || a.status === PROPOSTA)
+    .filter(a => a.status === 'in_attesa')
     .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
-  const delGiorno = appuntamenti
-    .filter(a => a.status !== 'in_attesa' && a.status !== PROPOSTA && toDateStr(new Date(a.data)) === giorno)
+  // Processate: già accettate, rifiutate o con una proposta in attesa di risposta
+  const processate = appuntamenti
+    .filter(a => a.status !== 'in_attesa' && toDateStr(new Date(a.data)) === giorno)
     .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
 
   const oggi = toDateStr(new Date())
@@ -458,13 +455,13 @@ export default function RichiestePage() {
             )}
           </div>
 
-          {/* ── PRENOTAZIONI PER GIORNO ── */}
+          {/* ── RICHIESTE PROCESSATE PER GIORNO ── */}
           <div>
             <button onClick={() => setPrenotazioniAperte(v => !v)} className="w-full flex items-center gap-3 py-2 text-left group">
               <div className="h-px flex-1 bg-ink-navy/8" />
               <span className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider group-hover:text-ink-navy/60 transition-colors flex items-center gap-1.5">
-                Prenotazioni
-                <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{delGiorno.length}</span>
+                Richieste processate
+                <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{processate.length}</span>
                 <span className="text-ink-navy/30">{prenotazioniAperte ? '▲' : '▼'}</span>
               </span>
               <div className="h-px flex-1 bg-ink-navy/8" />
@@ -494,8 +491,8 @@ export default function RichiestePage() {
                   </div>
                 </div>
 
-                {delGiorno.length === 0 ? (
-                  <p className="text-sm text-ink-navy/30 text-center py-4">Nessuna prenotazione per {fmtGiornoLabel(giorno).toLowerCase()}</p>
+                {processate.length === 0 ? (
+                  <p className="text-sm text-ink-navy/30 text-center py-4">Nessuna richiesta processata per {fmtGiornoLabel(giorno).toLowerCase()}</p>
                 ) : (
                   <div className="bg-white border border-ink-navy/10 rounded-xl overflow-hidden">
                     <table className="w-full text-sm">
@@ -508,7 +505,7 @@ export default function RichiestePage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {delGiorno.map(a => {
+                        {processate.map(a => {
                           const st = STATUS_STYLE[a.status] ?? STATUS_STYLE.confermato
                           return (
                             <tr key={a.id} onClick={() => setSelected(a)} className="hover:bg-mist cursor-pointer transition-colors">
@@ -635,7 +632,8 @@ export default function RichiestePage() {
                     <>
                       <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Stato</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(STATUS_STYLE).map(([key, s]) => (
+                        {/* "Proposta inviata" non è uno stato che si sceglie: lo imposta l'invio della proposta */}
+                        {Object.entries(STATUS_STYLE).filter(([k]) => k !== PROPOSTA).map(([key, s]) => (
                           <button key={key} onClick={() => cambiaStato(selected.id, key)}
                             className={`text-sm py-2 rounded-lg font-medium transition-colors ${selected.status === key ? `${s.bg} ${s.text}` : 'bg-mist text-ink-navy/60 hover:bg-ink-navy/10'}`}>
                             {s.label}

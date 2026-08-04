@@ -9,11 +9,21 @@ const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Lug
 const GIORNI_INIZIALE = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 
 // Calendario mensile inline per scegliere il giorno della prenotazione.
-function CalendarioMese({ selected, min, onSelect }: {
-  selected: string; min: string; onSelect: (d: string) => void
+// I giorni in cui il servizio scelto è prenotabile sono evidenziati in verde;
+// gli altri restano spenti e non cliccabili, così non si prova a caso.
+function CalendarioMese({ selected, min, onSelect, disponibili, caricando, onMeseCambiato }: {
+  selected: string
+  min: string
+  onSelect: (d: string) => void
+  disponibili: Set<string>
+  caricando: boolean
+  onMeseCambiato: (mese: string) => void
 }) {
   const [viewYear, setViewYear] = useState(() => parseInt(selected.slice(0, 4)))
   const [viewMonth, setViewMonth] = useState(() => parseInt(selected.slice(5, 7)) - 1)
+
+  const mese = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`
+  useEffect(() => { onMeseCambiato(mese) }, [mese])
 
   const firstDay = new Date(viewYear, viewMonth, 1)
   const lastDay = new Date(viewYear, viewMonth + 1, 0)
@@ -41,19 +51,30 @@ function CalendarioMese({ selected, min, onSelect }: {
       <div className="grid grid-cols-7 gap-1">
         {cells.map((day, i) => {
           if (!day) return <span key={i} />
-          const k = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const k = `${mese}-${String(day).padStart(2, '0')}`
           const isSel = k === selected
           const isPast = k < min
+          const libero = disponibili.has(k)
+          // Finché arrivano i giorni disponibili non blocchiamo nulla, per non far
+          // lampeggiare il calendario tutto spento a ogni cambio mese
+          const bloccato = isPast || (!caricando && !libero)
           return (
-            <button key={i} type="button" disabled={isPast} onClick={() => onSelect(k)}
+            <button key={i} type="button" disabled={bloccato} onClick={() => onSelect(k)}
               className={`h-9 w-full rounded-lg text-sm font-medium transition-colors
                 ${isSel ? 'bg-electric-blue text-white font-bold'
-                  : isPast ? 'text-ink-navy/20 cursor-not-allowed'
-                  : 'hover:bg-electric-blue/10 text-ink-navy'}`}>
+                  : bloccato ? 'text-ink-navy/20 cursor-not-allowed'
+                  : libero ? 'bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100'
+                  : 'text-ink-navy hover:bg-electric-blue/10'}`}>
               {day}
             </button>
           )
         })}
+      </div>
+      <div className="flex items-center gap-1.5 mt-3">
+        <span className="w-3 h-3 rounded bg-emerald-50 border border-emerald-200 shrink-0" />
+        <span className="text-xs text-ink-navy/40">
+          {caricando ? 'Cerco i giorni disponibili...' : 'Giorni disponibili per questo servizio'}
+        </span>
       </div>
     </div>
   )
@@ -91,10 +112,20 @@ export default function PrenotaCarePage() {
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [oraScelta, setOraScelta] = useState<string | null>(null)
 
+  const [giorniDisponibili, setGiorniDisponibili] = useState<Set<string>>(new Set())
+  const [caricandoGiorni, setCaricandoGiorni] = useState(false)
+  const [meseVisibile, setMeseVisibile] = useState(() => oggiStr().slice(0, 7))
+
   const [form, setForm] = useState({ nome: '', email: '', telefono: '', note: '' })
   const [inviando, setInviando] = useState(false)
   const [errore, setErrore] = useState<string | null>(null)
   const [confermato, setConfermato] = useState(false)
+
+  // Riconoscimento del paziente dall'email, prima di chiedergli i dati
+  const [emailCercata, setEmailCercata] = useState<string | null>(null)
+  const [pazienteNoto, setPazienteNoto] = useState<{ nome: string; telefonoMascherato: string | null } | null>(null)
+  const [cercando, setCercando] = useState(false)
+  const [erroreEmail, setErroreEmail] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/public/care-tipi-seduta?publicId=${publicId}`)
@@ -115,6 +146,54 @@ export default function PrenotaCarePage() {
       .then(r => r.json())
       .then(d => { setSlots(d.slots ?? []); setLoadingSlots(false) })
   }, [step, tipoScelto, dataScelta, publicId])
+
+  // Giorni prenotabili del mese visibile, per il colore verde nel calendario
+  useEffect(() => {
+    if (step < 2 || !tipoScelto) return
+    setCaricandoGiorni(true)
+    fetch(`/api/public/care-giorni-disponibili?publicId=${publicId}&tipoSedutaId=${tipoScelto.id}&mese=${meseVisibile}`)
+      .then(r => r.json())
+      .then(d => setGiorniDisponibili(new Set<string>(d.giorni ?? [])))
+      .catch(() => setGiorniDisponibili(new Set()))
+      .finally(() => setCaricandoGiorni(false))
+  }, [step, tipoScelto, meseVisibile, publicId])
+
+  /** Cerca il paziente dall'email: se lo troviamo gli chiediamo solo conferma. */
+  async function verificaEmail() {
+    const email = form.email.trim()
+    if (!email.includes('@')) { setErroreEmail('Controlla l\'indirizzo email'); return }
+    setCercando(true)
+    setErroreEmail(null)
+    try {
+      const res = await fetch('/api/public/care-paziente-cerca', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicId, email }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setErroreEmail('Non riesco a verificare l\'email, riprova.'); return }
+      setPazienteNoto(d.trovato ? { nome: d.nome, telefonoMascherato: d.telefonoMascherato } : null)
+      if (d.trovato) setForm(f => ({ ...f, nome: d.nome }))
+      setEmailCercata(email)
+    } catch {
+      setErroreEmail('Non riesco a verificare l\'email, riprova.')
+    } finally {
+      setCercando(false)
+    }
+  }
+
+  /** "Non sono io": si prosegue come paziente nuovo, con i campi da compilare. */
+  function nonSonoIo() {
+    setPazienteNoto(null)
+    setForm(f => ({ ...f, nome: '', telefono: '' }))
+  }
+
+  function cambiaEmail() {
+    setEmailCercata(null)
+    setPazienteNoto(null)
+    setErroreEmail(null)
+    setForm(f => ({ ...f, nome: '', telefono: '' }))
+  }
 
   async function handleConferma() {
     if (!tipoScelto || !oraScelta) return
@@ -188,7 +267,10 @@ export default function PrenotaCarePage() {
             {step >= 2 && tipoScelto && (
               <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5">
                 <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-3">2 — Data e ora</p>
-                <CalendarioMese selected={dataScelta} min={oggiStr()} onSelect={setDataScelta} />
+                <CalendarioMese
+                  selected={dataScelta} min={oggiStr()} onSelect={setDataScelta}
+                  disponibili={giorniDisponibili} caricando={caricandoGiorni}
+                  onMeseCambiato={setMeseVisibile} />
                 <div className="mt-3">
                   {loadingSlots ? (
                     <p className="text-sm text-ink-navy/35 py-4 text-center">Caricamento orari...</p>
@@ -212,37 +294,87 @@ export default function PrenotaCarePage() {
             {step >= 3 && oraScelta && (
               <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5">
                 <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-3">3 — I tuoi dati</p>
-                <div className="space-y-3">
-                  <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
-                    placeholder="Nome e cognome *"
-                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                      placeholder="Email *" type="email"
-                      className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-                    <input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })}
-                      placeholder="Telefono" type="tel"
-                      className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+
+                {/* Prima l'email: da lì capiamo se ci sei già o sei un paziente nuovo */}
+                {!emailCercata ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-ink-navy/70 mb-1">La tua email</label>
+                      <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                        onKeyDown={e => { if (e.key === 'Enter') verificaEmail() }}
+                        placeholder="mario@email.com" type="email" autoFocus
+                        className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                      <p className="text-xs text-ink-navy/35 mt-1.5">
+                        Se sei già stato da noi la riconosciamo e non ti facciamo riscrivere tutto.
+                      </p>
+                    </div>
+                    {erroreEmail && <p className="text-sm text-red-500">{erroreEmail}</p>}
+                    <button onClick={verificaEmail} disabled={cercando || !form.email.trim()}
+                      className="w-full inline-flex items-center justify-center gap-2 bg-electric-blue text-white font-bold text-sm py-3 rounded-lg hover:bg-electric-blue/90 transition-colors disabled:opacity-40">
+                      {cercando ? 'Verifico...' : 'Continua'}
+                      <span className="w-4 h-4"><IconArrowRight /></span>
+                    </button>
                   </div>
-                  <textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} rows={2}
-                    placeholder="Note per il fisioterapista (opzionale)"
-                    className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
-                </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 bg-mist rounded-lg px-3 py-2">
+                      <span className="text-sm text-ink-navy/70 truncate">{emailCercata}</span>
+                      <button onClick={cambiaEmail} className="text-xs font-semibold text-electric-blue hover:underline shrink-0">
+                        Cambia
+                      </button>
+                    </div>
 
-                {errore && <p className="text-sm text-red-500 mt-3">{errore}</p>}
+                    {pazienteNoto ? (
+                      // Paziente riconosciuto: gli chiediamo solo se è davvero lui
+                      <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 text-emerald-600 shrink-0"><IconCheck /></span>
+                          <p className="text-sm font-semibold text-emerald-900">Bentornato!</p>
+                        </div>
+                        <p className="text-sm text-emerald-900/80 mt-2">
+                          Risulti già registrato come <strong>{pazienteNoto.nome}</strong>
+                          {pazienteNoto.telefonoMascherato && <> · {pazienteNoto.telefonoMascherato}</>}.
+                        </p>
+                        <button onClick={nonSonoIo}
+                          className="mt-2 text-xs font-semibold text-emerald-800 hover:underline">
+                          Non sono io
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm text-ink-navy/50">
+                          È la prima volta che prenoti: lasciaci i tuoi dati.
+                        </p>
+                        <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
+                          placeholder="Nome e cognome *" autoFocus
+                          className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                        <input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })}
+                          placeholder="Telefono *" type="tel"
+                          className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                      </>
+                    )}
 
-                <div className="mt-4 bg-mist rounded-lg px-4 py-3 text-sm text-ink-navy/70">
-                  <strong>{tipoScelto?.nome}</strong> — {fmtGiorno(dataScelta)} alle {oraScelta} ({tipoScelto?.durata} min)
-                </div>
+                    <textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} rows={2}
+                      placeholder="Note per il fisioterapista (opzionale)"
+                      className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
 
-                <button onClick={handleConferma} disabled={!form.nome.trim() || !form.email.trim() || inviando}
-                  className="mt-4 w-full inline-flex items-center justify-center gap-2 bg-electric-blue text-white font-bold text-sm py-3 rounded-lg hover:bg-electric-blue/90 transition-colors disabled:opacity-40">
-                  {inviando ? 'Invio...' : 'Invia richiesta'}
-                  <span className="w-4 h-4"><IconArrowRight /></span>
-                </button>
-                <p className="mt-2 text-xs text-ink-navy/35 text-center">
-                  Serve l&apos;email: è lì che ricevi il riepilogo e la conferma dello studio.
-                </p>
+                    {errore && <p className="text-sm text-red-500">{errore}</p>}
+
+                    <div className="bg-mist rounded-lg px-4 py-3 text-sm text-ink-navy/70">
+                      <strong>{tipoScelto?.nome}</strong> — {fmtGiorno(dataScelta)} alle {oraScelta} ({tipoScelto?.durata} min)
+                    </div>
+
+                    <button onClick={handleConferma}
+                      disabled={inviando || !form.nome.trim() || (!pazienteNoto && !form.telefono.trim())}
+                      className="w-full inline-flex items-center justify-center gap-2 bg-electric-blue text-white font-bold text-sm py-3 rounded-lg hover:bg-electric-blue/90 transition-colors disabled:opacity-40">
+                      {inviando ? 'Invio...' : 'Invia richiesta'}
+                      <span className="w-4 h-4"><IconArrowRight /></span>
+                    </button>
+                    <p className="text-xs text-ink-navy/35 text-center">
+                      Riceverai il riepilogo e la conferma dello studio via email.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
