@@ -86,11 +86,14 @@ export default function ResocontoSerata() {
         {box.map(it => (
           <div
             key={it.label}
-            className="bg-white border border-ink-navy/10 rounded-2xl shadow-sm p-4 aspect-square flex flex-col items-center justify-center text-center gap-2"
+            className="bg-white border border-ink-navy/10 rounded-2xl shadow-sm p-4 aspect-square flex flex-col text-center"
           >
-            <p className="text-sm font-semibold text-ink-navy/45 uppercase tracking-wider leading-tight">{it.label}</p>
-            <p className={`text-2xl sm:text-3xl xl:text-4xl font-extrabold tabular-nums leading-none break-words ${it.accent} ${loading ? 'opacity-30' : ''}`}>{it.value}</p>
-            <p className="text-sm text-ink-navy/40">{it.sub}</p>
+            {/* Titolo in alto, separato da una riga orizzontale dai dati sottostanti */}
+            <p className="text-sm font-semibold text-ink-navy/45 uppercase tracking-wider leading-tight pb-3 border-b border-ink-navy/10">{it.label}</p>
+            <div className="flex-1 flex flex-col items-center justify-center gap-1.5">
+              <p className={`text-2xl sm:text-3xl xl:text-4xl font-extrabold tabular-nums leading-none break-words ${it.accent} ${loading ? 'opacity-30' : ''}`}>{it.value}</p>
+              <p className="text-sm text-ink-navy/40">{it.sub}</p>
+            </div>
           </div>
         ))}
       </div>
