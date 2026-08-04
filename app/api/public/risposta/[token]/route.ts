@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendEmailConferma, sendEmailRifiuto } from '@/lib/email'
+import { romeWallTimeToDate } from '@/lib/romeTime'
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -30,7 +31,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     const items = JSON.parse(preventivo.items ?? '[]') as Array<{ descrizione?: string; coperti?: number; allergie?: string; occasione?: string; durata?: number }>
     const note = preventivo.note ?? ''
     const dataMatch = note.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
-    const oraMatch = note.match(/ORA_ISO:(\d{2}:\d{2})/)
+    // L'ora può stare dentro DATA_ISO (prenotazioni pubbliche: DATA_ISO:YYYY-MM-DDThh:mm) oppure in ORA_ISO.
+    const oraMatch = note.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? note.match(/ORA_ISO:(\d{2}:\d{2})/)
     const copertiNote = note.match(/Coperti:\s*(\d+)/)
     const allergieNote = note.match(/Allergie:\s*([^.]+)/)
     const occasioneNote = note.match(/Occasione:\s*([^.]+)/)
@@ -52,7 +54,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
             clienteNome: preventivo.clienteName,
             clienteEmail: preventivo.clienteEmail,
             servizio: isTavolo ? 'Prenotazione tavolo' : (items[0]?.descrizione ?? preventivo.tipo),
-            data: new Date(`${dataMatch[1]}T${ora}:00`),
+            // Orario italiano → istante UTC corretto (evita lo slittamento di +1/+2 sul server UTC).
+            data: romeWallTimeToDate(dataMatch[1], ora),
             durata: items[0]?.durata ?? (isTavolo ? 90 : 15),
             coperti: items[0]?.coperti ?? (copertiNote ? parseInt(copertiNote[1]) : 1),
             allergie: items[0]?.allergie ?? allergieNote?.[1]?.trim() ?? null,
