@@ -5,6 +5,7 @@ import OrarioSelect from '@/app/components/OrarioSelect'
 import Link from 'next/link'
 import { IconTrash, IconArrowRight, IconClock } from '@/app/components/icons'
 import SedutaPopup from './../components/SedutaPopup'
+import { segnalaAggiornamento } from './../components/notificheUtil'
 
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_CODICE = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
@@ -251,12 +252,14 @@ export default function CalendarioPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     })
+    segnalaAggiornamento()
   }
 
   async function handleDelete(id: string) {
     await fetch(`/api/appuntamenti/${id}`, { method: 'DELETE', credentials: 'include' })
     setSelected(null)
     fetchAll()
+    segnalaAggiornamento()
   }
 
   function openNuovo(day: Date) {
@@ -333,6 +336,7 @@ export default function CalendarioPage() {
       }
       setShowNuovo(null)
       fetchAll()
+      segnalaAggiornamento()
     } finally {
       setSalvando(false)
     }

@@ -8,6 +8,7 @@ import {
   IconUpload, IconFile, IconLink,
 } from '@/app/components/icons'
 import SedutaPopup, { TitoloSeduta } from '../../components/SedutaPopup'
+import { segnalaAggiornamento } from '../../components/notificheUtil'
 
 const MAX_BYTE = 3 * 1024 * 1024
 
@@ -158,6 +159,7 @@ export default function PazienteDetailPage() {
     setModalSeduta(false)
     setFormSeduta({ data: '', tipo: '', note: '' })
     fetchAll()
+    segnalaAggiornamento()
   }
 
   function apriModalDoc(modo: 'file' | 'link') {
@@ -245,6 +247,7 @@ export default function PazienteDetailPage() {
   async function handleDeleteSeduta(sedutaId: string) {
     await fetch(`/api/sedute/${sedutaId}`, { method: 'DELETE', credentials: 'include' })
     fetchAll()
+    segnalaAggiornamento()
   }
 
   async function handleDeleteDoc(docId: string) {

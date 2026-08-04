@@ -3,47 +3,16 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { IconBell, IconArrowRight } from '@/app/components/icons'
-import { fmtOra, iconaPerTipo, type Notifica } from './notificheUtil'
+import { fmtOra, iconaPerTipo } from './notificheUtil'
+import { useNotifiche } from './NotificheProvider'
 
 // Campanella della TopBar: pallino blu quando c'è da leggere, e al click il
 // riepilogo di oggi. Lo storico completo sta in /care/dashboard/notifiche.
 export default function Campanella() {
-  const [notifiche, setNotifiche] = useState<Notifica[]>([])
-  const [daLeggere, setDaLeggere] = useState(0)
-  const [richiesteDaVerificare, setRichiesteDaVerificare] = useState(0)
+  // Dati e polling stanno nel provider: qui si legge e basta
+  const { notifiche, daLeggere, richiesteDaVerificare, ricarica } = useNotifiche()
   const [aperta, setAperta] = useState(false)
   const box = useRef<HTMLDivElement>(null)
-
-  async function carica() {
-    try {
-      const [nRes, rRes] = await Promise.all([
-        fetch('/api/care/notifiche', { credentials: 'include', cache: 'no-store' }),
-        fetch('/api/care/richieste/count', { credentials: 'include', cache: 'no-store' }),
-      ])
-      if (nRes.ok) {
-        const d = await nRes.json()
-        setNotifiche(d.notifiche ?? [])
-        setDaLeggere(d.daLeggere ?? 0)
-      }
-      if (rRes.ok) {
-        const r = await rRes.json()
-        setRichiesteDaVerificare(r.daVerificare ?? 0)
-      }
-    } catch { /* la campanella non è critica: se fallisce resta com'è */ }
-  }
-
-  useEffect(() => {
-    carica()
-    const t = setInterval(carica, 30000)
-    const aggiorna = () => carica()
-    window.addEventListener('notifiche-aggiornate', aggiorna)
-    window.addEventListener('refresh-richieste-count', aggiorna)
-    return () => {
-      clearInterval(t)
-      window.removeEventListener('notifiche-aggiornate', aggiorna)
-      window.removeEventListener('refresh-richieste-count', aggiorna)
-    }
-  }, [])
 
   // Chiusura cliccando fuori
   useEffect(() => {
@@ -63,9 +32,8 @@ export default function Campanella() {
     setAperta(prossimo)
     // Aprendo si azzera il pallino: le notifiche di oggi risultano viste
     if (prossimo && daLeggere > 0) {
-      setDaLeggere(0)
       await fetch('/api/care/notifiche', { method: 'PATCH', credentials: 'include' }).catch(() => {})
-      carica()
+      ricarica()
     }
   }
 

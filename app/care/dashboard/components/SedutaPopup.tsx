@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { IconUpload, IconFile, IconLink, IconTrash } from '@/app/components/icons'
+import { segnalaAggiornamento } from './notificheUtil'
 
 const MAX_BYTE = 3 * 1024 * 1024
 
@@ -120,6 +121,7 @@ export default function SedutaPopup({
       }
 
       onSalvato()
+      segnalaAggiornamento()
       onChiudi()
     } catch {
       setErrore('Salvataggio non riuscito, riprova.')

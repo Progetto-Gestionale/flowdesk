@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Campanella from './components/Campanella'
+import NotificheProvider from './components/NotificheProvider'
+import ToastNotifiche from './components/ToastNotifiche'
 import TopBar from '@/app/components/TopBar'
 
 export default function CareDashboardLayout({ children }: { children: React.ReactNode }) {
@@ -35,14 +37,17 @@ export default function CareDashboardLayout({ children }: { children: React.Reac
   }
 
   return (
-    <div className="flex h-screen bg-mist overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar notifiche={<Campanella />} />
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
-        </main>
+    <NotificheProvider>
+      <div className="flex h-screen bg-mist overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <TopBar notifiche={<Campanella />} />
+          <main className="flex-1 overflow-y-auto p-6">
+            {children}
+          </main>
+        </div>
+        <ToastNotifiche />
       </div>
-    </div>
+    </NotificheProvider>
   )
 }

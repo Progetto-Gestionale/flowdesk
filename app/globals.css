@@ -61,8 +61,23 @@ body {
   animation: pulse-soft 2.4s ease-in-out infinite;
 }
 
+/* Toast delle notifiche: entrano da destra, con la barra che conta alla rovescia */
+@keyframes toast-barra {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(24px) scale(0.97); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-fade-up, .animate-blob, .animate-blob-slow, .animate-pulse-soft {
+  .animate-fade-up, .animate-blob, .animate-blob-slow, .animate-pulse-soft, .animate-toast-in {
     animation: none;
     opacity: 1;
   }
