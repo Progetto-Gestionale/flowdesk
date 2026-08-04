@@ -94,6 +94,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   await prisma.appuntamento.updateMany({ where: { id, userId: user.id }, data })
 
+  // Flowest Care: un appuntamento segnato "completato" entra da solo nella cartella
+  // clinica del paziente. Se lo stato viene poi cambiato, la seduta creata in
+  // automatico sparisce — quelle inserite a mano non si toccano mai.
+  if (data.status) {
+    const app = await prisma.appuntamento.findFirst({
+      where: { id, userId: user.id },
+      select: { pazienteId: true, data: true, servizio: true },
+    })
+    if (app?.pazienteId) {
+      if (data.status === 'completato') {
+        await prisma.seduta.upsert({
+          where: { appuntamentoId: id },
+          update: { data: app.data, tipo: app.servizio },
+          create: {
+            userId: user.id,
+            pazienteId: app.pazienteId,
+            appuntamentoId: id,
+            data: app.data,
+            tipo: app.servizio,
+          },
+        })
+      } else {
+        await prisma.seduta.deleteMany({ where: { appuntamentoId: id, userId: user.id } })
+      }
+    }
+  }
+
   // Quando un appuntamento viene concluso (completato/cancellato/no_show), aggiorna la richiesta collegata
   if (data.status && ['completato', 'cancellato', 'no_show'].includes(data.status)) {
     const app = await prisma.appuntamento.findFirst({

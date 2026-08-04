@@ -232,6 +232,9 @@ model Seduta {
   data       DateTime @default(now())
   tipo       String?  // es. Valutazione, Terapia manuale, Rieducazione posturale
   note       String?  // cosa è stato fatto, dolore percepito, esercizi assegnati
+  // Valorizzato per le sedute nate da un appuntamento segnato "completato".
+  // Unique così l'aggiornamento è idempotente e non crea doppioni in cartella.
+  appuntamentoId String? @unique
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
   paziente   Paziente @relation(fields: [pazienteId], references: [id])

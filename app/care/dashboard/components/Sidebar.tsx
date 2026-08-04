@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  IconGrid, IconUsers, IconCalendar, IconChartBar, IconSettings,
+  IconGrid, IconCalendar, IconChartBar, IconSettings,
   IconStethoscope, IconClipboard, IconClock,
 } from '@/app/components/icons'
 
@@ -26,7 +26,6 @@ const navCare = [
     items: [
       { label: 'Sedute', href: '/care/dashboard/sedute', Icon: IconClock },
       { label: 'Analytics', href: '/care/dashboard/analytics', Icon: IconChartBar },
-      { label: 'Staff', href: '/care/dashboard/staff', Icon: IconUsers },
     ],
   },
   {
