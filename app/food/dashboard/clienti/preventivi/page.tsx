@@ -258,15 +258,24 @@ function NuovaRichiestaModal({ onClose, onSave, initial, onAssegnaTavolo }: {
 function PropostaModificaModal({ richiesta, onClose, onInvia }: {
   richiesta: Richiesta
   onClose: () => void
-  onInvia: (messaggio: string, note: string) => void
+  onInvia: (messaggio: string, data: string, ora: string, coperti?: number) => void
 }) {
+  const isTavolo = richiesta.tipo === 'tavolo'
+  const itemsRich = (() => { try { return JSON.parse(richiesta.items ?? '[]') as Array<{ coperti?: number }> } catch { return [] } })()
+  const dataIniz = richiesta.note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)?.[1] ?? ''
+  const oraIniz = (richiesta.note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? richiesta.note?.match(/ORA_ISO:(\d{2}:\d{2})/))?.[1] ?? ''
+  const copertiIniz = String(itemsRich[0]?.coperti ?? richiesta.note?.match(/Coperti:\s*(\d+)/)?.[1] ?? (isTavolo ? '2' : ''))
+
   const [messaggio, setMessaggio] = useState('')
-  // Le note interne non sono più modificabili da questo form: si preserva il valore esistente.
-  const note = richiesta.note ?? ''
+  const [data, setData] = useState(dataIniz)
+  const [ora, setOra] = useState(oraIniz)
+  const [coperti, setCoperti] = useState(copertiIniz)
+
+  const inp = 'w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue'
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-ink-navy">Proponi modifica</h2>
@@ -280,6 +289,24 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
           {richiesta.clienteEmail && <span className="text-electric-blue"> · {richiesta.clienteEmail}</span>}
         </div>
 
+        {/* Data / orario / coperti proposti: all'accettazione l'appuntamento userà questi valori */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data proposta</label>
+            <input type="date" value={data} onChange={e => setData(e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Orario proposto</label>
+            <OrarioSelect value={ora} onChange={setOra} className={inp} />
+          </div>
+        </div>
+        {isTavolo && (
+          <div>
+            <label className="block text-sm font-medium text-ink-navy/70 mb-1">Coperti</label>
+            <input type="number" min={1} value={coperti} onChange={e => setCoperti(e.target.value)} className={inp} />
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-ink-navy/70 mb-1">Messaggio per il cliente *</label>
           <textarea
@@ -287,7 +314,7 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
             onChange={e => setMessaggio(e.target.value)}
             rows={3}
             placeholder="Es: L'orario delle 20:00 non è disponibile, possiamo offrirti le 19:30 o le 21:00. Il tavolo sarebbe in sala interna."
-            className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none"
+            className={`${inp} resize-none`}
           />
           <p className="text-xs text-ink-navy/35 mt-1">Spiega cosa cambia rispetto alla richiesta originale.</p>
         </div>
@@ -297,7 +324,7 @@ function PropostaModificaModal({ richiesta, onClose, onInvia }: {
             Annulla
           </button>
           <button
-            onClick={() => onInvia(messaggio, note)}
+            onClick={() => onInvia(messaggio, data, ora, isTavolo && coperti ? (parseInt(coperti) || undefined) : undefined)}
             disabled={!messaggio.trim()}
             className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-lg hover:bg-electric-blue/90 disabled:opacity-40">
             Invia proposta
@@ -694,7 +721,8 @@ function Richieste() {
 
         const isTavolo = corrente.tipo === 'tavolo'
         const dataMatch = corrente.note?.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
-        const oraMatch = corrente.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
+        // L'ora può stare dentro DATA_ISO (prenotazioni pubbliche) oppure in ORA_ISO.
+        const oraMatch = corrente.note?.match(/DATA_ISO:\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/) ?? corrente.note?.match(/ORA_ISO:(\d{2}:\d{2})/)
 
         // Per tipi non-tavolo con data già catturata dal bot → crea appuntamento automaticamente
         if (!isTavolo && dataMatch?.[1]) {
@@ -812,12 +840,33 @@ function Richieste() {
     fetch('/api/appuntamenti', { credentials: 'include' }).then(r => r.json()).then(d => setAppuntamenti(d.appuntamenti ?? []))
   }
 
-  async function handleInviaProposta(messaggio: string, note: string) {
+  async function handleInviaProposta(messaggio: string, data: string, ora: string, coperti?: number) {
     if (!proposta) return
+    // Aggiorna nella richiesta la data/ora (DATA_ISO + ORA_ISO) e i coperti proposti, così la
+    // proposta li porta con sé: all'accettazione l'appuntamento userà i valori aggiornati.
+    let note = (proposta.note ?? '')
+      .replace(/DATA_ISO:\S+/g, '')
+      .replace(/ORA_ISO:\S+/g, '')
+      .replace(/Coperti:\s*\d+\.?/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+    if (data && ora) note = `${note} DATA_ISO:${data}T${ora} ORA_ISO:${ora}`.trim()
+    if (coperti != null) note = `${note} Coperti: ${coperti}.`.trim()
+
+    let items = proposta.items
+    if (coperti != null) {
+      try {
+        const arr = JSON.parse(proposta.items ?? '[]') as Array<Record<string, unknown>>
+        if (arr.length === 0) arr.push({ descrizione: 'Prenotazione tavolo', quantita: 1, prezzo: 0, coperti })
+        else arr[0] = { ...arr[0], coperti }
+        items = JSON.stringify(arr)
+      } catch {}
+    }
+
     await fetch(`/api/preventivi/${proposta.id}`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ _azione: 'proposta', messaggio, note }),
+      body: JSON.stringify({ _azione: 'proposta', messaggio, note, items }),
     })
     setProposta(null)
     await fetchRichieste()
