@@ -8,6 +8,9 @@ interface Serata {
   incassoTavoli: number
   incassoOrdiniDelivery: number
   incassoTotale: number
+  tavoliLiberi: number
+  copertiLiberi: number
+  tavoliTotali: number
 }
 
 const fmtEur = (n: number) => `€ ${n.toFixed(2)}`
@@ -17,14 +20,32 @@ export default function ResocontoSerata() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/analytics/serata', { credentials: 'include', cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : null))
-      .then((d: Serata | null) => setDati(d))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    let attivo = true
+    const carica = () => {
+      fetch('/api/analytics/serata', { credentials: 'include', cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null))
+        .then((d: Serata | null) => { if (attivo) setDati(d) })
+        .catch(() => {})
+        .finally(() => { if (attivo) setLoading(false) })
+    }
+    carica()
+    const iv = setInterval(carica, 60000) // aggiorna tavoli/coperti liberi ~ogni minuto
+    return () => { attivo = false; clearInterval(iv) }
   }, [])
 
   const box: { label: string; value: string; sub: string; accent: string }[] = [
+    {
+      label: 'Tavoli liberi ora',
+      value: dati ? String(dati.tavoliLiberi) : '—',
+      sub: dati ? `su ${dati.tavoliTotali} totali` : ' ',
+      accent: 'text-electric-blue',
+    },
+    {
+      label: 'Coperti liberi ora',
+      value: dati ? String(dati.copertiLiberi) : '—',
+      sub: 'posti disponibili',
+      accent: 'text-electric-blue',
+    },
     {
       label: 'Prenotazioni serata',
       value: dati ? String(dati.prenotazioniNum) : '—',
@@ -61,7 +82,7 @@ export default function ResocontoSerata() {
           </span>
         )}
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
         {box.map(it => (
           <div
             key={it.label}
