@@ -715,7 +715,6 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   const [vista, setVista] = useState<'mappa' | 'lista' | 'conto'>('mappa')
   const [ordiniAperti, setOrdiniAperti] = useState<Ordine[]>([])
   const [ordiniChiusi, setOrdiniChiusi] = useState<Ordine[]>([])
-  const [chiudendo, setChiudendo] = useState<string | null>(null)
   const [tavoli, setTavoli] = useState<Tavolo[]>([])
   const [gruppi, setGruppi] = useState<Gruppo[]>([])
   const [sale, setSale] = useState<Sala[]>([])
@@ -821,19 +820,6 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
     setOrdiniChiusi(tutti.filter(o => o.status === 'chiuso'))
   }
 
-  async function chiudiConto(o: Ordine) {
-    setChiudendo(o.id)
-    setOrdiniAperti(prev => prev.filter(x => x.id !== o.id))
-    setOrdiniChiusi(prev => [{ ...o, status: 'chiuso' }, ...prev])
-    try {
-      await fetch('/api/tavoli/chiudi-conto', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tavoloId: o.tavoloId, gruppoId: o.gruppoId }),
-      })
-      await Promise.all([fetchOrdini(), fetchTavoli(), fetchGruppi(giornoSelRef.current, turnoSelRef.current)])
-    } finally { setChiudendo(null) }
-  }
 
   async function riapriConto(o: Ordine) {
     await fetch(`/api/ordini/${o.id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'aperto' }) })
@@ -1108,7 +1094,6 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
         )
         const fmt = (n: number) => `€${n.toFixed(2)}`
         const totale = ordiniConto.reduce((s, o) => s + o.totale, 0)
-        const primo = ordiniConto[0]
         return (
           <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4" onClick={() => { setContoModal(null); setContoModificaOrdine(null) }}>
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
@@ -1154,15 +1139,12 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
                       <span className="text-xs text-ink-navy/40">Totale conto</span>
                       <span className="text-base font-bold text-ink-navy">{fmt(totale)}</span>
                     </div>
-                    <button onClick={() => { if (primo) chiudiConto(primo); setContoModal(null) }}
-                      disabled={!!primo && chiudendo === primo.id}
-                      className="w-full py-2.5 rounded-xl bg-ink-navy text-white text-sm font-semibold hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
-                      {primo && chiudendo === primo.id ? '…' : 'Chiudi tavolo'}
-                    </button>
-                    <Link href="/food/dashboard/conti"
-                      className="block text-center mt-2 text-xs font-semibold text-electric-blue hover:underline">
-                      Vai al conto in Conti →
+                    {/* La chiusura del conto (con inserimento coperti) avviene nella sezione Conti. */}
+                    <Link href="/food/dashboard/conti" onClick={() => setContoModal(null)}
+                      className="block w-full text-center py-2.5 rounded-xl bg-ink-navy text-white text-sm font-semibold hover:bg-ink-navy/80 transition-colors">
+                      Chiudi tavolo in Conti →
                     </Link>
+                    <p className="text-center mt-2 text-xs text-ink-navy/40">Nei Conti inserisci i coperti prima di chiudere.</p>
                   </div>
                 </>
               )}
