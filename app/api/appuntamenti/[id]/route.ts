@@ -1,6 +1,16 @@
 import { getAuthUser, getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { creaNotificaCare, descriviQuando } from '@/lib/notifiche'
+
+// Come si legge il cambio di stato nel testo della notifica
+const ETICHETTA_STATO: Record<string, string> = {
+  confermato: 'confermato',
+  completato: 'segnato come completato',
+  no_show: 'segnato come no-show',
+  cancellato: 'annullato',
+  proposta_inviata: 'in attesa di risposta',
+}
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getAuthUserId()
@@ -100,7 +110,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (data.status) {
     const app = await prisma.appuntamento.findFirst({
       where: { id, userId: user.id },
-      select: { pazienteId: true, data: true, servizio: true },
+      select: { pazienteId: true, data: true, servizio: true, clienteNome: true },
     })
     if (app?.pazienteId) {
       if (data.status === 'completato') {
@@ -118,6 +128,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       } else {
         await prisma.seduta.deleteMany({ where: { appuntamentoId: id, userId: user.id } })
       }
+    }
+    if (app && data.status !== 'in_attesa') {
+      await creaNotificaCare(user, {
+        tipo: 'calendario',
+        titolo: `${app.clienteNome ?? 'Appuntamento'}: ${ETICHETTA_STATO[data.status] ?? 'aggiornato'}`,
+        dettaglio: `${app.servizio ? `${app.servizio} · ` : ''}${descriviQuando(app.data)}`,
+        link: '/care/dashboard/calendario',
+      })
     }
   }
 
@@ -159,6 +177,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
+  const app = await prisma.appuntamento.findFirst({
+    where: { id, userId: user.id },
+    select: { clienteNome: true, data: true },
+  })
   await prisma.appuntamento.deleteMany({ where: { id, userId: user.id } })
+
+  if (app) {
+    await creaNotificaCare(user, {
+      tipo: 'calendario',
+      titolo: `Appuntamento eliminato — ${app.clienteNome ?? 'paziente'}`,
+      dettaglio: descriviQuando(app.data),
+      link: '/care/dashboard/calendario',
+    })
+  }
+
   return NextResponse.json({ ok: true })
 }

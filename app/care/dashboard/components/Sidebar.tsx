@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   IconGrid, IconCalendar, IconChartBar, IconSettings,
-  IconStethoscope, IconClipboard, IconClock,
+  IconStethoscope, IconClipboard, IconClock, IconBell, IconCheck,
 } from '@/app/components/icons'
 
 const navCare = [
@@ -13,6 +13,7 @@ const navCare = [
     items: [
       { label: 'Calendario', href: '/care/dashboard/calendario', Icon: IconCalendar },
       { label: 'Richieste', href: '/care/dashboard/richieste', Icon: IconClipboard },
+      { label: 'To-do List', href: '/care/dashboard/todo', Icon: IconCheck },
     ],
   },
   {
@@ -31,6 +32,7 @@ const navCare = [
   {
     section: 'Account',
     items: [
+      { label: 'Notifiche', href: '/care/dashboard/notifiche', Icon: IconBell },
       { label: 'Impostazioni', href: '/care/dashboard/impostazioni', Icon: IconSettings },
     ],
   },

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { romaToUtc, nomeStudio, STATUS_IN_ATTESA } from '@/lib/careRichiesta'
 import { sendEmailCareRichiestaRicevuta, sendEmailCareNuovaRichiesta } from '@/lib/email'
+import { creaNotifica } from '@/lib/notifiche'
 
 export async function POST(req: Request) {
   const { publicId, tipoSedutaId, data, ora, nome, email, telefono, note } = await req.json()
@@ -79,6 +80,13 @@ export async function POST(req: Request) {
       ...datiEmail,
     }),
   ])
+
+  await creaNotifica(user.id, {
+    tipo: 'richiesta',
+    titolo: `Nuova richiesta — ${nome}`,
+    dettaglio: `${tipoSeduta.nome} · ${data} alle ${ora}`,
+    link: '/care/dashboard/richieste',
+  })
 
   return NextResponse.json({ ok: true, appuntamento })
 }

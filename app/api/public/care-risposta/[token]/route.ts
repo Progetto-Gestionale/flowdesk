@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { utcToRoma, nomeStudio, STATUS_PROPOSTA } from '@/lib/careRichiesta'
 import { sendEmailCareConferma, sendEmailCareRispostaProposta } from '@/lib/email'
+import { creaNotifica } from '@/lib/notifiche'
 
 // POST — il paziente risponde dal link ricevuto per email alla proposta di un altro
 // orario. Se accetta, l'appuntamento è confermato e finisce in calendario da solo.
@@ -53,6 +54,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       ...datiSeduta,
     }),
   ].filter(Boolean) as Promise<unknown>[])
+
+  await creaNotifica(user.id, {
+    tipo: 'richiesta',
+    titolo: accettata
+      ? `${app.clienteNome ?? 'Il paziente'} ha accettato la proposta`
+      : `${app.clienteNome ?? 'Il paziente'} ha rifiutato la proposta`,
+    dettaglio: `${app.servizio ?? 'Seduta'} · ${data} alle ${ora}`,
+    link: accettata ? '/care/dashboard/calendario' : '/care/dashboard/richieste',
+  })
 
   return NextResponse.json({ ok: true, azione: accettata ? 'accettato' : 'rifiutato' })
 }

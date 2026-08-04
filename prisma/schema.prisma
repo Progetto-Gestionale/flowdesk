@@ -68,6 +68,8 @@ model User {
   documentiPazienti  DocumentoPaziente[]
   tipiSeduta         TipoSeduta[]
   disponibilitaOverride DisponibilitaOverride[]
+  notifiche          Notifica[]
+  todo               Todo[]
 }
 
 model MenuCategoria {
@@ -214,6 +216,32 @@ model TipoSeduta {
   createdAt    DateTime       @default(now())
   user         User           @relation(fields: [userId], references: [id])
   appuntamenti Appuntamento[]
+}
+
+model Notifica {
+  id        String   @id @default(cuid())
+  userId    String
+  tipo      String   // richiesta | calendario | seduta
+  titolo    String
+  dettaglio String?
+  link      String?  // dove portare al click
+  letta     Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+model Todo {
+  id        String   @id @default(cuid())
+  userId    String
+  testo     String
+  fatto     Boolean  @default(false)
+  ordine    Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, ordine])
 }
 
 model DisponibilitaOverride {
