@@ -86,13 +86,11 @@ export default function ResocontoSerata() {
         {box.map(it => (
           <div
             key={it.label}
-            className="bg-white border border-ink-navy/10 rounded-2xl shadow-sm p-4 aspect-square flex flex-col justify-between"
+            className="bg-white border border-ink-navy/10 rounded-2xl shadow-sm p-4 aspect-square flex flex-col items-center justify-center text-center gap-2"
           >
-            <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider leading-tight">{it.label}</p>
-            <div>
-              <p className={`text-xl sm:text-2xl font-extrabold tabular-nums leading-none ${it.accent} ${loading ? 'opacity-30' : ''}`}>{it.value}</p>
-              <p className="text-xs text-ink-navy/40 mt-1.5">{it.sub}</p>
-            </div>
+            <p className="text-sm font-semibold text-ink-navy/45 uppercase tracking-wider leading-tight">{it.label}</p>
+            <p className={`text-2xl sm:text-3xl xl:text-4xl font-extrabold tabular-nums leading-none break-words ${it.accent} ${loading ? 'opacity-30' : ''}`}>{it.value}</p>
+            <p className="text-sm text-ink-navy/40">{it.sub}</p>
           </div>
         ))}
       </div>
