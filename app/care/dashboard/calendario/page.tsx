@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import Link from 'next/link'
 import { IconTrash, IconArrowRight, IconClock } from '@/app/components/icons'
+import SedutaPopup from './../components/SedutaPopup'
 
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_CODICE = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
@@ -155,6 +156,7 @@ export default function CalendarioPage() {
   const [tipiSeduta, setTipiSeduta] = useState<TipoSeduta[]>([])
   const [salvando, setSalvando] = useState(false)
   const [erroreNuovo, setErroreNuovo] = useState('')
+  const [notaAperta, setNotaAperta] = useState<Appuntamento | null>(null)
   const [orariSettimanali, setOrariSettimanali] = useState<Record<string, string>>({})
   const [overrides, setOverrides] = useState<Override[]>([])
   const [modalOrari, setModalOrari] = useState<Date | null>(null)
@@ -551,7 +553,13 @@ export default function CalendarioPage() {
                     {' · '}{selected.durata} min
                   </p>
                   {selected.servizio && <p className="font-bold text-ink-navy">{selected.servizio}</p>}
-                  {selected.note && <p className="text-ink-navy/50 italic">{selected.note}</p>}
+                  <button onClick={() => { setNotaAperta(selected); setSelected(null) }}
+                    className="w-full text-left bg-mist hover:bg-ink-navy/10 rounded-lg px-3 py-2 transition-colors mt-1">
+                    <p className="text-xs font-semibold text-ink-navy/40 uppercase tracking-wider">Nota della seduta</p>
+                    <p className="text-sm text-ink-navy/70 mt-0.5">
+                      {selected.note || 'Aggiungi una nota o un allegato'}
+                    </p>
+                  </button>
                 </div>
 
                 {selected.pazienteId && (
@@ -695,6 +703,18 @@ export default function CalendarioPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {notaAperta?.pazienteId && (
+        <SedutaPopup
+          pazienteId={notaAperta.pazienteId}
+          appuntamentoId={notaAperta.id}
+          data={notaAperta.data}
+          tipo={notaAperta.servizio}
+          noteIniziali={notaAperta.note}
+          onChiudi={() => setNotaAperta(null)}
+          onSalvato={fetchAll}
+        />
       )}
 
       {/* Modal orari del giorno */}

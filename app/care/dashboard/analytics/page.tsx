@@ -7,13 +7,18 @@ import {
 } from 'recharts'
 import { IconChartBar } from '@/app/components/icons'
 
-const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+const MESI_BREVI = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
+const GIORNI_BREVI = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 
 // Colori della torta: il blu del brand più tinte ben distinguibili fra loro
 const COLORI = ['#1F52FF', '#0B1533', '#7C9CFF', '#D6FB3D', '#F59E0B', '#10B981', '#E11D48']
 
 interface Dati {
   seduteCompletate: number
+  noShow: number
+  tassoNoShow: number
+  pazientiNuovi: number
+  pazientiDiRitorno: number
   incassoTotale: number
   spesaMediaPaziente: number
   pazientiDistinti: number
@@ -34,62 +39,134 @@ function lunedi(d: Date) {
   return r
 }
 
-type Modo = 'settimana' | 'mese' | 'scegli'
+type Periodo = 'settimana' | 'mese' | 'anno'
+
+/** Sposta la data di riferimento avanti o indietro di un periodo. */
+function spostaRiferimento(rif: Date, periodo: Periodo, direzione: 1 | -1): Date {
+  const d = new Date(rif)
+  if (periodo === 'settimana') d.setDate(d.getDate() + direzione * 7)
+  else if (periodo === 'mese') d.setMonth(d.getMonth() + direzione)
+  else d.setFullYear(d.getFullYear() + direzione)
+  return d
+}
+
+// Stesso mini calendario di Analytics Food: mesi navigabili, niente futuro.
+function MiniCalendario({ periodo, riferimento, onScegli, onChiudi }: {
+  periodo: Periodo; riferimento: Date; onScegli: (d: Date) => void; onChiudi: () => void
+}) {
+  const ora = new Date()
+  const [annoNav, setAnnoNav] = useState(riferimento.getFullYear())
+  const [meseNav, setMeseNav] = useState(riferimento.getMonth())
+
+  if (periodo === 'anno') {
+    const anni = Array.from({ length: 6 }, (_, i) => ora.getFullYear() - 5 + i)
+    return (
+      <div className="absolute right-0 top-full mt-1 bg-white border border-ink-navy/10 rounded-2xl shadow-xl z-50 p-4 w-56">
+        <p className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide mb-3">Seleziona anno</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {anni.map(a => (
+            <button key={a} onClick={() => { onScegli(new Date(a, 6, 1)); onChiudi() }} disabled={a > ora.getFullYear()}
+              className={`rounded-xl py-2 text-sm font-medium transition-colors ${a === riferimento.getFullYear() ? 'bg-electric-blue text-white' : a > ora.getFullYear() ? 'text-ink-navy/25 cursor-not-allowed' : 'hover:bg-electric-blue/10 text-ink-navy/70'}`}>
+              {a}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const primoGiorno = new Date(annoNav, meseNav, 1).getDay()
+  const giorniMese = new Date(annoNav, meseNav + 1, 0).getDate()
+  const offset = primoGiorno === 0 ? 6 : primoGiorno - 1
+
+  return (
+    <div className="absolute right-0 top-full mt-1 bg-white border border-ink-navy/10 rounded-2xl shadow-xl z-50 p-4 w-72">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => { if (meseNav === 0) { setMeseNav(11); setAnnoNav(a => a - 1) } else setMeseNav(m => m - 1) }}
+          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-lg">‹</button>
+        <span className="text-sm font-semibold text-ink-navy">{MESI_BREVI[meseNav]} {annoNav}</span>
+        <button onClick={() => { if (meseNav === 11) { setMeseNav(0); setAnnoNav(a => a + 1) } else setMeseNav(m => m + 1) }}
+          disabled={annoNav === ora.getFullYear() && meseNav >= ora.getMonth()}
+          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-mist text-ink-navy/50 text-lg disabled:opacity-30">›</button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {GIORNI_BREVI.map((g, i) => <div key={i} className="text-center text-[10px] font-semibold text-ink-navy/35">{g}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {Array.from({ length: offset }).map((_, i) => <div key={`e${i}`} />)}
+        {Array.from({ length: giorniMese }).map((_, i) => {
+          const giorno = i + 1
+          const d = new Date(annoNav, meseNav, giorno)
+          const futuro = d > ora
+          const attivo = periodo === 'mese'
+            ? d.getFullYear() === riferimento.getFullYear() && d.getMonth() === riferimento.getMonth()
+            : (() => {
+                const lun = lunedi(riferimento)
+                const dom = new Date(lun); dom.setDate(lun.getDate() + 6)
+                return d >= lun && d <= dom
+              })()
+          return (
+            <button key={giorno} onClick={() => { if (!futuro) { onScegli(d); onChiudi() } }} disabled={futuro}
+              className={`rounded-lg py-1 text-xs font-medium transition-colors ${futuro ? 'text-ink-navy/15 cursor-not-allowed' : attivo ? 'bg-electric-blue text-white' : 'hover:bg-electric-blue/10 text-ink-navy/70'}`}>
+              {giorno}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export default function CareAnalyticsPage() {
-  const [modo, setModo] = useState<Modo>('settimana')
   const [dati, setDati] = useState<Dati | null>(null)
   const [loading, setLoading] = useState(true)
+  const [periodo, setPeriodo] = useState<Periodo>('settimana')
+  const [riferimento, setRiferimento] = useState<Date>(() => new Date())
+  const [calendarioAperto, setCalendarioAperto] = useState(false)
 
-  // Stato del selettore "Scegli"
-  const [tipoScelta, setTipoScelta] = useState<'settimana' | 'mese'>('mese')
-  const [mese, setMese] = useState(() => new Date().getMonth())
-  const [anno, setAnno] = useState(() => new Date().getFullYear())
-  const [settimanaScelta, setSettimanaScelta] = useState(() => chiave(lunedi(new Date())))
-
-  // Ultimi 26 lunedì, dal più recente: è la lista del menu "settimana"
-  const lunediPassati = useMemo(() => {
-    const out: string[] = []
-    const l = lunedi(new Date())
-    for (let i = 0; i < 26; i++) {
-      out.push(chiave(new Date(l.getFullYear(), l.getMonth(), l.getDate() - i * 7)))
-    }
-    return out
-  }, [])
-
-  const anni = useMemo(() => {
-    const y = new Date().getFullYear()
-    return [y, y - 1, y - 2]
-  }, [])
-
-  // Periodo effettivo in base al modo scelto
-  const periodo = useMemo(() => {
-    if (modo === 'settimana') {
-      const l = lunedi(new Date())
+  // Estremi del periodo attorno alla data di riferimento
+  const intervallo = useMemo(() => {
+    if (periodo === 'settimana') {
+      const l = lunedi(riferimento)
       return { da: chiave(l), a: chiave(new Date(l.getFullYear(), l.getMonth(), l.getDate() + 6)) }
     }
-    if (modo === 'mese') {
-      const d = new Date()
+    if (periodo === 'mese') {
       return {
-        da: chiave(new Date(d.getFullYear(), d.getMonth(), 1)),
-        a: chiave(new Date(d.getFullYear(), d.getMonth() + 1, 0)),
+        da: chiave(new Date(riferimento.getFullYear(), riferimento.getMonth(), 1)),
+        a: chiave(new Date(riferimento.getFullYear(), riferimento.getMonth() + 1, 0)),
       }
     }
-    if (tipoScelta === 'mese') {
-      return { da: chiave(new Date(anno, mese, 1)), a: chiave(new Date(anno, mese + 1, 0)) }
+    return {
+      da: chiave(new Date(riferimento.getFullYear(), 0, 1)),
+      a: chiave(new Date(riferimento.getFullYear(), 11, 31)),
     }
-    const [y, m, g] = settimanaScelta.split('-').map(Number)
-    return { da: settimanaScelta, a: chiave(new Date(y, m - 1, g + 6)) }
-  }, [modo, tipoScelta, mese, anno, settimanaScelta])
+  }, [periodo, riferimento])
+
+  const etichettaPeriodo = useMemo(() => {
+    if (periodo === 'anno') return String(riferimento.getFullYear())
+    if (periodo === 'mese') return riferimento.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+    const l = lunedi(riferimento)
+    const d = new Date(l); d.setDate(l.getDate() + 6)
+    return `${l.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} – ${d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`
+  }, [periodo, riferimento])
+
+  // Il periodo successivo è nel futuro? Allora la freccia avanti si spegne
+  const avantiBloccato = useMemo(() => {
+    const prossimo = spostaRiferimento(riferimento, periodo, 1)
+    const ora = new Date()
+    if (periodo === 'anno') return prossimo.getFullYear() > ora.getFullYear()
+    if (periodo === 'mese') return new Date(prossimo.getFullYear(), prossimo.getMonth(), 1) > ora
+    return lunedi(prossimo) > ora
+  }, [periodo, riferimento])
 
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/care/analytics?da=${periodo.da}&a=${periodo.a}`, { credentials: 'include', cache: 'no-store' })
+    fetch(`/api/care/analytics?da=${intervallo.da}&a=${intervallo.a}`, { credentials: 'include', cache: 'no-store' })
       .then(r => r.json())
       .then(d => setDati(d.error ? null : d))
       .catch(() => setDati(null))
       .finally(() => setLoading(false))
-  }, [periodo.da, periodo.a])
+  }, [intervallo.da, intervallo.a])
 
   const barre = (dati?.perGiorno ?? []).map(g => ({
     ...g,
@@ -97,83 +174,68 @@ export default function CareAnalyticsPage() {
   }))
 
   const kpi = [
-    { label: 'Sedute completate', valore: dati ? String(dati.seduteCompletate) : '—' },
-    { label: 'Incasso totale', valore: dati ? `€${dati.incassoTotale.toFixed(0)}` : '—' },
-    { label: 'Spesa media per paziente', valore: dati ? `€${dati.spesaMediaPaziente.toFixed(0)}` : '—' },
+    { label: 'Sedute completate', valore: dati ? String(dati.seduteCompletate) : '—', nota: null as string | null },
+    { label: 'Incasso totale', valore: dati ? `€${dati.incassoTotale.toFixed(0)}` : '—', nota: null },
+    { label: 'Spesa media per paziente', valore: dati ? `€${dati.spesaMediaPaziente.toFixed(0)}` : '—', nota: null },
+    {
+      label: 'Tasso di no-show',
+      valore: dati ? `${dati.tassoNoShow.toFixed(0)}%` : '—',
+      nota: dati ? `${dati.noShow} su ${dati.seduteCompletate + dati.noShow} previste` : null,
+    },
   ]
+
+  // Nuovi = pazienti che non avevano mai fatto una seduta prima di questo periodo
+  const pazientiTorta = dati
+    ? [
+        { nome: 'Nuovi', valore: dati.pazientiNuovi },
+        { nome: 'Di ritorno', valore: dati.pazientiDiRitorno },
+      ].filter(x => x.valore > 0)
+    : []
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-extrabold text-ink-navy">Analytics</h1>
-          <p className="text-ink-navy/50 mt-0.5">
-            {new Date(`${periodo.da}T12:00:00`).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}
-            {' – '}
-            {new Date(`${periodo.a}T12:00:00`).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
+          <p className="text-ink-navy/50 mt-0.5 capitalize">{etichettaPeriodo}</p>
         </div>
 
-        <div className="flex gap-1 bg-mist rounded-xl p-1">
-          {([['settimana', 'Settimana'], ['mese', 'Mese'], ['scegli', 'Scegli']] as const).map(([k, label]) => (
-            <button key={k} onClick={() => setModo(k)}
-              className={`text-sm font-semibold px-3.5 py-1.5 rounded-lg transition-colors ${
-                modo === k ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/45 hover:text-ink-navy/70'}`}>
-              {label}
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex rounded-xl border border-ink-navy/10 bg-white overflow-hidden shadow-sm text-sm font-medium">
+            {(['settimana', 'mese', 'anno'] as const).map(p => (
+              <button key={p} onClick={() => { setPeriodo(p); setRiferimento(new Date()) }}
+                className={`px-4 py-2 transition-colors ${periodo === p ? 'bg-electric-blue text-white' : 'text-ink-navy/50 hover:bg-mist'}`}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 relative">
+            <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, -1))}
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg">‹</button>
+            <button onClick={() => setCalendarioAperto(v => !v)}
+              className="text-sm font-medium text-ink-navy/70 min-w-[180px] text-center px-3 py-1.5 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors capitalize">
+              {etichettaPeriodo}
             </button>
-          ))}
+            {calendarioAperto && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setCalendarioAperto(false)} />
+                <MiniCalendario periodo={periodo} riferimento={riferimento}
+                  onScegli={d => setRiferimento(d)} onChiudi={() => setCalendarioAperto(false)} />
+              </>
+            )}
+            <button onClick={() => setRiferimento(r => spostaRiferimento(r, periodo, 1))} disabled={avantiBloccato}
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 bg-white text-ink-navy/50 hover:bg-mist transition-colors text-lg disabled:opacity-30">›</button>
+          </div>
         </div>
       </div>
 
-      {modo === 'scegli' && (
-        <div className="bg-white rounded-2xl border border-ink-navy/10 p-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs font-medium text-ink-navy/50 mb-1">Periodo</label>
-            <select value={tipoScelta} onChange={e => setTipoScelta(e.target.value as 'settimana' | 'mese')}
-              className="border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
-              <option value="mese">Mese</option>
-              <option value="settimana">Settimana</option>
-            </select>
-          </div>
-
-          {tipoScelta === 'mese' ? (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-ink-navy/50 mb-1">Mese</label>
-                <select value={mese} onChange={e => setMese(Number(e.target.value))}
-                  className="border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
-                  {MESI.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-ink-navy/50 mb-1">Anno</label>
-                <select value={anno} onChange={e => setAnno(Number(e.target.value))}
-                  className="border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
-                  {anni.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-            </>
-          ) : (
-            <div>
-              <label className="block text-xs font-medium text-ink-navy/50 mb-1">Settimana che inizia il</label>
-              <select value={settimanaScelta} onChange={e => setSettimanaScelta(e.target.value)}
-                className="border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
-                {lunediPassati.map(l => (
-                  <option key={l} value={l}>
-                    {new Date(`${l}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpi.map(k => (
           <div key={k.label} className="bg-white border border-ink-navy/10 rounded-2xl p-5">
             <div className="text-3xl font-extrabold text-ink-navy">{k.valore}</div>
             <div className="text-sm text-ink-navy/50 mt-0.5">{k.label}</div>
+            {k.nota && <div className="text-xs text-ink-navy/35 mt-0.5">{k.nota}</div>}
           </div>
         ))}
       </div>
@@ -205,6 +267,24 @@ export default function CareAnalyticsPage() {
                   />
                   <Bar dataKey="sedute" fill="#1F52FF" radius={[6, 6, 0, 0]} maxBarSize={38} />
                 </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white border border-ink-navy/10 rounded-2xl p-5">
+            <h2 className="font-bold text-ink-navy mb-1">Pazienti</h2>
+            <p className="text-xs text-ink-navy/40 mb-3">
+              {dati.pazientiNuovi} {dati.pazientiNuovi === 1 ? 'nuovo' : 'nuovi'} · {dati.pazientiDiRitorno} di ritorno
+            </p>
+            <div style={{ width: '100%', height: 220 }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={pazientiTorta} dataKey="valore" nameKey="nome" innerRadius={48} outerRadius={80} paddingAngle={2}>
+                    {pazientiTorta.map((_, i) => <Cell key={i} fill={i === 0 ? '#D6FB3D' : '#1F52FF'} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #0B153315', fontSize: 13 }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           </div>

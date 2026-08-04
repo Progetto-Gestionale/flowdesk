@@ -7,6 +7,7 @@ import {
   IconPencil, IconTrash, IconCalendar, IconClipboard, IconFolder, IconArrowRight,
   IconUpload, IconFile, IconLink,
 } from '@/app/components/icons'
+import SedutaPopup, { TitoloSeduta } from '../../components/SedutaPopup'
 
 const MAX_BYTE = 3 * 1024 * 1024
 
@@ -35,6 +36,8 @@ interface Documento {
   dimensione?: number | null
   tipo?: string
   createdAt: string
+  appuntamentoId?: string | null
+  sedutaId?: string | null
 }
 
 function fmtPeso(byte?: number | null) {
@@ -58,6 +61,26 @@ interface Appuntamento {
   data: string
   servizio?: string
   status: string
+  note?: string | null
+}
+
+// Seduta aperta nel popup: può essere un appuntamento in agenda o una voce di cartella
+// Voce della tendina "collega a una seduta": appuntamenti in agenda + sedute a mano
+interface VoceSeduta {
+  chiave: string
+  appuntamentoId: string | null
+  sedutaId: string | null
+  data: string
+  tipo?: string | null
+  completata: boolean
+}
+
+interface SedutaAperta {
+  appuntamentoId?: string | null
+  sedutaId?: string | null
+  data: string
+  tipo?: string | null
+  note?: string | null
 }
 
 function fmtData(d: string) {
@@ -90,13 +113,17 @@ export default function PazienteDetailPage() {
   const inputFileRef = useRef<HTMLInputElement>(null)
 
   const [confermaElimina, setConfermaElimina] = useState(false)
+  const [sedutaAperta, setSedutaAperta] = useState<SedutaAperta | null>(null)
+  const [elencoSedute, setElencoSedute] = useState<VoceSeduta[]>([])
+  const [sedutaDoc, setSedutaDoc] = useState('') // chiave scelta nella tendina del modal documenti
 
   async function fetchAll() {
-    const [pRes, sRes, dRes, aRes] = await Promise.all([
+    const [pRes, sRes, dRes, aRes, eRes] = await Promise.all([
       fetch(`/api/pazienti/${id}`, { credentials: 'include', cache: 'no-store' }),
       fetch(`/api/pazienti/${id}/sedute`, { credentials: 'include', cache: 'no-store' }),
       fetch(`/api/pazienti/${id}/documenti`, { credentials: 'include', cache: 'no-store' }),
       fetch('/api/appuntamenti', { credentials: 'include', cache: 'no-store' }),
+      fetch(`/api/pazienti/${id}/sedute-elenco`, { credentials: 'include', cache: 'no-store' }),
     ])
     const pData = await pRes.json()
     const sData = await sRes.json()
@@ -106,6 +133,7 @@ export default function PazienteDetailPage() {
     setSedute(sData.sedute ?? [])
     setDocumenti(dData.documenti ?? [])
     setAppuntamenti((aData.appuntamenti ?? []).filter((a: Appuntamento & { pazienteId?: string }) => a.pazienteId === id))
+    setElencoSedute((await eRes.json()).sedute ?? [])
     setLoading(false)
   }
 
@@ -142,6 +170,7 @@ export default function PazienteDetailPage() {
 
   function chiudiModalDoc() {
     setModalDoc(false)
+    setSedutaDoc('')
     setFileDoc(null)
     setErroreDoc('')
     setFormDoc({ nome: '', url: '', tipo: '' })
@@ -178,6 +207,11 @@ export default function PazienteDetailPage() {
     setCaricando(true)
     setErroreDoc('')
     try {
+      const voce = elencoSedute.find(v => v.chiave === sedutaDoc)
+      const collegamento = {
+        appuntamentoId: voce?.appuntamentoId ?? null,
+        sedutaId: voce?.sedutaId ?? null,
+      }
       const payload = modoDoc === 'file' && fileDoc
         ? {
             nome: formDoc.nome,
@@ -185,8 +219,9 @@ export default function PazienteDetailPage() {
             contenuto: await leggiFile(fileDoc),
             mimeType: fileDoc.type || 'application/octet-stream',
             dimensione: fileDoc.size,
+            ...collegamento,
           }
-        : { nome: formDoc.nome, tipo: formDoc.tipo, url: formDoc.url }
+        : { nome: formDoc.nome, tipo: formDoc.tipo, url: formDoc.url, ...collegamento }
 
       const res = await fetch(`/api/pazienti/${id}/documenti`, {
         method: 'POST', credentials: 'include',
@@ -220,6 +255,14 @@ export default function PazienteDetailPage() {
   async function handleElimina() {
     await fetch(`/api/pazienti/${id}/elimina`, { method: 'DELETE', credentials: 'include' })
     router.push('/care/dashboard/pazienti')
+  }
+
+  /** Data della seduta a cui un documento è agganciato, se lo è. */
+  function etichettaSeduta(d: Documento): string | null {
+    const voce = elencoSedute.find(v =>
+      (d.appuntamentoId && v.appuntamentoId === d.appuntamentoId) ||
+      (d.sedutaId && v.sedutaId === d.sedutaId))
+    return voce ? new Date(voce.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : null
   }
 
   if (loading) return <div className="text-center text-ink-navy/35 py-16">Caricamento...</div>
@@ -307,17 +350,20 @@ export default function PazienteDetailPage() {
 
       {/* Prossimi appuntamenti */}
       {prossimi.length > 0 && (
-        <div className="bg-electric-blue/10 border border-electric-blue/20 rounded-2xl p-5">
-          <p className="text-xs font-semibold text-electric-blue uppercase tracking-wider mb-3">Prossimi appuntamenti</p>
+        <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-6">
+          <h2 className="font-bold text-ink-navy flex items-center gap-2 mb-4">
+            <span className="w-4 h-4 text-electric-blue"><IconCalendar /></span>
+            Prossimi appuntamenti
+          </h2>
           <div className="space-y-2">
             {prossimi.map(a => (
-              <div key={a.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 text-electric-blue"><IconCalendar /></span>
-                  <span className="text-sm font-medium text-ink-navy">{fmtData(a.data)}</span>
-                  {a.servizio && <span className="text-xs text-ink-navy/40">· {a.servizio}</span>}
-                </div>
-              </div>
+              <button key={a.id}
+                onClick={() => setSedutaAperta({ appuntamentoId: a.id, data: a.data, tipo: a.servizio, note: a.note })}
+                className="w-full text-left bg-electric-blue/10 hover:bg-electric-blue/15 rounded-xl px-4 py-3 transition-colors">
+                <TitoloSeduta data={a.data} tipo={a.servizio} className="text-sm" />
+                {a.note && <p className="text-sm text-ink-navy/55 mt-1 line-clamp-2">{a.note}</p>}
+                {!a.note && <p className="text-xs text-ink-navy/35 mt-1">Clicca per aggiungere una nota o un allegato</p>}
+              </button>
             ))}
           </div>
           <Link href="/care/dashboard/calendario" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-electric-blue hover:underline">
@@ -343,14 +389,14 @@ export default function PazienteDetailPage() {
         ) : (
           <div className="space-y-2">
             {sedute.map(s => (
-              <div key={s.id} className="flex items-start justify-between gap-3 bg-mist rounded-xl px-4 py-3 group">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-ink-navy">{fmtData(s.data)}</p>
-                    {s.tipo && <span className="text-xs bg-white text-ink-navy/60 px-2 py-0.5 rounded-full font-medium">{s.tipo}</span>}
-                  </div>
-                  {s.note && <p className="text-sm text-ink-navy/60 mt-1">{s.note}</p>}
-                </div>
+              <div key={s.id} className="flex items-start gap-3 bg-mist rounded-xl px-4 py-3 group">
+                <button onClick={() => setSedutaAperta({ sedutaId: s.id, data: s.data, tipo: s.tipo, note: s.note })}
+                  className="min-w-0 flex-1 text-left">
+                  <TitoloSeduta data={s.data} tipo={s.tipo} className="text-sm" />
+                  {s.note
+                    ? <p className="text-sm text-ink-navy/55 mt-1">{s.note}</p>
+                    : <p className="text-xs text-ink-navy/35 mt-1">Clicca per aggiungere una nota o un allegato</p>}
+                </button>
                 <button onClick={() => handleDeleteSeduta(s.id)}
                   className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center text-ink-navy/25 hover:text-red-400 transition-all">
                   <span className="w-3 h-3"><IconTrash /></span>
@@ -416,6 +462,9 @@ export default function PazienteDetailPage() {
                     <p className="text-xs text-ink-navy/40">
                       {[d.tipo || (d.url ? 'Link esterno' : 'File'), peso, fmtData(d.createdAt)].filter(Boolean).join(' · ')}
                     </p>
+                    {etichettaSeduta(d) && (
+                      <p className="text-xs text-electric-blue mt-0.5">Seduta del {etichettaSeduta(d)}</p>
+                    )}
                   </a>
                   <button onClick={() => handleDeleteDoc(d.id)}
                     className="opacity-0 group-hover:opacity-100 shrink-0 w-6 h-6 flex items-center justify-center text-ink-navy/25 hover:text-red-400 transition-all">
@@ -516,6 +565,20 @@ export default function PazienteDetailPage() {
 
             <div className="space-y-3">
               <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Collega a una seduta</label>
+                <select value={sedutaDoc} onChange={e => setSedutaDoc(e.target.value)}
+                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
+                  <option value="">— Nessuna, documento generico —</option>
+                  {elencoSedute.map(v => (
+                    <option key={v.chiave} value={v.chiave}>
+                      {new Date(v.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      {v.tipo ? ` | ${v.tipo}` : ''}
+                      {v.completata ? '' : ' (da svolgere)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Nome documento *</label>
                 <input value={formDoc.nome} onChange={e => setFormDoc({ ...formDoc, nome: e.target.value })}
                   placeholder="Es. Referto RX ginocchio"
@@ -539,6 +602,19 @@ export default function PazienteDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {sedutaAperta && (
+        <SedutaPopup
+          pazienteId={id}
+          appuntamentoId={sedutaAperta.appuntamentoId}
+          sedutaId={sedutaAperta.sedutaId}
+          data={sedutaAperta.data}
+          tipo={sedutaAperta.tipo}
+          noteIniziali={sedutaAperta.note}
+          onChiudi={() => setSedutaAperta(null)}
+          onSalvato={fetchAll}
+        />
       )}
 
       {/* Conferma eliminazione */}

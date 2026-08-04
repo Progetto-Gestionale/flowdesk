@@ -339,6 +339,8 @@ export default function RichiestePage() {
       setSelected(null)
       setProposta(null)
       fetchAll()
+      // Aggiorna subito il badge in sidebar e sulla campanella
+      window.dispatchEvent(new Event('refresh-richieste-count'))
       return true
     } finally {
       setInvio(false)
@@ -382,6 +384,7 @@ export default function RichiestePage() {
     })
     setShowNuovo(false)
     fetchAll()
+    window.dispatchEvent(new Event('refresh-richieste-count'))
   }
 
   // Da verificare: solo quelle a cui non abbiamo ancora risposto

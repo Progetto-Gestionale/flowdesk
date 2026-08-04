@@ -10,16 +10,25 @@ import { fmtOra, iconaPerTipo, type Notifica } from './notificheUtil'
 export default function Campanella() {
   const [notifiche, setNotifiche] = useState<Notifica[]>([])
   const [daLeggere, setDaLeggere] = useState(0)
+  const [richiesteDaVerificare, setRichiesteDaVerificare] = useState(0)
   const [aperta, setAperta] = useState(false)
   const box = useRef<HTMLDivElement>(null)
 
   async function carica() {
     try {
-      const res = await fetch('/api/care/notifiche', { credentials: 'include', cache: 'no-store' })
-      if (!res.ok) return
-      const d = await res.json()
-      setNotifiche(d.notifiche ?? [])
-      setDaLeggere(d.daLeggere ?? 0)
+      const [nRes, rRes] = await Promise.all([
+        fetch('/api/care/notifiche', { credentials: 'include', cache: 'no-store' }),
+        fetch('/api/care/richieste/count', { credentials: 'include', cache: 'no-store' }),
+      ])
+      if (nRes.ok) {
+        const d = await nRes.json()
+        setNotifiche(d.notifiche ?? [])
+        setDaLeggere(d.daLeggere ?? 0)
+      }
+      if (rRes.ok) {
+        const r = await rRes.json()
+        setRichiesteDaVerificare(r.daVerificare ?? 0)
+      }
     } catch { /* la campanella non è critica: se fallisce resta com'è */ }
   }
 
@@ -28,7 +37,12 @@ export default function Campanella() {
     const t = setInterval(carica, 30000)
     const aggiorna = () => carica()
     window.addEventListener('notifiche-aggiornate', aggiorna)
-    return () => { clearInterval(t); window.removeEventListener('notifiche-aggiornate', aggiorna) }
+    window.addEventListener('refresh-richieste-count', aggiorna)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('notifiche-aggiornate', aggiorna)
+      window.removeEventListener('refresh-richieste-count', aggiorna)
+    }
   }, [])
 
   // Chiusura cliccando fuori
@@ -60,8 +74,11 @@ export default function Campanella() {
       <button onClick={apri} aria-label="Notifiche"
         className="relative w-5 h-5 text-ink-navy/50 hover:text-ink-navy transition-colors block">
         <IconBell />
-        {daLeggere > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-electric-blue ring-2 ring-white" />
+        {/* Giallo = ci sono richieste da accettare, ha la precedenza sul blu
+            delle notifiche semplicemente non lette */}
+        {(richiesteDaVerificare > 0 || daLeggere > 0) && (
+          <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
+            richiesteDaVerificare > 0 ? 'bg-zest-lime' : 'bg-electric-blue'}`} />
         )}
       </button>
 
@@ -70,6 +87,16 @@ export default function Campanella() {
           <div className="px-4 py-3 border-b border-ink-navy/8">
             <p className="text-sm font-bold text-ink-navy">Oggi</p>
           </div>
+
+          {richiesteDaVerificare > 0 && (
+            <Link href="/care/dashboard/richieste" onClick={() => setAperta(false)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-zest-lime/25 hover:bg-zest-lime/40 transition-colors border-b border-ink-navy/8">
+              <span className="w-2 h-2 rounded-full bg-zest-lime ring-1 ring-ink-navy/20 shrink-0" />
+              <p className="text-sm font-semibold text-ink-navy">
+                {richiesteDaVerificare} {richiesteDaVerificare === 1 ? 'richiesta da accettare' : 'richieste da accettare'}
+              </p>
+            </Link>
+          )}
 
           <div className="max-h-80 overflow-y-auto">
             {diOggi.length === 0 ? (

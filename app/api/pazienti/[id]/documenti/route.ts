@@ -18,7 +18,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const documenti = await prisma.documentoPaziente.findMany({
     where: { pazienteId: id, userId: user.id },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, nome: true, url: true, tipo: true, mimeType: true, dimensione: true, createdAt: true },
+    select: { id: true, nome: true, url: true, tipo: true, mimeType: true, dimensione: true, createdAt: true, appuntamentoId: true, sedutaId: true },
   })
 
   return NextResponse.json({ documenti })
@@ -35,7 +35,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const paziente = await prisma.paziente.findFirst({ where: { id, userId: user.id } })
   if (!paziente) return NextResponse.json({ error: 'Paziente non trovato' }, { status: 404 })
 
-  const { nome, url, tipo, contenuto, mimeType, dimensione } = await req.json()
+  const { nome, url, tipo, contenuto, mimeType, dimensione, appuntamentoId, sedutaId } = await req.json()
   if (!nome?.trim()) return NextResponse.json({ error: 'Nome richiesto' }, { status: 400 })
   if (!contenuto && !url) return NextResponse.json({ error: 'Serve un file o un link' }, { status: 400 })
 
@@ -58,8 +58,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       mimeType: base64 ? (mimeType || 'application/octet-stream') : null,
       dimensione: base64 ? (dimensione ?? null) : null,
       tipo: tipo || null,
+      appuntamentoId: appuntamentoId || null,
+      sedutaId: sedutaId || null,
     },
-    select: { id: true, nome: true, url: true, tipo: true, mimeType: true, dimensione: true, createdAt: true },
+    select: { id: true, nome: true, url: true, tipo: true, mimeType: true, dimensione: true, createdAt: true, appuntamentoId: true, sedutaId: true },
   })
 
   return NextResponse.json({ documento })
