@@ -31,6 +31,7 @@ interface Appuntamento {
   note?: string
   pazienteId?: string | null
   messaggioProposta?: string | null
+  createdAt: string
 }
 
 interface TipoSeduta { id: string; nome: string; durata: number }
@@ -387,10 +388,12 @@ export default function RichiestePage() {
   const daVerificare = appuntamenti
     .filter(a => a.status === 'in_attesa')
     .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
-  // Processate: già accettate, rifiutate o con una proposta in attesa di risposta
+  // Processate: già accettate, rifiutate o con una proposta in attesa di risposta.
+  // Il giorno è quello in cui la richiesta è ARRIVATA, non quello dell'appuntamento:
+  // altrimenti questa sezione diventa un doppione del calendario.
   const processate = appuntamenti
-    .filter(a => a.status !== 'in_attesa' && toDateStr(new Date(a.data)) === giorno)
-    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+    .filter(a => a.status !== 'in_attesa' && toDateStr(new Date(a.createdAt)) === giorno)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   const oggi = toDateStr(new Date())
 
@@ -476,7 +479,7 @@ export default function RichiestePage() {
                   <div className="flex-1 flex justify-center relative">
                     <button onClick={() => setCalOpen(v => !v)}
                       className="text-sm font-semibold text-ink-navy py-1 px-3 rounded-lg border border-ink-navy/10 bg-white hover:bg-mist transition-colors select-none whitespace-nowrap capitalize">
-                      {fmtGiornoLabel(giorno)}
+                      Arrivate {fmtGiornoLabel(giorno).toLowerCase()}
                       <span className="ml-1.5 text-ink-navy/30 text-xs">▾</span>
                     </button>
                     {calOpen && <MiniCal value={giorno} onChange={setGiorno} onClose={() => setCalOpen(false)} />}
@@ -499,7 +502,7 @@ export default function RichiestePage() {
                       <thead className="bg-mist border-b border-ink-navy/10">
                         <tr>
                           <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Paziente</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Ora</th>
+                          <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Appuntamento</th>
                           <th className="text-left px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Seduta</th>
                           <th className="text-center px-4 py-3 text-xs font-semibold text-ink-navy/50 uppercase tracking-wider">Stato</th>
                         </tr>
@@ -513,7 +516,10 @@ export default function RichiestePage() {
                                 <p className="font-semibold text-ink-navy">{a.clienteNome || 'Paziente'}</p>
                                 {a.clienteEmail && <p className="text-xs text-ink-navy/40">{a.clienteEmail}</p>}
                               </td>
-                              <td className="px-4 py-3"><span className="text-base font-bold text-ink-navy">{fmtOra(a.data)}</span></td>
+                              <td className="px-4 py-3">
+                                <span className="text-sm font-bold text-ink-navy capitalize">{fmtGiornoLungo(a.data)}</span>
+                                <span className="text-sm font-bold text-ink-navy"> · {fmtOra(a.data)}</span>
+                              </td>
                               <td className="px-4 py-3 text-ink-navy/60">{a.servizio || '—'}</td>
                               <td className="px-4 py-3 text-center">
                                 <span className={`text-xs font-semibold px-2 py-1 rounded-full ${st.bg} ${st.text}`}>{st.label}</span>

@@ -2,6 +2,7 @@ import { getAuthUser, getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { currentUser } from '@clerk/nextjs/server'
+import { creaNotificaCare, descriviQuando } from '@/lib/notifiche'
 
 async function getOrCreateUser(clerkId: string) {
   let user = await prisma.user.findUnique({ where: { clerkId } })
@@ -49,5 +50,16 @@ export async function POST(req: Request) {
   const appuntamento = await prisma.appuntamento.create({
     data: { userId: user.id, clienteNome, clienteEmail, servizio, data: dataObj, durata: durataMin, note, coperti: coperti ?? 1, allergie: allergie || null, occasione: occasione || null, tavoloId: tavoloId || null, pazienteId: pazienteId || null, tipoSedutaId: tipoSedutaId || null, ...(status ? { status } : {}) },
   })
+
+  // Le richieste in attesa notificano già per conto loro dalla pagina pubblica
+  if (appuntamento.status !== 'in_attesa') {
+    await creaNotificaCare(user, {
+      tipo: 'calendario',
+      titolo: `Nuovo appuntamento — ${clienteNome || 'paziente'}`,
+      dettaglio: `${servizio ? `${servizio} · ` : ''}${descriviQuando(appuntamento.data)}`,
+      link: '/care/dashboard/calendario',
+    })
+  }
+
   return NextResponse.json({ appuntamento })
 }

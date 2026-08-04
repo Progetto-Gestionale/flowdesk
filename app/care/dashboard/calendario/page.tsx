@@ -550,7 +550,7 @@ export default function CalendarioPage() {
                     {new Date(selected.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                     {' · '}{selected.durata} min
                   </p>
-                  {selected.servizio && <p className="text-ink-navy/50">{selected.servizio}</p>}
+                  {selected.servizio && <p className="font-bold text-ink-navy">{selected.servizio}</p>}
                   {selected.note && <p className="text-ink-navy/50 italic">{selected.note}</p>}
                 </div>
 

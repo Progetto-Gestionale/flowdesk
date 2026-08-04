@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { randomBytes } from 'crypto'
 import { romaToUtc, utcToRoma, nomeStudio, STATUS_PROPOSTA } from '@/lib/careRichiesta'
 import { sendEmailCareConferma, sendEmailCareAnnullata, sendEmailCareProposta } from '@/lib/email'
+import { creaNotifica } from '@/lib/notifiche'
 
 // PATCH — risposta del professionista a una richiesta (un Appuntamento in attesa).
 // azione: 'conferma' | 'rifiuta' | 'proposta'
@@ -59,6 +60,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await sendEmailCareConferma({ ...datiEmail, indirizzo: user.indirizzo, messaggio: messaggio || null })
       .catch(e => console.error('[care] email conferma fallita', e))
 
+    await creaNotifica(user.id, {
+      tipo: 'richiesta',
+      titolo: `Richiesta confermata — ${app.clienteNome ?? 'paziente'}`,
+      dettaglio: `${servizio ?? 'Seduta'} · ${dataFinale} alle ${oraFinale}`,
+      link: '/care/dashboard/richieste',
+    })
+
     return NextResponse.json({ ok: true })
   }
 
@@ -71,6 +79,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     await sendEmailCareAnnullata({ ...datiEmail, messaggio: messaggio || null })
       .catch(e => console.error('[care] email annullamento fallita', e))
+
+    await creaNotifica(user.id, {
+      tipo: 'richiesta',
+      titolo: `Richiesta rifiutata — ${app.clienteNome ?? 'paziente'}`,
+      dettaglio: `${dataFinale} alle ${oraFinale}`,
+      link: '/care/dashboard/richieste',
+    })
 
     return NextResponse.json({ ok: true })
   }
@@ -101,6 +116,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     await sendEmailCareProposta({ ...datiEmail, token, messaggio })
       .catch(e => console.error('[care] email proposta fallita', e))
+
+    await creaNotifica(user.id, {
+      tipo: 'richiesta',
+      titolo: `Proposta inviata — ${app.clienteNome ?? 'paziente'}`,
+      dettaglio: `Nuovo orario proposto: ${dataFinale} alle ${oraFinale}`,
+      link: '/care/dashboard/richieste',
+    })
 
     return NextResponse.json({ ok: true })
   }

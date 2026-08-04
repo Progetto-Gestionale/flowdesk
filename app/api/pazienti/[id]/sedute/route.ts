@@ -1,6 +1,7 @@
 import { getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { creaNotificaCare } from '@/lib/notifiche'
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getAuthUserId()
@@ -39,6 +40,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       tipo,
       note,
     },
+  })
+
+  await creaNotificaCare(user, {
+    tipo: 'seduta',
+    titolo: `Seduta registrata — ${paziente.nome}`,
+    dettaglio: seduta.tipo ?? undefined,
+    link: `/care/dashboard/pazienti/${id}`,
   })
 
   return NextResponse.json({ seduta })

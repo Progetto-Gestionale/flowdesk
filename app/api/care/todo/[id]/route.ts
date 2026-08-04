@@ -1,20 +1,22 @@
 import { getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { creaNotificaCare } from '@/lib/notifiche'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const userId = await getAuthUserId()
   if (!userId) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
   const { id } = await params
-  const data = await req.json()
-  if (data.data) data.data = new Date(data.data)
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
 
-  const seduta = await prisma.seduta.updateMany({ where: { id, userId: user.id }, data })
-  return NextResponse.json({ seduta })
+  const { testo, fatto } = await req.json()
+  const data: Record<string, unknown> = {}
+  if (typeof testo === 'string' && testo.trim()) data.testo = testo.trim()
+  if (typeof fatto === 'boolean') data.fatto = fatto
+
+  await prisma.todo.updateMany({ where: { id, userId: user.id }, data })
+  return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -25,20 +27,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
 
-  const seduta = await prisma.seduta.findFirst({
-    where: { id, userId: user.id },
-    select: { tipo: true, pazienteId: true, paziente: { select: { nome: true } } },
-  })
-  await prisma.seduta.deleteMany({ where: { id, userId: user.id } })
-
-  if (seduta) {
-    await creaNotificaCare(user, {
-      tipo: 'seduta',
-      titolo: `Seduta eliminata — ${seduta.paziente.nome}`,
-      dettaglio: seduta.tipo ?? undefined,
-      link: `/care/dashboard/pazienti/${seduta.pazienteId}`,
-    })
-  }
-
+  await prisma.todo.deleteMany({ where: { id, userId: user.id } })
   return NextResponse.json({ ok: true })
 }

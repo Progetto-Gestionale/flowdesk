@@ -4,6 +4,7 @@ import { useUser } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
+import Campanella from './components/Campanella'
 import TopBar from '@/app/components/TopBar'
 
 export default function CareDashboardLayout({ children }: { children: React.ReactNode }) {
@@ -37,7 +38,7 @@ export default function CareDashboardLayout({ children }: { children: React.Reac
     <div className="flex h-screen bg-mist overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar />
+        <TopBar notifiche={<Campanella />} />
         <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>
