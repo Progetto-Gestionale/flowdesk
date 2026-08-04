@@ -3,8 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Runtime: transaction pooler Supabase (porta 6543, ?pgbouncer=true) — adatto al serverless.
+  url       = env("DATABASE_URL")
+  // Solo per Prisma CLI (migrate / db push): connessione diretta "session" (porta 5432).
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
