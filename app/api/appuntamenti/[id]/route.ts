@@ -2,6 +2,7 @@ import { getAuthUser, getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { creaNotificaCare, descriviQuando } from '@/lib/notifiche'
+import { sincronizzaSeduta } from '@/lib/sedute'
 
 // Come si legge il cambio di stato nel testo della notifica
 const ETICHETTA_STATO: Record<string, string> = {
@@ -112,22 +113,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where: { id, userId: user.id },
       select: { pazienteId: true, data: true, servizio: true, clienteNome: true },
     })
-    if (app?.pazienteId) {
-      if (data.status === 'completato') {
-        await prisma.seduta.upsert({
-          where: { appuntamentoId: id },
-          update: { data: app.data, tipo: app.servizio },
-          create: {
-            userId: user.id,
-            pazienteId: app.pazienteId,
-            appuntamentoId: id,
-            data: app.data,
-            tipo: app.servizio,
-          },
-        })
-      } else {
-        await prisma.seduta.deleteMany({ where: { appuntamentoId: id, userId: user.id } })
-      }
+    if (app) {
+      await sincronizzaSeduta({ ...app, id, userId: user.id, status: data.status })
     }
     if (app && data.status !== 'in_attesa') {
       await creaNotificaCare(user, {
