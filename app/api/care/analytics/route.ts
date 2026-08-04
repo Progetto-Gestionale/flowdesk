@@ -22,15 +22,27 @@ export async function GET(req: Request) {
   const inizio = romeWallTimeToDate(da, '00:00')
   const fine = new Date(romeWallTimeToDate(a, '00:00').getTime() + 24 * 60 * 60 * 1000)
 
-  const completate = await prisma.appuntamento.findMany({
-    where: { userId: user.id, status: 'completato', data: { gte: inizio, lt: fine } },
-    select: {
-      data: true,
-      pazienteId: true,
-      servizio: true,
-      tipoSeduta: { select: { nome: true, prezzo: true } },
-    },
-  })
+  const [completate, noShow, storicoPrecedente] = await Promise.all([
+    prisma.appuntamento.findMany({
+      where: { userId: user.id, status: 'completato', data: { gte: inizio, lt: fine } },
+      select: {
+        data: true,
+        pazienteId: true,
+        servizio: true,
+        tipoSeduta: { select: { nome: true, prezzo: true } },
+      },
+    }),
+    prisma.appuntamento.count({
+      where: { userId: user.id, status: 'no_show', data: { gte: inizio, lt: fine } },
+    }),
+    // Chi era già passato di qui PRIMA del periodo: serve a distinguere i pazienti
+    // nuovi da quelli di ritorno
+    prisma.appuntamento.findMany({
+      where: { userId: user.id, status: 'completato', data: { lt: inizio }, pazienteId: { not: null } },
+      select: { pazienteId: true },
+      distinct: ['pazienteId'],
+    }),
+  ])
 
   // Sedute e incasso giorno per giorno (l'asse X del grafico a barre)
   const perGiorno = new Map<string, { sedute: number; incasso: number }>()
@@ -58,8 +70,20 @@ export async function GET(req: Request) {
     perTipo.set(nome, rigaT)
   }
 
+  // Tasso di no-show sulle sedute che avrebbero dovuto svolgersi
+  const previste = completate.length + noShow
+  const tassoNoShow = previste > 0 ? (noShow / previste) * 100 : 0
+
+  const giaVisti = new Set(storicoPrecedente.map(x => x.pazienteId))
+  let pazientiNuovi = 0
+  for (const p of pazienti) if (!giaVisti.has(p)) pazientiNuovi++
+
   return NextResponse.json({
     seduteCompletate: completate.length,
+    noShow,
+    tassoNoShow,
+    pazientiNuovi,
+    pazientiDiRitorno: pazienti.size - pazientiNuovi,
     incassoTotale,
     // "Quanto lascia in media un paziente nel periodo", non per singola seduta
     spesaMediaPaziente: pazienti.size ? incassoTotale / pazienti.size : 0,

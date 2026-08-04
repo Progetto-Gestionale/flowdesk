@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import {
   IconGrid, IconCalendar, IconChartBar, IconSettings,
   IconStethoscope, IconClipboard, IconClock, IconBell, IconCheck,
@@ -40,6 +41,24 @@ const navCare = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [daVerificare, setDaVerificare] = useState(0)
+
+  useEffect(() => {
+    async function conta() {
+      try {
+        const res = await fetch('/api/care/richieste/count', { credentials: 'include', cache: 'no-store' })
+        const d = await res.json()
+        setDaVerificare(d.daVerificare ?? 0)
+      } catch { /* il badge non è critico */ }
+    }
+    conta()
+    const t = setInterval(conta, 30000)
+    window.addEventListener('refresh-richieste-count', conta)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('refresh-richieste-count', conta)
+    }
+  }, [])
 
   return (
     <aside className="w-60 shrink-0 bg-ink-navy flex flex-col h-full">
@@ -80,6 +99,11 @@ export default function Sidebar() {
                       <item.Icon />
                     </span>
                     <span className="flex-1">{item.label}</span>
+                    {item.href === '/care/dashboard/richieste' && daVerificare > 0 && (
+                      <span className="bg-zest-lime text-ink-navy text-xs font-bold px-1.5 py-0.5 rounded-full">
+                        {daVerificare > 9 ? '9+' : daVerificare}
+                      </span>
+                    )}
                   </Link>
                 )
               })}

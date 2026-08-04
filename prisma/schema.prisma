@@ -283,9 +283,17 @@ model DocumentoPaziente {
   mimeType   String?
   dimensione Int?     // byte del file originale
   tipo       String?  // referto | prescrizione | radiografia | altro
+  // Seduta a cui il documento si riferisce. Due colonne perché una seduta può
+  // essere ancora un appuntamento in agenda (non svolto) oppure già una voce di
+  // cartella clinica; ne è valorizzata al massimo una, nessuna = documento generico.
+  appuntamentoId String?
+  sedutaId       String?
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
   paziente   Paziente @relation(fields: [pazienteId], references: [id])
+
+  @@index([pazienteId, appuntamentoId])
+  @@index([pazienteId, sedutaId])
 }
 
 model GruppoTavoli {
