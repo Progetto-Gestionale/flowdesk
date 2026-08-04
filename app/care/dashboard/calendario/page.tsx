@@ -5,18 +5,13 @@ import OrarioSelect from '@/app/components/OrarioSelect'
 import Link from 'next/link'
 import { IconTrash, IconArrowRight, IconClock } from '@/app/components/icons'
 import SedutaPopup from './../components/SedutaPopup'
+import GrigliaSettimana from './../components/GrigliaSettimana'
+import { STATUS_STYLE } from './../components/statiAppuntamento'
 import { segnalaAggiornamento } from './../components/notificheUtil'
 
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_CODICE = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
 const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
-
-const STATUS_STYLE: Record<string, { bg: string; text: string; label: string }> = {
-  confermato: { bg: 'bg-electric-blue/15', text: 'text-electric-blue', label: 'Confermato' },
-  completato: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Completato' },
-  no_show: { bg: 'bg-orange-100', text: 'text-orange-600', label: 'No-show' },
-  cancellato: { bg: 'bg-red-100', text: 'text-red-500', label: 'Cancellato' },
-}
 
 interface Appuntamento {
   id: string
@@ -398,6 +393,18 @@ export default function CalendarioPage() {
     setVista('settimana')
   }
 
+  /** Nuovo appuntamento cliccando una cella vuota della griglia. */
+  function nuovoAllOra(day: Date, ora: number) {
+    setForm({ ...FORM_VUOTO, ora: `${String(ora).padStart(2, '0')}:00` })
+    setErroreNuovo('')
+    setShowNuovo(day)
+  }
+
+  /** Il pulsante in alto propone oggi se è nella settimana mostrata. */
+  function nuovoDaBarra() {
+    openNuovo(days.find(d => isSameDay(d, today)) ?? days[0])
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -433,6 +440,10 @@ export default function CalendarioPage() {
             className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist">Oggi</button>
           <button onClick={vaiAvanti}
             className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 text-ink-navy/50 hover:bg-mist">›</button>
+          <button onClick={nuovoDaBarra}
+            className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90 transition-colors">
+            + Aggiungi
+          </button>
         </div>
       </div>
 
@@ -495,43 +506,18 @@ export default function CalendarioPage() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-7 gap-3">
-          {days.map((day, i) => {
-            const isToday = isSameDay(day, new Date())
-            const dayApps = appsPerGiorno(day)
-            return (
-              <div key={i} className="min-h-[280px]">
-                <div className={`text-center pb-2 mb-2 border-b-2 ${isToday ? 'border-electric-blue' : 'border-ink-navy/10'}`}>
-                  <p className="text-[10px] font-semibold text-ink-navy/35 uppercase tracking-wider">{GIORNI_BREVI[i]}</p>
-                  <p className={`text-lg font-bold ${isToday ? 'text-electric-blue' : 'text-ink-navy'}`}>{day.getDate()}</p>
-                  <button onClick={() => apriModalOrari(day)}
-                    className={`mt-1 inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full transition-colors ${orarioEffettivo(day).override ? 'bg-zest-lime/25 text-ink-navy' : 'text-ink-navy/30 hover:text-electric-blue'}`}
-                    title={orarioEffettivo(day).testo}>
-                    <span className="w-2.5 h-2.5"><IconClock /></span>
-                    {orarioEffettivo(day).testo === 'Chiuso' ? 'Chiuso' : 'Orari'}
-                  </button>
-                </div>
-                <div className="space-y-1.5">
-                  {dayApps.map(a => {
-                    const st = STATUS_STYLE[a.status] ?? STATUS_STYLE.confermato
-                    const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
-                    return (
-                      <button key={a.id} onClick={() => openSelected(a)}
-                        className={`w-full text-left rounded-lg px-2 py-1.5 ${st.bg} ${st.text} hover:opacity-80 transition-opacity`}>
-                        <p className="text-[11px] font-bold leading-tight">{ora}</p>
-                        <p className="text-[11px] font-semibold leading-tight truncate">{a.clienteNome || 'Paziente'}</p>
-                      </button>
-                    )
-                  })}
-                  <button onClick={() => openNuovo(day)}
-                    className="w-full text-[11px] text-ink-navy/30 hover:text-electric-blue border border-dashed border-ink-navy/10 hover:border-electric-blue rounded-lg py-1.5 transition-colors">
-                    + Aggiungi
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <GrigliaSettimana
+          giorni={days}
+          oggi={today}
+          appuntamentiDi={appsPerGiorno}
+          orarioDi={day => {
+            const o = orarioEffettivo(day)
+            return { testo: o.testo, personalizzato: Boolean(o.override) }
+          }}
+          onNuovo={nuovoAllOra}
+          onApri={a => openSelected(a as Appuntamento)}
+          onOrari={apriModalOrari}
+        />
       )}
 
       {/* Pannello dettaglio appuntamento */}
@@ -620,6 +606,14 @@ export default function CalendarioPage() {
               Nuovo appuntamento — {showNuovo.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
             </h2>
             <div className="space-y-3">
+              {/* Il giorno si sceglie qui: partendo dal pulsante in alto non lo
+                  si è indicato cliccando una colonna */}
+              <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Data</label>
+                <input type="date" value={toDateStr(showNuovo)}
+                  onChange={e => { if (e.target.value) setShowNuovo(new Date(`${e.target.value}T12:00:00`)) }}
+                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Paziente</label>
                 <select value={form.pazienteId} onChange={e => setForm({ ...form, pazienteId: e.target.value })}
