@@ -110,21 +110,6 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
-
-      {/* Piano attivo */}
-      <div className="p-4 border-t border-white/10">
-        <div className="bg-white/5 rounded-lg p-3 flex items-center gap-2.5">
-          <span className="w-2 h-2 rounded-full bg-zest-lime shrink-0" />
-          <div>
-            <p className="text-xs font-semibold text-zest-lime">
-              Piano Pro
-            </p>
-            <p className="text-xs text-white/40 mt-0.5">
-              Attivo
-            </p>
-          </div>
-        </div>
-      </div>
     </aside>
   )
 }
