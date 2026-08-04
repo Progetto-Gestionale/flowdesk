@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ComponentType } from 'react'
 import { IconUsers, IconClipboard, IconChat, IconCalendar, IconFork } from '@/app/components/icons'
+import ResocontoSerata from './components/ResocontoSerata'
 
 const stats: { label: string; value: string; Icon: ComponentType<{ className?: string }>; href: string }[] = [
   { label: 'Lead questo mese', value: '—', Icon: IconUsers, href: '/food/dashboard/clienti/crm' },
@@ -40,6 +41,9 @@ export default function DashboardHome() {
         <h1 className="text-2xl font-extrabold text-ink-navy">Benvenuto in Flowest</h1>
         <p className="text-ink-navy/50 mt-1">Ecco un riepilogo della tua attività.</p>
       </div>
+
+      {/* Resoconto della serata */}
+      <ResocontoSerata />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

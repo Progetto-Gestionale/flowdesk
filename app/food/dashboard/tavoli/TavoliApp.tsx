@@ -564,7 +564,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={toggleEditMode}
             className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl border transition-colors ${editMode ? 'bg-electric-blue text-white border-electric-blue' : 'bg-white text-ink-navy/60 border-ink-navy/15 hover:bg-mist'}`}>
-            {editMode ? 'Modifica attiva' : 'Modifica'}
+            {editMode ? 'Concludi modifica' : 'Modifica'}
           </button>
           {editMode && (
             <>

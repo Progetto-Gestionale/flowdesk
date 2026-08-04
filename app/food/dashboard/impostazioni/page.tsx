@@ -1097,12 +1097,9 @@ export default function Impostazioni() {
               </div>
 
               <div className="border-t border-ink-navy/8 pt-4 mt-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-ink-navy/70">Piano attivo: Trial gratuito</p>
-                    <p className="text-sm text-ink-navy/50">Accesso completo durante il periodo di prova</p>
-                  </div>
-                  <button className="bg-electric-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-electric-blue/90">Passa a Pro</button>
+                <div>
+                  <p className="text-sm font-medium text-ink-navy/70">Piano attivo: Pro</p>
+                  <p className="text-sm text-ink-navy/50">Accesso completo a tutte le funzioni</p>
                 </div>
               </div>
             </Section>
