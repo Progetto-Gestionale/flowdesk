@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { IconReceipt } from '@/app/components/icons'
 
 interface RigaOrdine {
@@ -66,6 +66,13 @@ const TIPO_THEME = {
   delivery: { border: 'border-teal-300',   bg: 'bg-teal-50',    text: 'text-teal-800'   },
 }
 
+// Colori più tenui per le celle dentro le righe
+const CELL_THEME = {
+  tavolo:   { border: 'border-amber-200',  bg: 'bg-amber-50/30'  },
+  asporto:  { border: 'border-violet-200', bg: 'bg-violet-50/30' },
+  delivery: { border: 'border-teal-200',   bg: 'bg-teal-50/30'   },
+}
+
 export default function OrdiniPage() {
   const [ordini, setOrdini] = useState<Ordine[]>([])
   const [tavoli, setTavoli] = useState<TavoloDb[]>([])
@@ -73,7 +80,7 @@ export default function OrdiniPage() {
   const [loading, setLoading] = useState(true)
   const [cambioTavolo, setCambioTavolo] = useState<string | null>(null)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
-  const [storicoAperto, setStoricoAperto] = useState(false)
+  const [vista, setVista] = useState<'attuali' | 'passati'>('attuali')
   const [filtroStorico, setFiltroStorico] = useState<'tavolo' | 'asporto' | 'delivery'>('tavolo')
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
@@ -209,169 +216,210 @@ export default function OrdiniPage() {
   const appStoricoFiltrati = filtroStorico === 'tavolo' ? []
     : appStorico.filter(a => (inferTipoOrdine(a.servizio) ?? 'asporto') === filtroStorico)
 
-  function OrdineCard({ o }: { o: Ordine }) {
+  // Raggruppamento degli ordini di tavolo: ogni tavolo (o gruppo di tavoli uniti) è una
+  // riga orizzontale con tutti i suoi ordini in fila. Asporto/delivery restano card singole.
+  const isTavoloOrdine = (o: Ordine) => o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
+
+  function raggruppaPerTavolo(list: Ordine[]) {
+    const map = new Map<string, { key: string; label: string; ordini: Ordine[] }>()
+    for (const o of list) {
+      const key = o.gruppoId ? `g:${o.gruppoId}` : o.tavoloId ? `t:${o.tavoloId}` : 'none'
+      if (!map.has(key)) {
+        const t = tavoli.find(tv => tv.id === o.tavoloId)
+        // gruppo → o.tavolo è già "T2+3"; tavolo singolo → etichetta o "Tavolo N"; senza tavolo → "Da assegnare"
+        const label = o.gruppoId
+          ? o.tavolo
+          : t ? (t.etichetta ?? `Tavolo ${t.numero}`)
+          : o.tavoloId ? o.tavolo : 'Da assegnare'
+        map.set(key, { key, label, ordini: [] })
+      }
+      map.get(key)!.ordini.push(o)
+    }
+    const gruppi = [...map.values()]
+    // dentro ogni riga: ordini più vecchi a sinistra
+    for (const g of gruppi) g.ordini.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
+    // in cima il tavolo che aspetta da più tempo
+    gruppi.sort((a, b) => +new Date(a.ordini[0].createdAt) - +new Date(b.ordini[0].createdAt))
+    return gruppi
+  }
+
+  const ordiniAttiviTavolo = ordiniAttivi.filter(isTavoloOrdine)
+  const gruppiTavoloAttivi = raggruppaPerTavolo(ordiniAttiviTavolo)
+  const gruppiTavoloStorico = raggruppaPerTavolo(ordiniStoricoFiltrati)
+
+  // Asporto e delivery: come i tavoli, ognuno diventa una riga orizzontale con dentro
+  // sia gli ordini dal menu (Ordine) sia le prenotazioni online (AppuntamentoOrdine).
+  const perOra = (a: Ordine, b: Ordine) => +new Date(a.createdAt) - +new Date(b.createdAt)
+  const ordiniAttiviAsporto = ordiniAttivi.filter(o => !isTavoloOrdine(o) && o.tipo !== 'delivery').sort(perOra)
+  const ordiniAttiviDelivery = ordiniAttivi.filter(o => !isTavoloOrdine(o) && o.tipo === 'delivery').sort(perOra)
+  const appAttiviAsporto = appAttivi.filter(a => inferTipoOrdine(a.servizio) !== 'delivery')
+  const appAttiviDelivery = appAttivi.filter(a => inferTipoOrdine(a.servizio) === 'delivery')
+  const nAsportoAttivi = ordiniAttiviAsporto.length + appAttiviAsporto.length
+  const nDeliveryAttivi = ordiniAttiviDelivery.length + appAttiviDelivery.length
+
+  // Bottoni azione condivisi dalle celle degli ordini (Pronto / Elimina con conferma).
+  function AzioneOrdine({ o }: { o: Ordine }) {
     const isDone = isDoneOrdine(o)
-    const isTavolo = o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
-    const tipoKey: keyof typeof TIPO_THEME = isTavolo ? 'tavolo' : o.tipo === 'delivery' ? 'delivery' : 'asporto'
-    const theme = TIPO_THEME[tipoKey] // colore per tipo anche sugli ordini conclusi
-    const ora = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+    if (!isDone) return (
+      <button onClick={() => avanzaOrdine(o)}
+        className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors shrink-0">
+        Pronto
+      </button>
+    )
+    return confermaElimina === o.id ? (
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={() => setConfermaElimina(null)} className="text-xs px-2 py-0.5 rounded-lg border border-ink-navy/15 text-ink-navy/50">No</button>
+        <button onClick={() => cancellaOrdine(o.id)} className="text-xs px-2 py-0.5 rounded-lg bg-red-500 text-white font-semibold">Sì</button>
+      </div>
+    ) : (
+      <button onClick={() => setConfermaElimina(o.id)}
+        className="text-xs font-semibold px-2 py-1 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors shrink-0">
+        Elimina
+      </button>
+    )
+  }
 
-    const tavoloAssegnato = tavoli.find(t => t.id === o.tavoloId)
-    const label = isTavolo
-      ? (o.gruppoId ? o.tavolo : tavoloAssegnato ? (tavoloAssegnato.etichetta ?? `Tavolo ${tavoloAssegnato.numero}`) : `Tavolo ${o.tavolo}`)
-      : (() => { try { return JSON.parse(o.clienteInfo ?? '{}').nome || 'Ordine online' } catch { return 'Ordine online' } })()
-
-    let ci: { nome?: string; telefono?: string; indirizzo?: string; ora?: string; clienteOra?: string } = {}
+  // Cella compatta di un singolo ordine dentro una riga (tavolo, asporto o delivery).
+  function OrderCell({ o }: { o: Ordine }) {
+    const isDone = isDoneOrdine(o)
+    const isTavolo = isTavoloOrdine(o)
+    const tipoKey: keyof typeof CELL_THEME = isTavolo ? 'tavolo' : o.tipo === 'delivery' ? 'delivery' : 'asporto'
+    const cell = CELL_THEME[tipoKey]
+    const oraArrivo = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+    const nonConsegnato = o.status === 'non_consegnato'
+    let ci: { nome?: string; telefono?: string; indirizzo?: string; ora?: string } = {}
     try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
+    const nome = ci.nome || 'Ordine online'
 
     return (
-      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${o.status === 'non_consegnato' ? 'border-red-300' : theme ? theme.border : 'border-ink-navy/10'}`}>
-        {o.status === 'non_consegnato' && (
-          <div className="px-4 py-2 bg-red-500 text-white text-center">
-            <p className="text-xs font-bold uppercase tracking-wide">{tipoKey === 'delivery' ? 'Non consegnato' : 'Non ritirato'}</p>
-          </div>
+      <div className={`shrink-0 w-56 rounded-lg border flex flex-col overflow-hidden ${nonConsegnato ? 'border-red-300 bg-red-50/40' : `${cell.border} ${cell.bg}`} ${isDone ? 'opacity-60' : ''}`}>
+        {nonConsegnato && (
+          <p className="px-3 py-1 bg-red-500 text-white text-[10px] font-bold uppercase tracking-wide text-center">
+            {tipoKey === 'delivery' ? 'Non consegnato' : 'Non ritirato'}
+          </p>
         )}
-        {/* Header */}
-        <div className={`px-4 py-3 border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
-          {/* Riga 1: label a sinistra + badge tipo (con orario per i tavoli) a destra */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <span className={`block text-sm font-bold truncate ${theme ? theme.text : 'text-ink-navy/50'}`}>{label}</span>
-              {/* asporto/delivery: orario ritiro/consegna in evidenza sotto il nome */}
-              {!isTavolo && ci.ora && (
-                <p className={`mt-0.5 text-sm font-bold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy'}`}>
+        <div className="px-3 py-2 border-b border-black/5 bg-white/50">
+          <div className="flex items-center justify-between gap-2">
+            {isTavolo
+              ? <span className="text-xs font-semibold text-ink-navy/50 truncate">{oraArrivo} · €{o.totale.toFixed(2)}</span>
+              : <span className="text-sm font-bold text-ink-navy truncate">{nome}</span>}
+            <AzioneOrdine o={o} />
+          </div>
+          {!isTavolo && (
+            <>
+              {ci.ora && (
+                <p className="mt-0.5 text-sm font-bold text-ink-navy">
                   {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ci.ora}
                 </p>
               )}
-            </div>
-            <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isTavolo ? 'bg-amber-200/60 text-amber-700' : tipoKey === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'}`}>
-                {isTavolo ? 'Tavolo' : tipoKey === 'delivery' ? 'Delivery' : 'Asporto'}
-              </span>
-              {/* tavolo: orario di arrivo ordine sotto il badge */}
-              {isTavolo && <span className={`text-xs ${theme ? theme.text + '/60' : 'text-ink-navy/35'}`}>{ora}</span>}
-            </div>
-          </div>
-
-          {/* Riga 2: prezzo + azione */}
-          <div className="flex items-center gap-2 flex-wrap mt-2">
-            <span className={`text-sm font-semibold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
-            {!isDone && (
-              <button onClick={() => avanzaOrdine(o)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
-                Pronto
-              </button>
-            )}
-            {isDone && (
-              confermaElimina === o.id ? (
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => setConfermaElimina(null)} className="text-xs px-2 py-1 rounded-lg border border-ink-navy/15 text-ink-navy/50">No</button>
-                  <button onClick={() => cancellaOrdine(o.id)} className="text-xs px-2 py-1 rounded-lg bg-red-500 text-white font-semibold">Sì</button>
-                </div>
-              ) : (
-                <button onClick={() => setConfermaElimina(o.id)}
-                  className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors">
-                  Elimina
-                </button>
-              )
-            )}
-          </div>
+              <p className="text-xs text-ink-navy/45">
+                €{o.totale.toFixed(2)}{ci.telefono ? ` · ${ci.telefono}` : ''}
+              </p>
+              {tipoKey === 'delivery' && ci.indirizzo && (
+                <p className="text-[11px] text-ink-navy/45 break-words">{ci.indirizzo}</p>
+              )}
+            </>
+          )}
         </div>
-
-        {/* Assegna tavolo */}
-        {isTavolo && !isDone && cambioTavolo === o.id && (
-          <div className="px-4 py-2 bg-electric-blue/10 border-b border-electric-blue/15">
-            <p className="text-xs font-medium text-electric-blue mb-2">Assegna tavolo:</p>
-            <div className="flex flex-wrap gap-1.5">
-              {tavoli.map(t => (
-                <button key={t.id} onClick={() => assegnaTavolo(o.id, t.id, t.numero.toString())}
-                  className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${o.tavoloId === t.id ? 'bg-electric-blue text-white' : 'bg-white border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/15'}`}>
-                  {t.etichetta ?? `T${t.numero}`}
-                  <span className="ml-1 text-electric-blue">({t.posti}p)</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Righe */}
-        <div className={`divide-y divide-ink-navy/6 ${isDone ? 'opacity-60' : ''}`}>
-          {isTavolo && tavoli.length > 0 && !isDone && (
-            <div className="px-4 py-2">
-              <button onClick={() => setCambioTavolo(cambioTavolo === o.id ? null : o.id)}
-                className="text-xs text-electric-blue hover:underline">cambia tavolo</button>
-            </div>
-          )}
-          {!isTavolo && ci.telefono && (
-            <div className="px-4 py-2 space-y-0.5">
-              <p className="text-xs text-ink-navy/50">{ci.telefono}</p>
-            </div>
-          )}
+        <div className="divide-y divide-ink-navy/6 flex-1">
           {o.righe.map(r => (
-            <div key={r.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-extrabold text-ink-navy shrink-0">{r.quantita}×</span>
-                <span className="text-sm font-bold text-ink-navy truncate">{r.nome}</span>
-                {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+            <div key={r.id} className="flex items-start gap-1.5 px-3 py-1.5">
+              <span className="text-sm font-extrabold text-ink-navy shrink-0">{r.quantita}×</span>
+              <div className="min-w-0">
+                <span className="text-sm font-bold text-ink-navy break-words">{r.nome}</span>
+                {r.note && <span className="block text-[11px] text-ink-navy/35 break-words">{r.note}</span>}
               </div>
-              <span className="text-sm text-ink-navy/50 shrink-0">€{(r.prezzo * r.quantita).toFixed(2)}</span>
             </div>
           ))}
-          {o.righe.length === 0 && <p className="px-4 py-3 text-sm text-ink-navy/30">Nessuna voce</p>}
-          {o.note && <p className="px-4 py-2 text-xs text-ink-navy/35 italic">{o.note}</p>}
+          {o.righe.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
         </div>
+        {o.note && <p className="px-3 py-1.5 text-[11px] text-ink-navy/35 italic border-t border-black/5">{o.note}</p>}
+        {/* riassegna tavolo (solo per ordini di tavolo, utile per quelli senza tavolo o da spostare) */}
+        {isTavolo && !isDone && tavoli.length > 0 && (
+          <div className="border-t border-black/5">
+            <button onClick={() => setCambioTavolo(cambioTavolo === o.id ? null : o.id)}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-electric-blue hover:underline">
+              cambia tavolo
+            </button>
+            {cambioTavolo === o.id && (
+              <div className="px-3 pb-2 flex flex-wrap gap-1">
+                {tavoli.map(t => (
+                  <button key={t.id} onClick={() => assegnaTavolo(o.id, t.id, t.numero.toString())}
+                    className={`text-[11px] px-2 py-0.5 rounded-lg font-medium transition-colors ${o.tavoloId === t.id ? 'bg-electric-blue text-white' : 'bg-white border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/15'}`}>
+                    {t.etichetta ?? `T${t.numero}`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }
 
-  function AppCard({ a }: { a: AppuntamentoOrdine }) {
+  // Cella compatta di una prenotazione online (asporto/delivery) dentro la riga.
+  function AppCell({ a }: { a: AppuntamentoOrdine }) {
     const isDone = isDoneApp(a)
-    const tipoKey: keyof typeof TIPO_THEME = inferTipoOrdine(a.servizio) === 'delivery' ? 'delivery' : 'asporto'
-    const theme = TIPO_THEME[tipoKey] // colore per tipo anche sugli ordini conclusi
+    const tipoKey: keyof typeof CELL_THEME = inferTipoOrdine(a.servizio) === 'delivery' ? 'delivery' : 'asporto'
+    const cell = CELL_THEME[tipoKey]
     const ora = new Date(a.data).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
     const [desc] = (a.note ?? '').split('\n')
     const nota = (desc ?? '').replace(/^Da richiesta #\d+$/, '').trim()
 
     return (
-      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${theme ? theme.border : 'border-ink-navy/10'}`}>
-        <div className={`px-4 py-3 border-b ${theme ? `${theme.bg} ${theme.border}` : 'bg-mist border-ink-navy/10'}`}>
-          {/* Riga 1: nome + tipo a destra */}
+      <div className={`shrink-0 w-56 rounded-lg border flex flex-col overflow-hidden ${cell.border} ${cell.bg} ${isDone ? 'opacity-60' : ''}`}>
+        <div className="px-3 py-2 border-b border-black/5 bg-white/50">
           <div className="flex items-center justify-between gap-2">
-            <span className={`text-sm font-bold truncate ${theme ? theme.text : 'text-ink-navy/50'}`}>{a.clienteNome || 'Cliente'}</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${tipoKey === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'}`}>
-              {tipoKey === 'delivery' ? 'Delivery' : 'Asporto'}
-            </span>
-          </div>
-          {/* Orario ritiro/consegna in evidenza */}
-          <p className={`mt-1 text-sm font-bold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy'}`}>
-            {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ora}
-          </p>
-          {/* Riga 2: azione */}
-          <div className="flex items-center gap-2 mt-2">
-            {!isDone && (
+            <span className="text-sm font-bold text-ink-navy truncate">{a.clienteNome || 'Cliente'}</span>
+            {!isDone ? (
               <button onClick={() => segnaAppCompletato(a.id)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors">
+                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 transition-colors shrink-0">
                 Pronto
               </button>
-            )}
-            {isDone && (
+            ) : (
               <button onClick={() => eliminaAppuntamento(a.id)}
-                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors">
+                className="text-xs font-semibold px-2 py-1 rounded-lg border border-red-200 text-red-400 hover:bg-red-50 transition-colors shrink-0">
                 Elimina
               </button>
             )}
           </div>
+          <p className="mt-0.5 text-sm font-bold text-ink-navy">
+            {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ora}
+          </p>
         </div>
-        {nota && (
-          <div className={`px-4 py-3 ${isDone ? 'opacity-60' : ''}`}>
-            <p className="text-sm font-bold text-ink-navy">{nota}</p>
+        <div className="flex-1">
+          {nota && <p className="px-3 py-1.5 text-sm font-bold text-ink-navy break-words">{nota}</p>}
+          {a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
+            <p className="px-3 pb-1.5 text-xs text-red-500 break-words">{a.allergie}</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Riga orizzontale con intestazione (tavolo/asporto/delivery) e le celle degli ordini in fila.
+  function OrdiniRow({ label, tipoKey, totale, count, children }: {
+    label: string
+    tipoKey: keyof typeof TIPO_THEME
+    totale?: number
+    count: number
+    children: ReactNode
+  }) {
+    const theme = TIPO_THEME[tipoKey]
+    const badge = tipoKey === 'tavolo' ? 'bg-amber-200/60 text-amber-700'
+      : tipoKey === 'delivery' ? 'bg-teal-200/60 text-teal-700' : 'bg-violet-200/60 text-violet-700'
+    return (
+      <div className={`bg-white border ${theme.border} rounded-xl overflow-hidden shadow-sm`}>
+        <div className={`px-4 py-2.5 ${theme.bg} border-b ${theme.border} flex items-center justify-between gap-2`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`text-sm font-bold truncate ${theme.text}`}>{label}</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${badge}`}>
+              {count} {count === 1 ? 'ordine' : 'ordini'}
+            </span>
           </div>
-        )}
-        {a.allergie && a.allergie.toLowerCase() !== 'nessuna' && (
-          <div className="px-4 pb-3">
-            <p className="text-xs text-red-500">{a.allergie}</p>
-          </div>
-        )}
+          {totale != null && <span className={`text-sm font-semibold shrink-0 ${theme.text}`}>€{totale.toFixed(2)}</span>}
+        </div>
+        <div className="flex gap-3 overflow-x-auto p-3">{children}</div>
       </div>
     )
   }
@@ -382,12 +430,23 @@ export default function OrdiniPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-ink-navy">Ordini</h1>
-          <p className="text-ink-navy/50 text-sm mt-0.5">
-            {totaleAttivi > 0 ? `${totaleAttivi} ordini attivi` : 'Nessun ordine attivo'} · aggiornamento ogni 15s
-          </p>
+          <div className="flex gap-1 bg-mist rounded-xl p-1">
+            {([
+              { key: 'attuali' as const, label: 'Attuali', count: totaleAttivi },
+              { key: 'passati' as const, label: 'Passati', count: totaleStorico },
+            ]).map(({ key, label, count }) => (
+              <button key={key} onClick={() => setVista(key)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${vista === key ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                {label}
+                {count > 0 && (
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${vista === key ? 'bg-electric-blue text-white' : 'bg-ink-navy/10 text-ink-navy/50'}`}>{count}</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
         <button onClick={() => { fetchOrdini(); fetchAppuntamenti() }}
           className="text-sm text-electric-blue hover:text-ink-navy font-medium border border-electric-blue/25 px-3 py-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
@@ -428,61 +487,73 @@ export default function OrdiniPage() {
           <p className="text-ink-navy/50 text-sm">Nessun ordine ancora</p>
           <p className="text-ink-navy/35 text-xs mt-1">Gli ordini arrivano dal menu digitale o dal calendario</p>
         </div>
+      ) : vista === 'attuali' ? (
+        /* ─── Ordini attuali ─── */
+        totaleAttivi === 0 ? (
+          <p className="text-sm text-ink-navy/40 py-12 text-center">Nessun ordine attivo al momento</p>
+        ) : (
+          <div className="space-y-3">
+            {/* Tavoli: una riga orizzontale per tavolo (o gruppo di tavoli uniti) */}
+            {gruppiTavoloAttivi.map(g => (
+              <OrdiniRow key={g.key} label={g.label} tipoKey="tavolo" count={g.ordini.length}
+                totale={g.ordini.reduce((s, o) => s + o.totale, 0)}>
+                {g.ordini.map(o => <OrderCell key={o.id} o={o} />)}
+              </OrdiniRow>
+            ))}
+            {/* Asporto: una riga con ordini e prenotazioni online */}
+            {nAsportoAttivi > 0 && (
+              <OrdiniRow label="Asporto" tipoKey="asporto" count={nAsportoAttivi}
+                totale={ordiniAttiviAsporto.reduce((s, o) => s + o.totale, 0)}>
+                {ordiniAttiviAsporto.map(o => <OrderCell key={o.id} o={o} />)}
+                {appAttiviAsporto.map(a => <AppCell key={a.id} a={a} />)}
+              </OrdiniRow>
+            )}
+            {/* Delivery: una riga con ordini e prenotazioni online */}
+            {nDeliveryAttivi > 0 && (
+              <OrdiniRow label="Delivery" tipoKey="delivery" count={nDeliveryAttivi}
+                totale={ordiniAttiviDelivery.reduce((s, o) => s + o.totale, 0)}>
+                {ordiniAttiviDelivery.map(o => <OrderCell key={o.id} o={o} />)}
+                {appAttiviDelivery.map(a => <AppCell key={a.id} a={a} />)}
+              </OrdiniRow>
+            )}
+          </div>
+        )
       ) : (
-        <div className="space-y-6">
-
-          {/* Ordini attivi */}
-          {totaleAttivi > 0 && (
-            <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-ink-navy/50 uppercase tracking-wider flex items-center gap-2">
-                In corso
-                <span className="bg-electric-blue text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{totaleAttivi}</span>
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {ordiniAttivi.map(o => <OrdineCard key={o.id} o={o} />)}
-                {appAttivi.map(a => <AppCard key={a.id} a={a} />)}
+        /* ─── Ordini passati (pronti questa serata) ─── */
+        totaleStorico === 0 ? (
+          <p className="text-sm text-ink-navy/40 py-12 text-center">Nessun ordine concluso questa serata</p>
+        ) : (
+          <div className="space-y-3">
+            {/* Selettore tipo */}
+            <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
+              {(['tavolo', 'asporto', 'delivery'] as const).map(t => (
+                <button key={t} onClick={() => setFiltroStorico(t)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${filtroStorico === t ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            {ordiniStoricoFiltrati.length + appStoricoFiltrati.length === 0 ? (
+              <p className="text-sm text-ink-navy/30 py-3">Nessun ordine concluso di questo tipo</p>
+            ) : filtroStorico === 'tavolo' ? (
+              <div className="space-y-3">
+                {gruppiTavoloStorico.map(g => (
+                  <OrdiniRow key={g.key} label={g.label} tipoKey="tavolo" count={g.ordini.length}
+                    totale={g.ordini.reduce((s, o) => s + o.totale, 0)}>
+                    {g.ordini.map(o => <OrderCell key={o.id} o={o} />)}
+                  </OrdiniRow>
+                ))}
               </div>
-            </div>
-          )}
-
-          {/* Storico di oggi */}
-          {totaleStorico > 0 && (
-            <div>
-              <button onClick={() => setStoricoAperto(v => !v)}
-                className="w-full flex items-center gap-3 text-left group py-2">
-                <div className="h-px flex-1 bg-ink-navy/8" />
-                <span className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider group-hover:text-ink-navy/60 transition-colors flex items-center gap-1.5">
-                  Pronti questa serata
-                  <span className="bg-mist text-ink-navy/40 px-2 py-0.5 rounded-full normal-case tracking-normal">{totaleStorico}</span>
-                  <span className="text-ink-navy/30">{storicoAperto ? '▲' : '▼'}</span>
-                </span>
-                <div className="h-px flex-1 bg-ink-navy/8" />
-              </button>
-              {storicoAperto && (
-                <div className="mt-3 space-y-3">
-                  {/* Selettore tipo — solo per gli ordini conclusi */}
-                  <div className="flex gap-1 bg-mist rounded-xl p-1 w-fit">
-                    {(['tavolo', 'asporto', 'delivery'] as const).map(t => (
-                      <button key={t} onClick={() => setFiltroStorico(t)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${filtroStorico === t ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                  {ordiniStoricoFiltrati.length + appStoricoFiltrati.length === 0 ? (
-                    <p className="text-sm text-ink-navy/30 py-3">Nessun ordine concluso di questo tipo</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {ordiniStoricoFiltrati.map(o => <OrdineCard key={o.id} o={o} />)}
-                      {appStoricoFiltrati.map(a => <AppCard key={a.id} a={a} />)}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-        </div>
+            ) : (
+              <OrdiniRow label={filtroStorico === 'delivery' ? 'Delivery' : 'Asporto'} tipoKey={filtroStorico}
+                count={ordiniStoricoFiltrati.length + appStoricoFiltrati.length}
+                totale={ordiniStoricoFiltrati.reduce((s, o) => s + o.totale, 0)}>
+                {ordiniStoricoFiltrati.map(o => <OrderCell key={o.id} o={o} />)}
+                {appStoricoFiltrati.map(a => <AppCell key={a.id} a={a} />)}
+              </OrdiniRow>
+            )}
+          </div>
+        )
       )}
     </div>
   )
