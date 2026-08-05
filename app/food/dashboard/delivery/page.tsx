@@ -15,29 +15,45 @@ interface Ordine {
 }
 
 type Stato = 'in_preparazione' | 'pronto' | 'consegnato'
+type Tipo = 'delivery' | 'asporto'
 
 function statoOrdine(o: Ordine): Stato {
-  // 'non_consegnato' finisce comunque tra i "consegnati" (storico serata) ma con banner.
+  // 'non_consegnato' finisce comunque tra i conclusi (storico serata) ma con banner.
   if (o.status === 'consegnato' || o.status === 'chiuso' || o.status === 'non_consegnato') return 'consegnato'
   if (o.status === 'pronto') return 'pronto'
   return 'in_preparazione'
 }
 
-const SEZIONI: { key: Stato; label: string }[] = [
-  { key: 'in_preparazione', label: 'In preparazione' },
-  { key: 'pronto', label: 'Pronto — da consegnare' },
-  { key: 'consegnato', label: 'Consegnati' },
-]
+// Etichette e colori dipendono dal tipo selezionato (delivery = consegna/teal, asporto = ritiro/violet).
+function testi(tipo: Tipo) {
+  const isDelivery = tipo === 'delivery'
+  return {
+    isDelivery,
+    badge: isDelivery ? 'Delivery' : 'Asporto',
+    quando: isDelivery ? 'Consegna' : 'Ritiro',
+    sezioni: [
+      { key: 'in_preparazione' as Stato, label: 'In preparazione' },
+      { key: 'pronto' as Stato, label: isDelivery ? 'Pronto — da consegnare' : 'Pronto — da ritirare' },
+      { key: 'consegnato' as Stato, label: isDelivery ? 'Consegnati' : 'Ritirati' },
+    ],
+    segna: isDelivery ? 'Segna consegnato' : 'Segna ritirato',
+    non: isDelivery ? 'Non consegnato' : 'Non ritirato',
+    theme: isDelivery
+      ? { border: 'border-teal-300', headBg: 'bg-teal-50', text: 'text-teal-800', textSoft: 'text-teal-800/60', badge: 'bg-teal-200/60 text-teal-700', btn: 'bg-teal-600 hover:bg-teal-700', dot: 'bg-teal-600' }
+      : { border: 'border-violet-300', headBg: 'bg-violet-50', text: 'text-violet-800', textSoft: 'text-violet-800/60', badge: 'bg-violet-200/60 text-violet-700', btn: 'bg-violet-600 hover:bg-violet-700', dot: 'bg-violet-600' },
+  }
+}
 
-export default function DeliveryPage() {
+export default function AsportoDeliveryPage() {
   const [ordini, setOrdini] = useState<Ordine[]>([])
+  const [tipoSel, setTipoSel] = useState<Tipo>('delivery')
   const [loading, setLoading] = useState(true)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
 
   const fetchOrdini = useCallback(async () => {
     const res = await fetch('/api/ordini?oggi=1', { credentials: 'include' })
     const data = await res.json().catch(() => ({}))
-    setOrdini((data.ordini ?? []).filter((o: Ordine) => o.tipo === 'delivery'))
+    setOrdini((data.ordini ?? []).filter((o: Ordine) => o.tipo === 'delivery' || o.tipo === 'asporto'))
   }, [])
 
   useEffect(() => {
@@ -63,6 +79,8 @@ export default function DeliveryPage() {
     fetchOrdini()
   }
 
+  const t = testi(tipoSel)
+
   function Card({ o }: { o: Ordine }) {
     const stato = statoOrdine(o)
     const isDone = stato === 'consegnato'
@@ -73,31 +91,31 @@ export default function DeliveryPage() {
     const oraArrivo = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 
     return (
-      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${nonConsegnato ? 'border-red-300' : isDone ? 'border-ink-navy/10' : 'border-teal-300'}`}>
+      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${nonConsegnato ? 'border-red-300' : isDone ? 'border-ink-navy/10' : t.theme.border}`}>
         {nonConsegnato && (
           <div className="px-4 py-2 bg-red-500 text-white text-center">
-            <p className="text-xs font-bold uppercase tracking-wide">Non consegnato</p>
+            <p className="text-xs font-bold uppercase tracking-wide">{t.non}</p>
           </div>
         )}
         {/* Header */}
-        <div className={`px-4 py-3 border-b ${isDone ? 'bg-mist border-ink-navy/10' : 'bg-teal-50 border-teal-300'}`}>
+        <div className={`px-4 py-3 border-b ${isDone ? 'bg-mist border-ink-navy/10' : `${t.theme.headBg} ${t.theme.border}`}`}>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <span className={`block text-sm font-bold truncate ${isDone ? 'text-ink-navy/50' : 'text-teal-800'}`}>{label}</span>
+              <span className={`block text-sm font-bold truncate ${isDone ? 'text-ink-navy/50' : t.theme.text}`}>{label}</span>
               {ci.ora && (
                 <p className={`mt-0.5 text-sm font-bold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy'}`}>
-                  Consegna alle {ci.ora}
+                  {t.quando} alle {ci.ora}
                 </p>
               )}
             </div>
             <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-200/60 text-teal-700">Delivery</span>
-              <span className={`text-xs ${isDone ? 'text-ink-navy/35' : 'text-teal-800/60'}`}>ordine {oraArrivo}</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${t.theme.badge}`}>{t.badge}</span>
+              <span className={`text-xs ${isDone ? 'text-ink-navy/35' : t.theme.textSoft}`}>ordine {oraArrivo}</span>
             </div>
           </div>
         </div>
 
-        {/* Info consegna */}
+        {/* Info cliente: indirizzo (solo delivery) + telefono — qui SÌ, in Ordini no */}
         {(ci.indirizzo || ci.telefono) && (
           <div className="px-4 py-2.5 bg-white border-b border-ink-navy/6 space-y-0.5">
             {ci.indirizzo && <p className="text-sm font-semibold text-ink-navy">{ci.indirizzo}</p>}
@@ -131,11 +149,11 @@ export default function DeliveryPage() {
               <>
                 <button onClick={() => setStato(o.id, 'non_consegnato')}
                   className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                  Non consegnato
+                  {t.non}
                 </button>
                 <button onClick={() => setStato(o.id, 'consegnato')}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors">
-                  Segna consegnato
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-colors ${t.theme.btn}`}>
+                  {t.segna}
                 </button>
               </>
             )}
@@ -160,14 +178,31 @@ export default function DeliveryPage() {
 
   if (loading) return <p className="text-ink-navy/35 text-sm p-8">Caricamento...</p>
 
-  const perStato = (s: Stato) => ordini.filter(o => statoOrdine(o) === s)
+  const attivi = (tipo: Tipo) => ordini.filter(o => o.tipo === tipo && statoOrdine(o) !== 'consegnato').length
+  const perStato = (s: Stato) => ordini.filter(o => o.tipo === tipoSel && statoOrdine(o) === s)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-ink-navy">Delivery</h1>
-          <p className="text-ink-navy/50 text-sm mt-0.5">Ordini a domicilio · aggiornamento ogni 15s</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-ink-navy">Asporto &amp; Delivery</h1>
+          <div className="flex gap-1 bg-mist rounded-xl p-1">
+            {([
+              { key: 'delivery' as Tipo, label: 'Delivery' },
+              { key: 'asporto' as Tipo, label: 'Asporto' },
+            ]).map(({ key, label }) => {
+              const n = attivi(key)
+              return (
+                <button key={key} onClick={() => setTipoSel(key)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${tipoSel === key ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                  {label}
+                  {n > 0 && (
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${tipoSel === key ? 'bg-electric-blue text-white' : 'bg-ink-navy/10 text-ink-navy/50'}`}>{n}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <button onClick={fetchOrdini}
           className="text-sm text-electric-blue hover:text-ink-navy font-medium border border-electric-blue/25 px-3 py-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
@@ -175,15 +210,15 @@ export default function DeliveryPage() {
         </button>
       </div>
 
-      {/* Tre colonne sempre visibili: preparazione · pronti · consegnati (restano per tutta la giornata) */}
+      {/* Tre colonne sempre visibili: preparazione · pronti · conclusi (restano per tutta la giornata) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-        {SEZIONI.map(sez => {
+        {t.sezioni.map(sez => {
           const lista = perStato(sez.key)
           return (
             <div key={sez.key} className="bg-mist/40 rounded-2xl border border-ink-navy/8 p-3">
               <h2 className="text-sm font-semibold text-ink-navy/60 uppercase tracking-wider flex items-center gap-2 mb-3 px-1">
                 {sez.label}
-                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${sez.key === 'pronto' ? 'bg-teal-600 text-white' : 'bg-white text-ink-navy/50 border border-ink-navy/10'}`}>{lista.length}</span>
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${sez.key === 'pronto' ? `${t.theme.dot} text-white` : 'bg-white text-ink-navy/50 border border-ink-navy/10'}`}>{lista.length}</span>
               </h2>
               <div className="space-y-3">
                 {lista.length === 0
