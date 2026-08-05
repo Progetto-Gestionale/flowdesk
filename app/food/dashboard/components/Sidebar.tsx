@@ -18,7 +18,7 @@ const navFood = [
       { label: 'Conti', href: '/food/dashboard/conti', Icon: IconCash },
       { label: 'Prenotazioni tavoli', href: '/food/dashboard/clienti/preventivi', Icon: IconClipboard },
       { label: 'Calendario', href: '/food/dashboard/clienti/calendario', Icon: IconCalendar },
-      { label: 'Delivery', href: '/food/dashboard/delivery', Icon: IconDelivery },
+      { label: 'Asporto & Delivery', href: '/food/dashboard/delivery', Icon: IconDelivery },
     ],
   },
   {
