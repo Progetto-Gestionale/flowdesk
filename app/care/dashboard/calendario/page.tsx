@@ -31,12 +31,6 @@ interface Paziente {
   email?: string
 }
 
-interface Seduta {
-  id: string
-  data: string
-  tipo?: string
-}
-
 function startOfWeek(d: Date) {
   const day = d.getDay()
   const diff = day === 0 ? -6 : 1 - day
@@ -146,7 +140,6 @@ export default function CalendarioPage() {
   const [currentMonth, setCurrentMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d })
   const [calDropOpen, setCalDropOpen] = useState(false)
   const [selected, setSelected] = useState<Appuntamento | null>(null)
-  const [seduteStorico, setSeduteStorico] = useState<Seduta[]>([])
   const [showNuovo, setShowNuovo] = useState<Date | null>(null)
   const [form, setForm] = useState(FORM_VUOTO)
   const [tipiSeduta, setTipiSeduta] = useState<TipoSeduta[]>([])
@@ -229,14 +222,8 @@ export default function CalendarioPage() {
     fetchOverrides(weekStart)
   }
 
-  async function openSelected(a: Appuntamento) {
+  function openSelected(a: Appuntamento) {
     setSelected(a)
-    setSeduteStorico([])
-    if (a.pazienteId) {
-      const res = await fetch(`/api/pazienti/${a.pazienteId}/sedute`, { credentials: 'include', cache: 'no-store' })
-      const data = await res.json()
-      setSeduteStorico((data.sedute ?? []).slice(0, 3))
-    }
   }
 
   async function handleStatusChange(id: string, status: string) {
@@ -553,25 +540,10 @@ export default function CalendarioPage() {
                 </div>
 
                 {selected.pazienteId && (
-                  <div className="bg-mist rounded-xl px-4 py-3">
-                    <p className="text-xs font-semibold text-ink-navy/35 uppercase tracking-wider mb-2">Sedute precedenti</p>
-                    {seduteStorico.length === 0 ? (
-                      <p className="text-xs text-ink-navy/35">Nessuna seduta registrata</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {seduteStorico.map(s => (
-                          <p key={s.id} className="text-xs text-ink-navy/60">
-                            {new Date(s.data).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
-                            {s.tipo ? ` · ${s.tipo}` : ''}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                    <Link href={`/care/dashboard/pazienti/${selected.pazienteId}`}
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-electric-blue hover:underline">
-                      Apri cartella clinica <span className="w-3 h-3"><IconArrowRight /></span>
-                    </Link>
-                  </div>
+                  <Link href={`/care/dashboard/pazienti/${selected.pazienteId}`}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-electric-blue hover:underline">
+                    Apri cartella clinica <span className="w-3 h-3"><IconArrowRight /></span>
+                  </Link>
                 )}
 
                 <div>

@@ -133,7 +133,7 @@ export default function GrigliaSettimana({
                   return (
                     <button key={a.id} onClick={() => onApri(a)}
                       style={{ position: 'absolute', top, height: altezza, left: 3, right: 3 }}
-                      className={`text-left rounded-lg px-1.5 py-1 overflow-hidden shadow-sm transition-opacity hover:opacity-80 ${st.bg} ${st.text}`}>
+                      className={`text-left px-1.5 py-1 overflow-hidden shadow-sm transition-opacity hover:opacity-80 ${st.bg} ${st.text}`}>
                       <p className={`font-bold leading-tight ${compatto ? 'text-[10px] truncate' : 'text-[11px]'}`}>
                         {d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                         {compatto && <span className="font-semibold"> · {a.clienteNome || 'Paziente'}</span>}
