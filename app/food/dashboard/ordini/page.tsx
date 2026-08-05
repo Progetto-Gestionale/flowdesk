@@ -28,6 +28,7 @@ interface Ordine {
   totale: number
   note: string | null
   createdAt: string
+  closedAt: string | null
   righe: RigaOrdine[]
 }
 
@@ -78,7 +79,6 @@ export default function OrdiniPage() {
   const [tavoli, setTavoli] = useState<TavoloDb[]>([])
   const [appuntamenti, setAppuntamenti] = useState<AppuntamentoOrdine[]>([])
   const [loading, setLoading] = useState(true)
-  const [cambioTavolo, setCambioTavolo] = useState<string | null>(null)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [vista, setVista] = useState<'attuali' | 'passati'>('attuali')
   const [filtroStorico, setFiltroStorico] = useState<'tavolo' | 'asporto' | 'delivery'>('tavolo')
@@ -156,16 +156,6 @@ export default function OrdiniPage() {
     fetchOrdini()
   }
 
-  async function assegnaTavolo(ordineId: string, tavoloId: string, tavoloNumero: string) {
-    await fetch(`/api/ordini/${ordineId}`, {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tavoloId, tavolo: tavoloNumero }),
-    })
-    setCambioTavolo(null)
-    fetchOrdini()
-  }
-
   async function segnaAppCompletato(id: string) {
     await fetch(`/api/appuntamenti/${id}`, {
       method: 'PATCH', credentials: 'include',
@@ -219,33 +209,67 @@ export default function OrdiniPage() {
   // Raggruppamento degli ordini di tavolo: ogni tavolo (o gruppo di tavoli uniti) è una
   // riga orizzontale con tutti i suoi ordini in fila. Asporto/delivery restano card singole.
   const isTavoloOrdine = (o: Ordine) => o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
+  const chiusuraTime = (o: Ordine) => o.closedAt ? +new Date(o.closedAt) : +new Date(o.createdAt)
+  const tavoloLabel = (o: Ordine) => {
+    const t = tavoli.find(tv => tv.id === o.tavoloId)
+    // gruppo → o.tavolo è già "T2+3"; tavolo singolo → etichetta o "Tavolo N"; senza tavolo → "Da assegnare"
+    return o.gruppoId ? o.tavolo : t ? (t.etichetta ?? `Tavolo ${t.numero}`) : o.tavoloId ? o.tavolo : 'Da assegnare'
+  }
 
+  // ATTIVI: una riga per tavolo, tavolo che aspetta da più tempo in cima.
   function raggruppaPerTavolo(list: Ordine[]) {
     const map = new Map<string, { key: string; label: string; ordini: Ordine[] }>()
     for (const o of list) {
       const key = o.gruppoId ? `g:${o.gruppoId}` : o.tavoloId ? `t:${o.tavoloId}` : 'none'
-      if (!map.has(key)) {
-        const t = tavoli.find(tv => tv.id === o.tavoloId)
-        // gruppo → o.tavolo è già "T2+3"; tavolo singolo → etichetta o "Tavolo N"; senza tavolo → "Da assegnare"
-        const label = o.gruppoId
-          ? o.tavolo
-          : t ? (t.etichetta ?? `Tavolo ${t.numero}`)
-          : o.tavoloId ? o.tavolo : 'Da assegnare'
-        map.set(key, { key, label, ordini: [] })
-      }
+      if (!map.has(key)) map.set(key, { key, label: tavoloLabel(o), ordini: [] })
       map.get(key)!.ordini.push(o)
     }
     const gruppi = [...map.values()]
-    // dentro ogni riga: ordini più vecchi a sinistra
     for (const g of gruppi) g.ordini.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
-    // in cima il tavolo che aspetta da più tempo
     gruppi.sort((a, b) => +new Date(a.ordini[0].createdAt) - +new Date(b.ordini[0].createdAt))
     return gruppi
   }
 
+  // CONCLUSI: ogni "sessione" del tavolo è una riga a sé. Un nuovo ordine creato DOPO la
+  // chiusura del conto (status 'chiuso') apre una nuova sessione → se il tavolo viene chiuso
+  // e poi rioccupato i nuovi ordini finiscono su una riga separata. Righe chiuse più di
+  // recente in cima, più vecchie in basso.
+  function raggruppaStoricoPerTavolo(list: Ordine[]) {
+    const perTavolo = new Map<string, Ordine[]>()
+    for (const o of list) {
+      const key = o.gruppoId ? `g:${o.gruppoId}` : o.tavoloId ? `t:${o.tavoloId}` : 'none'
+      if (!perTavolo.has(key)) perTavolo.set(key, [])
+      perTavolo.get(key)!.push(o)
+    }
+    const righe: { key: string; label: string; ordini: Ordine[]; fine: number }[] = []
+    for (const [key, ords] of perTavolo) {
+      const label = tavoloLabel(ords[0])
+      const sorted = [...ords].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
+      let sessione: Ordine[] = []
+      let chiusuraConto = 0 // closedAt dell'ultimo ordine 'chiuso' (fine conto) della sessione
+      const chiudi = () => {
+        if (!sessione.length) return
+        righe.push({ key: `${key}-${righe.length}`, label, ordini: sessione, fine: Math.max(...sessione.map(chiusuraTime)) })
+      }
+      for (const o of sorted) {
+        if (sessione.length && chiusuraConto && +new Date(o.createdAt) > chiusuraConto) {
+          chiudi(); sessione = []; chiusuraConto = 0
+        }
+        sessione.push(o)
+        if (o.status === 'chiuso' && o.closedAt) chiusuraConto = Math.max(chiusuraConto, +new Date(o.closedAt))
+      }
+      chiudi()
+    }
+    righe.sort((a, b) => b.fine - a.fine)
+    return righe
+  }
+
   const ordiniAttiviTavolo = ordiniAttivi.filter(isTavoloOrdine)
   const gruppiTavoloAttivi = raggruppaPerTavolo(ordiniAttiviTavolo)
-  const gruppiTavoloStorico = raggruppaPerTavolo(ordiniStoricoFiltrati)
+  const gruppiTavoloStorico = raggruppaStoricoPerTavolo(ordiniStoricoFiltrati)
+  // asporto/delivery conclusi: i più recenti (chiusi per ultimi) per primi
+  const ordiniStoricoFiltratiSorted = [...ordiniStoricoFiltrati].sort((a, b) => chiusuraTime(b) - chiusuraTime(a))
+  const appStoricoFiltratiSorted = [...appStoricoFiltrati].sort((a, b) => +new Date(b.data) - +new Date(a.data))
 
   // Asporto e delivery: come i tavoli, ognuno diventa una riga orizzontale con dentro
   // sia gli ordini dal menu (Ordine) sia le prenotazioni online (AppuntamentoOrdine).
@@ -312,12 +336,8 @@ export default function OrdiniPage() {
                   {tipoKey === 'delivery' ? 'Consegna' : 'Ritiro'} alle {ci.ora}
                 </p>
               )}
-              <p className="text-xs text-ink-navy/45">
-                €{o.totale.toFixed(2)}{ci.telefono ? ` · ${ci.telefono}` : ''}
-              </p>
-              {tipoKey === 'delivery' && ci.indirizzo && (
-                <p className="text-[11px] text-ink-navy/45 break-words">{ci.indirizzo}</p>
-              )}
+              {/* telefono e indirizzo NON qui: si vedono nella pagina Asporto/Delivery */}
+              <p className="text-xs text-ink-navy/45">€{o.totale.toFixed(2)}</p>
             </>
           )}
         </div>
@@ -334,25 +354,6 @@ export default function OrdiniPage() {
           {o.righe.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
         </div>
         {o.note && <p className="px-3 py-1.5 text-[11px] text-ink-navy/35 italic border-t border-black/5">{o.note}</p>}
-        {/* riassegna tavolo (solo per ordini di tavolo, utile per quelli senza tavolo o da spostare) */}
-        {isTavolo && !isDone && tavoli.length > 0 && (
-          <div className="border-t border-black/5">
-            <button onClick={() => setCambioTavolo(cambioTavolo === o.id ? null : o.id)}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-electric-blue hover:underline">
-              cambia tavolo
-            </button>
-            {cambioTavolo === o.id && (
-              <div className="px-3 pb-2 flex flex-wrap gap-1">
-                {tavoli.map(t => (
-                  <button key={t.id} onClick={() => assegnaTavolo(o.id, t.id, t.numero.toString())}
-                    className={`text-[11px] px-2 py-0.5 rounded-lg font-medium transition-colors ${o.tavoloId === t.id ? 'bg-electric-blue text-white' : 'bg-white border border-electric-blue/25 text-electric-blue hover:bg-electric-blue/15'}`}>
-                    {t.etichetta ?? `T${t.numero}`}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     )
   }
@@ -548,8 +549,8 @@ export default function OrdiniPage() {
               <OrdiniRow label={filtroStorico === 'delivery' ? 'Delivery' : 'Asporto'} tipoKey={filtroStorico}
                 count={ordiniStoricoFiltrati.length + appStoricoFiltrati.length}
                 totale={ordiniStoricoFiltrati.reduce((s, o) => s + o.totale, 0)}>
-                {ordiniStoricoFiltrati.map(o => <OrderCell key={o.id} o={o} />)}
-                {appStoricoFiltrati.map(a => <AppCell key={a.id} a={a} />)}
+                {ordiniStoricoFiltratiSorted.map(o => <OrderCell key={o.id} o={o} />)}
+                {appStoricoFiltratiSorted.map(a => <AppCell key={a.id} a={a} />)}
               </OrdiniRow>
             )}
           </div>
