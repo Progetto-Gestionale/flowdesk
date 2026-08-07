@@ -14,6 +14,25 @@ export async function GET(req: Request) {
   let leadCancellati = 0
   let convEliminate = 0
   let richiesteConcluse = 0
+  let contiChiusi = 0
+
+  // 0. Chiudi automaticamente i conti dei TAVOLI rimasti aperti dalla serata precedente,
+  //    così i tavoli non restano occupati nei giorni successivi. Cutoff = 04:00 UTC
+  //    (stessa finestra della board Ordini): ogni ordine di tavolo creato prima del cutoff
+  //    e non ancora chiuso viene marcato 'chiuso'. (Asporto/delivery esclusi: non tengono
+  //    occupato un tavolo e potrebbero essere mai ritirati → non vanno segnati come incassati.)
+  const cutoffServata = new Date()
+  cutoffServata.setUTCHours(4, 0, 0, 0)
+  if (new Date().getUTCHours() < 4) cutoffServata.setUTCDate(cutoffServata.getUTCDate() - 1)
+  const resConti = await prisma.ordine.updateMany({
+    where: {
+      createdAt: { lt: cutoffServata },
+      status: { notIn: ['chiuso', 'non_consegnato'] },
+      OR: [{ tipo: 'tavolo' }, { tavoloId: { not: null } }, { gruppoId: { not: null } }],
+    },
+    data: { status: 'chiuso', closedAt: ora },
+  })
+  contiChiusi = resConti.count
 
   // 1a. Auto-conferma ordini e delivery non ancora gestiti manualmente
   //     (status non in stati finali) con data passata
@@ -123,6 +142,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     appuntamentiCompletati: appAggiornati,
+    contiChiusi,
     richiesteConcluse,
 
     leadArchiviati: leadCancellati,

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, type ReactNode } from 'react'
 import { IconReceipt } from '@/app/components/icons'
+import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
 
 interface RigaOrdine {
   id: string
@@ -87,7 +88,7 @@ export default function OrdiniPage() {
   const [savingBlocco, setSavingBlocco] = useState(false)
 
   async function fetchOrdini() {
-    const res = await fetch('/api/ordini?oggi=1', { credentials: 'include' })
+    const res = await fetch('/api/ordini?oggi=1&futuri=1', { credentials: 'include' })
     const data = await res.json().catch(() => ({}))
     setOrdini(data.ordini ?? [])
   }
@@ -191,8 +192,20 @@ export default function OrdiniPage() {
   }
   const isDoneApp = (a: AppuntamentoOrdine) => a.status === 'completato'
 
-  const ordiniAttivi = ordini.filter(o => !isDoneOrdine(o))
-  const ordiniStorico = ordini.filter(o => isDoneOrdine(o))
+  // Un ordine asporto/delivery per una data futura NON entra nella board Ordini: resta nella
+  // pagina Asporto & Delivery finché non arriva la sua serata. I tavoli sono sempre "oggi".
+  const serataDiOrdine = (o: Ordine): string | null => {
+    if (o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null) return serataOggi()
+    let ci: { data?: string; ora?: string } = {}
+    try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
+    return ci.data ? serataOrdine(ci.data, ci.ora) : serataKey(new Date(o.createdAt))
+  }
+  const oggi = serataOggi()
+  // Solo gli ordini della serata corrente arrivano in board (i futuri sono altrove, i passati già gestiti/scaduti).
+  const ordiniBoard = ordini.filter(o => serataDiOrdine(o) === oggi)
+
+  const ordiniAttivi = ordiniBoard.filter(o => !isDoneOrdine(o))
+  const ordiniStorico = ordiniBoard.filter(o => isDoneOrdine(o))
   const appAttivi = appOggi.filter(a => !isDoneApp(a))
   const appStorico = appOggi.filter(a => isDoneApp(a))
 
@@ -353,7 +366,7 @@ export default function OrdiniPage() {
           ))}
           {o.righe.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
         </div>
-        {o.note && <p className="px-3 py-1.5 text-[11px] text-ink-navy/35 italic border-t border-black/5">{o.note}</p>}
+        {o.note && <p className="px-3 py-1.5 text-xs font-bold text-red-600 break-words border-t border-red-200 bg-red-50/60">{o.note}</p>}
       </div>
     )
   }
