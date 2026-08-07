@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 
   const ordini = await prisma.ordine.findMany({
     where,
-    include: { righe: true },
+    include: { righe: { orderBy: { id: 'asc' } } }, // ordine stabile: le righe non "saltano" dopo un update
     orderBy: { createdAt: 'desc' },
   })
   return NextResponse.json({ ordini })
