@@ -1,5 +1,11 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
+
+function formatDataLunga(s: string) {
+  const d = new Date(`${s}T12:00:00`)
+  return d.toLocaleDateString('it-IT', { weekday: 'long', day: '2-digit', month: 'long' })
+}
 
 interface RigaOrdine { id: string; nome: string; prezzo: number; quantita: number; note?: string }
 interface Ordine {
@@ -51,7 +57,8 @@ export default function AsportoDeliveryPage() {
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
 
   const fetchOrdini = useCallback(async () => {
-    const res = await fetch('/api/ordini?oggi=1', { credentials: 'include' })
+    // futuri=1 → include anche gli ordini prenotati per giorni successivi
+    const res = await fetch('/api/ordini?oggi=1&futuri=1', { credentials: 'include' })
     const data = await res.json().catch(() => ({}))
     setOrdini((data.ordini ?? []).filter((o: Ordine) => o.tipo === 'delivery' || o.tipo === 'asporto'))
   }, [])
@@ -81,17 +88,22 @@ export default function AsportoDeliveryPage() {
 
   const t = testi(tipoSel)
 
-  function Card({ o }: { o: Ordine }) {
+  function Card({ o, futuro }: { o: Ordine; futuro?: boolean }) {
     const stato = statoOrdine(o)
     const isDone = stato === 'consegnato'
     const nonConsegnato = o.status === 'non_consegnato'
-    let ci: { nome?: string; telefono?: string; indirizzo?: string; ora?: string } = {}
+    let ci: { nome?: string; telefono?: string; indirizzo?: string; ora?: string; data?: string } = {}
     try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
     const label = ci.nome || 'Ordine online'
     const oraArrivo = new Date(o.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
 
     return (
-      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${nonConsegnato ? 'border-red-300' : isDone ? 'border-ink-navy/10' : t.theme.border}`}>
+      <div className={`bg-white border rounded-xl overflow-hidden shadow-sm ${futuro ? 'border-amber-300' : nonConsegnato ? 'border-red-300' : isDone ? 'border-ink-navy/10' : t.theme.border}`}>
+        {futuro && ci.data && (
+          <div className="px-4 py-2 bg-amber-100 text-amber-800 text-center">
+            <p className="text-xs font-bold">📅 Prenotato per {formatDataLunga(ci.data)} — non è di oggi</p>
+          </div>
+        )}
         {nonConsegnato && (
           <div className="px-4 py-2 bg-red-500 text-white text-center">
             <p className="text-xs font-bold uppercase tracking-wide">{t.non}</p>
@@ -142,7 +154,10 @@ export default function AsportoDeliveryPage() {
         <div className="px-4 py-3 border-t border-ink-navy/8 flex items-center justify-between gap-2 flex-wrap">
           <span className={`text-sm font-semibold ${isDone ? 'text-ink-navy/40' : 'text-ink-navy/70'}`}>€{o.totale.toFixed(2)}</span>
           <div className="flex items-center gap-2">
-            {stato === 'in_preparazione' && (
+            {futuro && (
+              <span className="text-xs font-semibold text-amber-700">In arrivo</span>
+            )}
+            {!futuro && stato === 'in_preparazione' && (
               <span className="text-xs text-ink-navy/35">In cucina</span>
             )}
             {stato === 'pronto' && (
@@ -178,8 +193,21 @@ export default function AsportoDeliveryPage() {
 
   if (loading) return <p className="text-ink-navy/35 text-sm p-8">Caricamento...</p>
 
-  const attivi = (tipo: Tipo) => ordini.filter(o => o.tipo === tipo && statoOrdine(o) !== 'consegnato').length
-  const perStato = (s: Stato) => ordini.filter(o => o.tipo === tipoSel && statoOrdine(o) === s)
+  // Serata di riferimento dell'ordine (data prenotata, o serata di creazione se assente).
+  const serataDi = (o: Ordine): string | null => {
+    let ci: { data?: string; ora?: string } = {}
+    try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
+    return ci.data ? serataOrdine(ci.data, ci.ora) : serataKey(new Date(o.createdAt))
+  }
+  const oggiKey = serataOggi()
+  const isFuturo = (o: Ordine) => { const s = serataDi(o); return !!s && s > oggiKey }
+  const isOggi = (o: Ordine) => { const s = serataDi(o); return !s || s === oggiKey } // i passati (scaduti) restano esclusi
+
+  const attivi = (tipo: Tipo) => ordini.filter(o => o.tipo === tipo && isOggi(o) && statoOrdine(o) !== 'consegnato').length
+  const perStato = (s: Stato) => ordini.filter(o => o.tipo === tipoSel && isOggi(o) && statoOrdine(o) === s)
+  const futuri = ordini
+    .filter(o => o.tipo === tipoSel && isFuturo(o))
+    .sort((a, b) => (serataDi(a) ?? '').localeCompare(serataDi(b) ?? ''))
 
   return (
     <div className="space-y-6">
@@ -229,6 +257,22 @@ export default function AsportoDeliveryPage() {
           )
         })}
       </div>
+
+      {/* In arrivo: ordini prenotati per giorni futuri (non ancora nella board Ordini) */}
+      {futuri.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-ink-navy/60 uppercase tracking-wider flex items-center gap-2 mb-3">
+            In arrivo · prenotati
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">{futuri.length}</span>
+          </h2>
+          <p className="text-xs text-ink-navy/45 mb-3">
+            Questi ordini sono per una data futura: compariranno nella sezione Ordini il giorno indicato.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+            {futuri.map(o => <Card key={o.id} o={o} futuro />)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

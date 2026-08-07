@@ -10,11 +10,6 @@ import {
 import { preparaFoto } from '@/lib/uploadFoto'
 import OrarioSelect from '@/app/components/OrarioSelect'
 
-const SETTORI = [
-  'Ristorazione', 'Biomedica', 'Consulenza', 'E-commerce',
-  'Immobiliare', 'Fitness & Wellness', 'Avvocati & Studi legali',
-  'Artigianato', 'Moda & Beauty', 'Educazione & Formazione', 'Altro',
-]
 
 const GIORNI = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
 const GIORNI_LABEL: Record<string, string> = {
@@ -472,7 +467,6 @@ export default function Impostazioni() {
 
   // Dati per sezione
   const [name, setName] = useState('')
-  const [niche, setNiche] = useState('')
   const [nomeLocale, setNomeLocale] = useState('')
   const [indirizzo, setIndirizzo] = useState('')
   const [telefono, setTelefono] = useState('')
@@ -517,7 +511,7 @@ export default function Impostazioni() {
       fetch('/api/profile', { credentials: 'include' }).then(r => r.json()),
       fetch('/api/settings', { credentials: 'include' }).then(r => r.json()),
     ]).then(([profile, s]) => {
-      if (profile.user) { setName(profile.user.name ?? ''); setNiche(profile.user.niche ?? '') }
+      if (profile.user) { setName(profile.user.name ?? '') }
       setNomeLocale(s.nomeLocale ?? '')
       setIndirizzo(s.indirizzo ?? '')
       setTelefono(s.telefono ?? '')
@@ -560,7 +554,7 @@ export default function Impostazioni() {
       const res = await fetch(id === 'account' ? '/api/profile' : '/api/settings', {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(id === 'account' ? { name, niche } : payload),
+        body: JSON.stringify(id === 'account' ? { name } : payload),
       })
       const json = await res.json()
       if (!res.ok) { console.error('[saveSezione]', res.status, json); throw new Error(json.error || `Errore ${res.status}`) }
@@ -1029,18 +1023,12 @@ export default function Impostazioni() {
           })()}
 
           {sezioneAttiva === 'account' && (
-            <Section title="Profilo account" subtitle="Il tuo nome e settore di appartenenza."
+            <Section title="Profilo account" subtitle="Il tuo nome."
               onSave={() => saveSezione('account', {})}
               status={st('account')}>
               <Field label="Il tuo nome">
                 <input type="text" value={name} onChange={e => { setName(e.target.value); dirty('account') }}
                   placeholder="Mario Rossi" className={cls} />
-              </Field>
-              <Field label="Settore">
-                <select value={niche} onChange={e => { setNiche(e.target.value); dirty('account') }} className={cls}>
-                  <option value="">Seleziona settore</option>
-                  {SETTORI.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
               </Field>
 
               <div className="border-t border-ink-navy/8 pt-4 mt-2">

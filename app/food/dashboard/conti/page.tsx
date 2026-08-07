@@ -293,6 +293,9 @@ export default function ContiPage() {
   const [chiudendo, setChiudendo] = useState<string | null>(null)
   const [copertiModal, setCopertiModal] = useState<Ordine | null>(null)
   const [copertiValue, setCopertiValue] = useState(2)
+  const [copertiTotale, setCopertiTotale] = useState(0)          // totale del conto da chiudere
+  const [modalStep, setModalStep] = useState<'scelta' | 'romana'>('scelta')
+  const [pagatiRomana, setPagatiRomana] = useState<Set<number>>(new Set()) // coperti che hanno pagato
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [chiusiAperti, setChiusiAperti] = useState(false)
@@ -351,6 +354,24 @@ export default function ContiPage() {
   function aggiorna(updated: Ordine) {
     setTutti(prev => prev.map(x => x.id === updated.id ? updated : x))
     if (modificando?.id === updated.id) setModificando(updated)
+  }
+
+  // Apre il modal di chiusura conto (step "scelta": coperti + Chiudi/Paga alla romana)
+  function apriChiusura(o: Ordine, totale: number) {
+    setCopertiModal(o)
+    setCopertiValue(2)
+    setCopertiTotale(totale)
+    setModalStep('scelta')
+    setPagatiRomana(new Set())
+  }
+
+  // Cambia il numero di coperti tenendo coerenti le spunte "pagato" della romana
+  function cambiaCoperti(delta: number) {
+    setCopertiValue(v => {
+      const nv = Math.max(1, v + delta)
+      setPagatiRomana(prev => new Set([...prev].filter(i => i < nv)))
+      return nv
+    })
   }
 
   async function chiudiConto(o: Ordine, coperti: number) {
@@ -502,7 +523,7 @@ export default function ContiPage() {
             </button>
             {aperto && (
               isTavolo(o) ? (
-                <button onClick={() => { setCopertiModal(o); setCopertiValue(2) }} disabled={chiudendo === o.id}
+                <button onClick={() => apriChiusura(o, o.totale)} disabled={chiudendo === o.id}
                   className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
                   {chiudendo === o.id ? '…' : 'Chiudi'}
                 </button>
@@ -661,7 +682,7 @@ export default function ContiPage() {
                 {chiudendo === conto.key ? '…' : `Paga selezionati (${selN}) · ${fmt(selTot)}`}
               </button>
             )}
-            <button onClick={() => { setCopertiModal(conto.ordini[0]); setCopertiValue(2) }}
+            <button onClick={() => apriChiusura(conto.ordini[0], conto.ordini.filter(o => !isPagato(o)).reduce((s, o) => s + o.totale, 0))}
               disabled={chiudendo === conto.ordini[0].id}
               className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
               Chiudi conto {n > 1 ? '(tutto)' : ''}
@@ -820,25 +841,77 @@ export default function ContiPage() {
       {copertiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-navy/30 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-xs mx-4">
-            <h3 className="text-base font-bold text-ink-navy mb-1">Chiudi {copertiModal.tavolo}</h3>
-            <p className="text-sm text-ink-navy/50 mb-5">Quanti coperti al tavolo?</p>
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <button onClick={() => setCopertiValue(v => Math.max(1, v - 1))}
-                className="w-10 h-10 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-xl font-bold hover:bg-mist transition-colors flex items-center justify-center">−</button>
-              <span className="text-4xl font-bold text-ink-navy w-12 text-center">{copertiValue}</span>
-              <button onClick={() => setCopertiValue(v => v + 1)}
-                className="w-10 h-10 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-xl font-bold hover:bg-mist transition-colors flex items-center justify-center">+</button>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setCopertiModal(null)}
-                className="flex-1 py-2.5 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-sm font-semibold hover:bg-mist transition-colors">
-                Annulla
-              </button>
-              <button onClick={() => chiudiConto(copertiModal, copertiValue)}
-                className="flex-1 py-2.5 bg-ink-navy text-white rounded-xl text-sm font-semibold hover:bg-ink-navy/80 transition-colors">
-                Conferma
-              </button>
-            </div>
+            {modalStep === 'scelta' ? (
+              <>
+                <h3 className="text-base font-bold text-ink-navy mb-1">Chiudi {copertiModal.tavolo}</h3>
+                <p className="text-sm text-ink-navy/50 mb-5">Quanti coperti al tavolo?</p>
+                <div className="flex items-center justify-center gap-4 mb-6">
+                  <button onClick={() => cambiaCoperti(-1)}
+                    className="w-10 h-10 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-xl font-bold hover:bg-mist transition-colors flex items-center justify-center">−</button>
+                  <span className="text-4xl font-bold text-ink-navy w-12 text-center">{copertiValue}</span>
+                  <button onClick={() => cambiaCoperti(1)}
+                    className="w-10 h-10 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-xl font-bold hover:bg-mist transition-colors flex items-center justify-center">+</button>
+                </div>
+                <div className="space-y-2">
+                  <button onClick={() => chiudiConto(copertiModal, copertiValue)}
+                    className="w-full py-2.5 bg-ink-navy text-white rounded-xl text-sm font-semibold hover:bg-ink-navy/80 transition-colors">
+                    Chiudi conto
+                  </button>
+                  <button onClick={() => setModalStep('romana')}
+                    className="w-full py-2.5 bg-electric-blue text-white rounded-xl text-sm font-semibold hover:bg-electric-blue/90 transition-colors">
+                    Paga alla romana
+                  </button>
+                  <button onClick={() => setCopertiModal(null)}
+                    className="w-full py-2 text-ink-navy/50 text-sm font-semibold hover:text-ink-navy/70 transition-colors">
+                    Annulla
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-bold text-ink-navy mb-1">Paga alla romana</h3>
+                <p className="text-sm text-ink-navy/50 mb-4">{fmt(copertiTotale)} diviso {copertiValue} coperti</p>
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  <button onClick={() => cambiaCoperti(-1)}
+                    className="w-9 h-9 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-lg font-bold hover:bg-mist transition-colors flex items-center justify-center">−</button>
+                  <div className="text-center w-28">
+                    <span className="block text-2xl font-bold text-ink-navy">{fmt(copertiTotale / copertiValue)}</span>
+                    <span className="text-xs text-ink-navy/45">a testa · {copertiValue} coperti</span>
+                  </div>
+                  <button onClick={() => cambiaCoperti(1)}
+                    className="w-9 h-9 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-lg font-bold hover:bg-mist transition-colors flex items-center justify-center">+</button>
+                </div>
+                <div className="max-h-52 overflow-y-auto -mx-1 px-1 mb-3 space-y-1.5">
+                  {Array.from({ length: copertiValue }, (_, i) => {
+                    const pagato = pagatiRomana.has(i)
+                    return (
+                      <button key={i} onClick={() => setPagatiRomana(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${pagato ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-ink-navy/15 text-ink-navy/70 hover:bg-mist'}`}>
+                        <span className="flex items-center gap-2">
+                          <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[11px] ${pagato ? 'bg-green-500 text-white' : 'border border-ink-navy/25'}`}>{pagato ? '✓' : ''}</span>
+                          Coperto {i + 1}
+                        </span>
+                        <span>{fmt(copertiTotale / copertiValue)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center justify-between text-sm mb-3 px-1">
+                  <span className="text-ink-navy/60 font-medium">Pagato {pagatiRomana.size}/{copertiValue}</span>
+                  <span className="font-bold text-ink-navy">{fmt(copertiTotale / copertiValue * pagatiRomana.size)} di {fmt(copertiTotale)}</span>
+                </div>
+                <div className="space-y-2">
+                  <button onClick={() => chiudiConto(copertiModal, copertiValue)}
+                    className="w-full py-2.5 bg-ink-navy text-white rounded-xl text-sm font-semibold hover:bg-ink-navy/80 transition-colors">
+                    Chiudi conto
+                  </button>
+                  <button onClick={() => setModalStep('scelta')}
+                    className="w-full py-2 text-ink-navy/50 text-sm font-semibold hover:text-ink-navy/70 transition-colors">
+                    Indietro
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

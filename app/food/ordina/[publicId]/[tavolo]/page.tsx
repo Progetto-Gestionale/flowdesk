@@ -34,7 +34,11 @@ export default function OrdinaPage() {
   const [errore, setErrore] = useState('')
 
   const [carrello, setCarrello] = useState<RigaCarrello[]>([])
-  const [noteOrdine, setNoteOrdine] = useState('')
+  // Segnalazioni cucina: solo box predefiniti (niente note libere lato cliente).
+  const [celiachia, setCeliachia] = useState(false)
+  const [lattosio, setLattosio] = useState(false)
+  const [allergie, setAllergie] = useState(false)
+  const [allergieNote, setAllergieNote] = useState('')
   const [vistaCarrello, setVistaCarrello] = useState(false)
   const [inviando, setInviando] = useState(false)
   const [ordinato, setOrdinato] = useState(false)
@@ -79,13 +83,21 @@ export default function OrdinaPage() {
   const totale = carrello.reduce((s, r) => s + r.prezzo * r.quantita, 0)
   const totaleArticoli = carrello.reduce((s, r) => s + r.quantita, 0)
 
+  function componiNote() {
+    const parti: string[] = []
+    if (celiachia) parti.push('Celiachia')
+    if (lattosio) parti.push('Intolleranza al lattosio')
+    if (allergie) parti.push(allergieNote.trim() ? `Allergie: ${allergieNote.trim()}` : 'Allergie')
+    return parti.join(' · ')
+  }
+
   async function inviaOrdine() {
     setInviando(true)
     try {
       const res = await fetch('/api/ordina', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicId, tavolo, righe: carrello, note: noteOrdine }),
+        body: JSON.stringify({ publicId, tavolo, righe: carrello, note: componiNote() }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -126,7 +138,7 @@ export default function OrdinaPage() {
         </div>
         <h2 className="text-xl font-bold text-gray-900">Ordine inviato</h2>
         <p className="text-gray-500 text-sm mt-2">Il tuo ordine è stato ricevuto.</p>
-        <button onClick={() => { setOrdinato(false); setVistaCarrello(false); setNoteOrdine('') }}
+        <button onClick={() => { setOrdinato(false); setVistaCarrello(false); setCeliachia(false); setLattosio(false); setAllergie(false); setAllergieNote('') }}
           className="mt-6 w-full py-2.5 rounded-xl text-white font-semibold text-sm"
           style={{ backgroundColor: coloreP }}>
           Ordina ancora
@@ -251,11 +263,30 @@ export default function OrdinaPage() {
                 </div>
               ))}
               <div className="pt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note per la cucina</label>
-                <textarea value={noteOrdine} onChange={e => setNoteOrdine(e.target.value)}
-                  placeholder="Allergie, preferenze, richieste speciali..."
-                  rows={2} className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 resize-none"
-                  style={{ '--tw-ring-color': coloreP } as any} />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Segnalazioni per la cucina</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2.5 text-sm text-gray-800 cursor-pointer">
+                    <input type="checkbox" checked={celiachia} onChange={e => setCeliachia(e.target.checked)}
+                      className="w-4 h-4 rounded" style={{ accentColor: coloreP }} />
+                    Celiachia
+                  </label>
+                  <label className="flex items-center gap-2.5 text-sm text-gray-800 cursor-pointer">
+                    <input type="checkbox" checked={lattosio} onChange={e => setLattosio(e.target.checked)}
+                      className="w-4 h-4 rounded" style={{ accentColor: coloreP }} />
+                    Intolleranza al lattosio
+                  </label>
+                  <label className="flex items-center gap-2.5 text-sm text-gray-800 cursor-pointer">
+                    <input type="checkbox" checked={allergie} onChange={e => setAllergie(e.target.checked)}
+                      className="w-4 h-4 rounded" style={{ accentColor: coloreP }} />
+                    Allergie
+                  </label>
+                </div>
+                {allergie && (
+                  <input type="text" value={allergieNote} onChange={e => setAllergieNote(e.target.value)}
+                    placeholder="Specifica a cosa sei allergico/a"
+                    className="mt-2 w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                    style={{ '--tw-ring-color': coloreP } as any} />
+                )}
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100">
