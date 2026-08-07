@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null }
 interface Ordine {
   id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null
-  totale: number; note: string | null; status: string; createdAt: string
+  totale: number; note: string | null; status: string; createdAt: string; closedAt?: string | null
   tipo: string; righe: RigaOrdine[]; clienteInfo?: string | null
 }
 interface Piatto { id: string; nome: string; prezzo: number; descrizione?: string | null }
@@ -27,6 +27,42 @@ function raggruppaConti(list: Ordine[]): Conto[] {
     c.totale += o.totale
   }
   return [...map.values()]
+}
+
+// Per i conti CHIUSI: ogni "sessione" del tavolo è un conto separato. Se un tavolo viene
+// chiuso e poi rioccupato, gli ordini condividono lo stesso tavoloId ma NON devono finire
+// nello stesso conto: un ordine creato DOPO la chiusura precedente apre una nuova sessione.
+function raggruppaContiChiusi(list: Ordine[]): Conto[] {
+  const perTavolo = new Map<string, Ordine[]>()
+  for (const o of list) {
+    const key = contoKey(o)
+    if (!perTavolo.has(key)) perTavolo.set(key, [])
+    perTavolo.get(key)!.push(o)
+  }
+  const conti: Conto[] = []
+  for (const [key, ords] of perTavolo) {
+    const sorted = [...ords].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
+    let sessione: Ordine[] = []
+    let chiusuraConto = 0 // closedAt dell'ultima chiusura conto ('chiuso') della sessione
+    const chiudi = () => {
+      if (!sessione.length) return
+      const first = sessione[0]
+      conti.push({
+        key: `${key}-${conti.length}`, label: first.tavolo,
+        tavoloId: first.tavoloId, gruppoId: first.gruppoId,
+        ordini: sessione, totale: sessione.reduce((s, o) => s + o.totale, 0),
+      })
+    }
+    for (const o of sorted) {
+      if (sessione.length && chiusuraConto && +new Date(o.createdAt) > chiusuraConto) {
+        chiudi(); sessione = []; chiusuraConto = 0
+      }
+      sessione.push(o)
+      if (o.status === 'chiuso' && o.closedAt) chiusuraConto = Math.max(chiusuraConto, +new Date(o.closedAt))
+    }
+    chiudi()
+  }
+  return conti
 }
 
 function getSerataKey(createdAt: string): string {
@@ -349,7 +385,7 @@ export default function ContiPage() {
   // Per i tavoli raggruppo i sottogruppi in conti; asporto/delivery restano card singole
   const contiAperti = filtroTipo === 'tavolo' ? raggruppaConti(aperti) : []
   // Anche i conti chiusi restano raggruppati: i sottogruppi devono stare dentro lo stesso conto, non separati
-  const contiChiusi = filtroTipo === 'tavolo' ? raggruppaConti(chiusi) : []
+  const contiChiusi = filtroTipo === 'tavolo' ? raggruppaContiChiusi(chiusi) : []
 
   function aggiorna(updated: Ordine) {
     setTutti(prev => prev.map(x => x.id === updated.id ? updated : x))
@@ -409,6 +445,23 @@ export default function ContiPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'pagato' }),
       })))
+    } finally {
+      setChiudendo(null)
+      fetchOrdini()
+    }
+  }
+
+  // Annulla il "pagato" di un sottogruppo (in caso di errore): torna aperto e non incassato.
+  // Lo riportiamo a 'consegnato' (servito ma da pagare) così non ricompare in cucina.
+  async function annullaPagato(o: Ordine) {
+    setChiudendo(o.id)
+    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'consegnato' } : x))
+    try {
+      await fetch(`/api/ordini/${o.id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'consegnato' }),
+      })
     } finally {
       setChiudendo(null)
       fetchOrdini()
@@ -587,7 +640,15 @@ export default function ContiPage() {
                 className="w-4 h-4 shrink-0 rounded border-ink-navy/30 text-electric-blue focus:ring-electric-blue/40" />
             )}
             {totali > 1 && <span className="text-[11px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-full shrink-0">Sottogruppo {index}</span>}
-            {pagato && !chiuso && <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">Pagato</span>}
+            {pagato && !chiuso && (
+              <span className="flex items-center gap-1 shrink-0">
+                <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Pagato</span>
+                <button type="button" onClick={(e) => { e.preventDefault(); annullaPagato(o) }} disabled={chiudendo === o.id}
+                  className="text-[11px] font-semibold text-ink-navy/45 hover:text-red-500 underline disabled:opacity-40 transition-colors">
+                  annulla
+                </button>
+              </span>
+            )}
             <span className="text-xs text-ink-navy/40 shrink-0">{ora}</span>
           </label>
           <div className="flex items-center gap-2 shrink-0">

@@ -211,6 +211,7 @@ export default function Calendario() {
   const [assegnaLoading, setAssegnaLoading] = useState(false)
   const [hourStart, setHourStart] = useState(11)
   const [hourEnd, setHourEnd] = useState(24)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const today = new Date()
 
@@ -238,6 +239,20 @@ export default function Calendario() {
     const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
   }, [])
+
+  // All'apertura della vista Giorno su OGGI, centra la griglia sull'orario corrente
+  // invece di partire dalla mattina. Solo se l'ora attuale rientra nella fascia mostrata.
+  useEffect(() => {
+    if (loading || vista !== 'giorno') return
+    const el = scrollRef.current
+    if (!el) return
+    const now = new Date()
+    if (!isSameDay(currentDay, now)) return
+    const nowH = now.getHours() + now.getMinutes() / 60
+    if (nowH < hourStart || nowH > hourEnd) return
+    const posY = (nowH - hourStart) * PX_PER_HOUR
+    el.scrollTop = Math.max(0, posY - el.clientHeight / 2)
+  }, [loading, vista, currentDay, hourStart, hourEnd])
 
   function appForDay(day: Date) {
     // Ore dopo mezzanotte che appartengono al giorno lavorativo PRECEDENTE (es. chiusura 02:00 → 2).
@@ -459,7 +474,7 @@ export default function Calendario() {
                       </span>
                     </div>
                   )}
-                  <div className="bg-white border border-ink-navy/10 rounded-xl overflow-auto"
+                  <div ref={scrollRef} className="bg-white border border-ink-navy/10 rounded-xl overflow-auto"
                     style={{ height: 'calc(100vh - 220px)', minWidth: 0 }}>
                     <div>
                       {/* Asse orari a sinistra + un'unica lane: le prenotazioni della
@@ -482,6 +497,20 @@ export default function Calendario() {
                               <div className="absolute left-0 right-0 border-t border-dashed border-ink-navy/5" style={{ top: (h - hourStart) * PX_PER_HOUR + PX_PER_HOUR / 2 }} />
                             </div>
                           ))}
+                          {/* Linea "ora corrente": solo quando la griglia mostra oggi e l'ora rientra nella fascia */}
+                          {(() => {
+                            const now = new Date()
+                            if (!isSameDay(currentDay, now)) return null
+                            const nowH = now.getHours() + now.getMinutes() / 60
+                            if (nowH < hourStart || nowH > hourEnd) return null
+                            return (
+                              <div className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+                                style={{ top: (nowH - hourStart) * PX_PER_HOUR }}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-electric-blue -ml-0.5 shrink-0" />
+                                <span className="flex-1 border-t border-electric-blue/70" />
+                              </div>
+                            )
+                          })()}
                           {laid.map(({ a, col: subCol, total }) => {
                             const tipo = inferTipo(a.servizio)
                             const ts = TIPO_STYLE[tipo]

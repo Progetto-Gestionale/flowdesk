@@ -885,7 +885,7 @@ export default function PrenotaPage() {
               <p className="text-sm font-semibold text-gray-700">
                 {dati.tipo === 'delivery' ? 'Quando vuoi la consegna?' : 'Quando passi a ritirare?'}
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="min-w-0">
                   <label className="block text-xs font-medium text-gray-500 mb-1">Data *</label>
                   <input type="date" value={dati.data} min={oggi}

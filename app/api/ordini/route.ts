@@ -41,3 +41,51 @@ export async function GET(req: Request) {
   })
   return NextResponse.json({ ordini })
 }
+
+// POST — il titolare inserisce a mano un ordine asporto/delivery (es. preso al telefono).
+// L'ordine nasce con status 'nuovo' come quelli online, quindi va subito in cucina e compare
+// nella board Ordini / Asporto & Delivery (o in "In arrivo" se prenotato per una data futura).
+export async function POST(req: Request) {
+  const user = await getAuthUser()
+  if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
+
+  const { tipo, nome, telefono, indirizzo, data, ora, righe, note } = await req.json()
+  if (!Array.isArray(righe) || righe.length === 0) {
+    return NextResponse.json({ error: 'Ordine vuoto' }, { status: 400 })
+  }
+
+  const isDelivery = tipo === 'delivery'
+  const totale = righe.reduce((s: number, r: { prezzo: number; quantita: number }) => s + (r.prezzo ?? 0) * (r.quantita ?? 0), 0)
+
+  const clienteInfo = JSON.stringify({
+    nome: nome?.trim() || null,
+    telefono: telefono?.trim() || null,
+    indirizzo: isDelivery ? (indirizzo?.trim() || null) : null,
+    data: data || null,
+    ora: ora || null,
+  })
+
+  const ordine = await prisma.ordine.create({
+    data: {
+      userId: user.id,
+      tavolo: isDelivery ? 'Delivery' : 'Asporto',
+      tipo: isDelivery ? 'delivery' : 'asporto',
+      clienteInfo,
+      totale,
+      note: note?.trim() || null,
+      status: 'nuovo',
+      righe: {
+        create: righe.map((r: { piattoId?: string | null; nome: string; prezzo: number; quantita: number; note?: string }) => ({
+          piattoId: r.piattoId ?? null,
+          nome: r.nome,
+          prezzo: r.prezzo,
+          quantita: r.quantita,
+          note: r.note ?? '',
+        })),
+      },
+    },
+    include: { righe: true },
+  })
+
+  return NextResponse.json({ ok: true, ordine })
+}

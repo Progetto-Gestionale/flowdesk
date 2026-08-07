@@ -1046,7 +1046,7 @@ export default function StaffPage() {
                  Disponibile solo dalle {dispCella?.oraInizio} alle {dispCella?.oraFine}.
               </div>
             )}
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-ink-navy/60 mb-1">Dalle</label>
                 <OrarioSelect value={cellModal.oraInizio}
@@ -1364,7 +1364,7 @@ export default function StaffPage() {
                 <input type="date" value={formTurno.data} onChange={e => setFormTurno(f => ({ ...f, data: e.target.value }))}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-ink-navy/70 mb-1">Inizio *</label>
                   <OrarioSelect value={formTurno.oraInizio} onChange={v => setFormTurno(f => ({ ...f, oraInizio: v }))}
@@ -1448,7 +1448,7 @@ export default function StaffPage() {
               <button onClick={() => setEditTurno(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
             </div>
             <div className="space-y-3">
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
                   <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Inizio</label>
                   <OrarioSelect value={editForm.oraInizio}
