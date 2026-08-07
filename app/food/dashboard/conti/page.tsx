@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 
-interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null }
+interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; pagata?: boolean }
 interface Ordine {
   id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null
   totale: number; note: string | null; status: string; createdAt: string; closedAt?: string | null
@@ -367,6 +367,10 @@ export default function ContiPage() {
   // 'non_consegnato' (non consegnato / non ritirato) = conto concluso ma NON incassato.
   const isDone = (o: Ordine) => isTavolo(o) ? o.status === 'chiuso' : (o.status === 'consegnato' || o.status === 'chiuso' || o.status === 'non_consegnato')
   const isPagato = (o: Ordine) => o.status === 'pagato'
+  // Una singola voce è pagata se marcata pagata o se l'intero sottogruppo è già 'pagato'.
+  const rigaPagata = (o: Ordine, r: RigaOrdine) => isPagato(o) || !!r.pagata
+  // Rimanente da incassare di un sottogruppo: 0 se pagato tutto, altrimenti la somma delle righe non pagate.
+  const restanteSottogruppo = (o: Ordine) => isPagato(o) ? 0 : o.righe.filter(r => !r.pagata).reduce((s, r) => s + r.prezzo * r.quantita, 0)
   const matchesFiltro = (o: Ordine) => {
     if (filtroTipo === 'tavolo') return isTavolo(o)
     if (filtroTipo === 'delivery') return o.tipo === 'delivery'
@@ -464,6 +468,24 @@ export default function ContiPage() {
       })
     } finally {
       setChiudendo(null)
+      fetchOrdini()
+    }
+  }
+
+  // Segna/annulla il pagamento di una singola voce del conto (aiuto cassa per dividere per piatto).
+  // Update ottimistico + persistenza su /api/righe/[id]. Non chiude il conto: serve solo "Chiudi conto".
+  async function toggleRigaPagata(o: Ordine, r: RigaOrdine) {
+    const nuovo = !r.pagata
+    setTutti(prev => prev.map(x => x.id === o.id
+      ? { ...x, righe: x.righe.map(rr => rr.id === r.id ? { ...rr, pagata: nuovo } : rr) }
+      : x))
+    try {
+      await fetch(`/api/righe/${r.id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pagata: nuovo }),
+      })
+    } finally {
       fetchOrdini()
     }
   }
@@ -676,16 +698,33 @@ export default function ContiPage() {
           </div>
         </div>
         <div className="divide-y divide-ink-navy/6 pl-6">
-          {o.righe.map(r => (
-            <div key={r.id} className="flex items-center justify-between py-1.5 gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs font-bold text-ink-navy w-5 shrink-0 text-center">{r.quantita}×</span>
-                <span className="text-sm text-ink-navy truncate">{r.nome}</span>
-                {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+          {o.righe.map(r => {
+            const paid = rigaPagata(o, r)
+            // Toggle per riga solo su un sottogruppo aperto e non già interamente pagato.
+            const interattiva = !chiuso && !pagato && !modUnione
+            return (
+              <div key={r.id} className="flex items-center justify-between py-1.5 gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-bold text-ink-navy w-5 shrink-0 text-center">{r.quantita}×</span>
+                  <span className={`text-sm truncate ${paid ? 'text-ink-navy/35 line-through' : 'text-ink-navy'}`}>{r.nome}</span>
+                  {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-sm ${paid ? 'text-ink-navy/30 line-through' : 'text-ink-navy/50'}`}>{fmt(r.prezzo * r.quantita)}</span>
+                  {interattiva && (paid ? (
+                    <span className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">Pagata</span>
+                      <button onClick={() => toggleRigaPagata(o, r)}
+                        className="text-[11px] font-semibold text-ink-navy/45 hover:text-red-500 underline transition-colors">annulla</button>
+                    </span>
+                  ) : (
+                    <button onClick={() => toggleRigaPagata(o, r)}
+                      className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-electric-blue/30 text-electric-blue hover:bg-electric-blue/10 transition-colors">Paga</button>
+                  ))}
+                </div>
               </div>
-              <span className="text-sm text-ink-navy/50 shrink-0">{fmt(r.prezzo * r.quantita)}</span>
-            </div>
-          ))}
+            )
+          })}
           {o.righe.length === 0 && <p className="py-1.5 text-sm text-ink-navy/30">Nessuna voce</p>}
         </div>
       </div>
@@ -743,7 +782,7 @@ export default function ContiPage() {
                 {chiudendo === conto.key ? '…' : `Paga selezionati (${selN}) · ${fmt(selTot)}`}
               </button>
             )}
-            <button onClick={() => apriChiusura(conto.ordini[0], conto.ordini.filter(o => !isPagato(o)).reduce((s, o) => s + o.totale, 0))}
+            <button onClick={() => apriChiusura(conto.ordini[0], conto.ordini.reduce((s, o) => s + restanteSottogruppo(o), 0))}
               disabled={chiudendo === conto.ordini[0].id}
               className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
               Chiudi conto {n > 1 ? '(tutto)' : ''}
