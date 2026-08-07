@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { IconTrash } from '@/app/components/icons'
+import { getCache, setCache } from '@/lib/pageCache'
+
+// Cache navigazione (stale-while-revalidate): al ritorno sulla pagina mostra subito
+// l'ultimo dato noto invece di "Caricamento…", poi ricarica in background.
+const CAL_CACHE_KEY = 'food:calendario'
+type CalCache = { appuntamenti: Appuntamento[]; tavoli: Tavolo[]; hourStart: number; hourEnd: number }
 
 const GIORNI_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_FULL = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
@@ -221,21 +227,35 @@ export default function Calendario() {
       fetch('/api/tavoli', { credentials: 'include', cache: 'no-store' }),
       fetch('/api/settings', { credentials: 'include' }),
     ])
-    setAppuntamenti((await resApp.json()).appuntamenti ?? [])
-    setTavoli((await resTavoli.json()).tavoli ?? [])
+    const apps: Appuntamento[] = (await resApp.json()).appuntamenti ?? []
+    const tvs: Tavolo[] = (await resTavoli.json()).tavoli ?? []
     const settings = await resSettings.json()
+    let hs = 11, he = 24
     if (settings.orariApertura) {
       try {
         const orari: Record<string, string> = JSON.parse(settings.orariApertura)
-        const { start, end } = parseOrariRange(orari)
-        setHourStart(start)
-        setHourEnd(end)
+        const r = parseOrariRange(orari)
+        hs = r.start; he = r.end
       } catch { /* usa default */ }
     }
+    setAppuntamenti(apps)
+    setTavoli(tvs)
+    setHourStart(hs)
+    setHourEnd(he)
+    setCache<CalCache>(CAL_CACHE_KEY, { appuntamenti: apps, tavoli: tvs, hourStart: hs, hourEnd: he })
   }
 
   useEffect(() => {
-    fetchAll().finally(() => setLoading(false))
+    // Idrata subito dall'ultimo dato in cache (se c'è): niente "Caricamento…" al ritorno.
+    const cached = getCache<CalCache>(CAL_CACHE_KEY)
+    if (cached) {
+      setAppuntamenti(cached.appuntamenti)
+      setTavoli(cached.tavoli)
+      setHourStart(cached.hourStart)
+      setHourEnd(cached.hourEnd)
+      setLoading(false)
+    }
+    fetchAll().finally(() => setLoading(false)) // revalidate in background
     const interval = setInterval(fetchAll, 15000)
     return () => clearInterval(interval)
   }, [])
