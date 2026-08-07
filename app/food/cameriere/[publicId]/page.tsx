@@ -124,6 +124,9 @@ export default function CamerierePage() {
       return prev.map(r => r.piattoId === piattoId ? { ...r, quantita: r.quantita - 1 } : r)
     })
   }
+  function setNota(piattoId: string, nota: string) {
+    setCarrello(prev => prev.map(r => r.piattoId === piattoId ? { ...r, note: nota } : r))
+  }
   const qty = (id: string) => carrello.find(r => r.piattoId === id)?.quantita ?? 0
   const totale = carrello.reduce((s, r) => s + r.prezzo * r.quantita, 0)
   const totaleArticoli = carrello.reduce((s, r) => s + r.quantita, 0)
@@ -364,14 +367,20 @@ export default function CamerierePage() {
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-3 space-y-3">
               {carrello.map(r => (
-                <div key={r.piattoId} className="flex items-center justify-between gap-3">
-                  <div className="flex-1"><p className="font-medium text-gray-900 text-sm">{r.nome}</p><p className="text-gray-500 text-xs">€{r.prezzo.toFixed(2)} cad.</p></div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => rimuovi(r.piattoId)} className="w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold" style={{ borderColor: coloreP, color: coloreP }}>−</button>
-                    <span className="font-bold text-gray-900 w-4 text-center text-sm">{r.quantita}</span>
-                    <button onClick={() => aggiungi({ id: r.piattoId, nome: r.nome, prezzo: r.prezzo, descrizione: null, immagineUrl: null })} className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold" style={{ backgroundColor: coloreP }}>+</button>
+                <div key={r.piattoId} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1"><p className="font-medium text-gray-900 text-sm">{r.nome}</p><p className="text-gray-500 text-xs">€{r.prezzo.toFixed(2)} cad.</p></div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => rimuovi(r.piattoId)} className="w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold" style={{ borderColor: coloreP, color: coloreP }}>−</button>
+                      <span className="font-bold text-gray-900 w-4 text-center text-sm">{r.quantita}</span>
+                      <button onClick={() => aggiungi({ id: r.piattoId, nome: r.nome, prezzo: r.prezzo, descrizione: null, immagineUrl: null })} className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold" style={{ backgroundColor: coloreP }}>+</button>
+                    </div>
+                    <p className="font-bold text-gray-900 text-sm w-14 text-right">€{(r.prezzo * r.quantita).toFixed(2)}</p>
                   </div>
-                  <p className="font-bold text-gray-900 text-sm w-14 text-right">€{(r.prezzo * r.quantita).toFixed(2)}</p>
+                  <input type="text" value={r.note} onChange={e => setNota(r.piattoId, e.target.value)}
+                    placeholder="Nota per questo piatto (es. senza cipolla)…"
+                    className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2"
+                    style={{ '--tw-ring-color': coloreP } as any} />
                 </div>
               ))}
               <div className="pt-3">

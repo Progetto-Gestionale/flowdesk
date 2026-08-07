@@ -694,7 +694,7 @@ export default function Impostazioni() {
                       <button onClick={() => { setTurniServizio(prev => prev.filter((_, j) => j !== i)); dirty('turni') }}
                         className="text-xs text-red-400 hover:text-red-600 font-medium">Rimuovi</button>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-ink-navy/60 mb-1">Nome turno</label>
                         <input type="text" value={t.nome}

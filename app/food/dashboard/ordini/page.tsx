@@ -284,15 +284,39 @@ export default function OrdiniPage() {
   const ordiniStoricoFiltratiSorted = [...ordiniStoricoFiltrati].sort((a, b) => chiusuraTime(b) - chiusuraTime(a))
   const appStoricoFiltratiSorted = [...appStoricoFiltrati].sort((a, b) => +new Date(b.data) - +new Date(a.data))
 
-  // Asporto e delivery: come i tavoli, ognuno diventa una riga orizzontale con dentro
-  // sia gli ordini dal menu (Ordine) sia le prenotazioni online (AppuntamentoOrdine).
-  const perOra = (a: Ordine, b: Ordine) => +new Date(a.createdAt) - +new Date(b.createdAt)
-  const ordiniAttiviAsporto = ordiniAttivi.filter(o => !isTavoloOrdine(o) && o.tipo !== 'delivery').sort(perOra)
-  const ordiniAttiviDelivery = ordiniAttivi.filter(o => !isTavoloOrdine(o) && o.tipo === 'delivery').sort(perOra)
-  const appAttiviAsporto = appAttivi.filter(a => inferTipoOrdine(a.servizio) !== 'delivery')
-  const appAttiviDelivery = appAttivi.filter(a => inferTipoOrdine(a.servizio) === 'delivery')
-  const nAsportoAttivi = ordiniAttiviAsporto.length + appAttiviAsporto.length
-  const nDeliveryAttivi = ordiniAttiviDelivery.length + appAttiviDelivery.length
+  // Asporto e delivery: ogni tipo è una riga con dentro sia gli ordini (Ordine) sia le
+  // prenotazioni online (AppuntamentoOrdine), ordinati per ORARIO DI CONSEGNA/RITIRO (non
+  // di arrivo): a sinistra chi va servito prima, a destra chi va servito dopo.
+  const oraServizioOrdine = (o: Ordine): number => {
+    let ci: { data?: string; ora?: string } = {}
+    try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
+    if (ci.ora) {
+      const giorno = ci.data ?? new Date(o.createdAt).toISOString().slice(0, 10)
+      const t = new Date(`${giorno}T${ci.ora}:00`).getTime()
+      if (!Number.isNaN(t)) return t
+    }
+    return new Date(o.createdAt).getTime() // fallback: orario di arrivo se manca l'ora
+  }
+  const oraServizioApp = (a: AppuntamentoOrdine): number => new Date(a.data).getTime()
+
+  type ServeItem = { key: string; time: number; ord?: Ordine; app?: AppuntamentoOrdine }
+  const mergeServe = (ords: Ordine[], apps: AppuntamentoOrdine[]): ServeItem[] => [
+    ...ords.map(o => ({ key: o.id, time: oraServizioOrdine(o), ord: o })),
+    ...apps.map(a => ({ key: a.id, time: oraServizioApp(a), app: a })),
+  ].sort((x, y) => x.time - y.time)
+
+  const asportoAttivi = mergeServe(
+    ordiniAttivi.filter(o => !isTavoloOrdine(o) && o.tipo !== 'delivery'),
+    appAttivi.filter(a => inferTipoOrdine(a.servizio) !== 'delivery'),
+  )
+  const deliveryAttivi = mergeServe(
+    ordiniAttivi.filter(o => !isTavoloOrdine(o) && o.tipo === 'delivery'),
+    appAttivi.filter(a => inferTipoOrdine(a.servizio) === 'delivery'),
+  )
+  const nAsportoAttivi = asportoAttivi.length
+  const nDeliveryAttivi = deliveryAttivi.length
+  const totAsportoAttivi = asportoAttivi.reduce((s, i) => s + (i.ord?.totale ?? 0), 0)
+  const totDeliveryAttivi = deliveryAttivi.reduce((s, i) => s + (i.ord?.totale ?? 0), 0)
 
   // Bottoni azione condivisi dalle celle degli ordini (Pronto / Elimina con conferma).
   function AzioneOrdine({ o }: { o: Ordine }) {
@@ -360,7 +384,7 @@ export default function OrdiniPage() {
               <span className="text-sm font-extrabold text-ink-navy shrink-0">{r.quantita}×</span>
               <div className="min-w-0">
                 <span className="text-sm font-bold text-ink-navy break-words">{r.nome}</span>
-                {r.note && <span className="block text-[11px] text-ink-navy/35 break-words">{r.note}</span>}
+                {r.note && <span className="ml-1.5 text-[11px] font-semibold text-red-600 break-words">— {r.note}</span>}
               </div>
             </div>
           ))}
@@ -514,20 +538,16 @@ export default function OrdiniPage() {
                 {g.ordini.map(o => <OrderCell key={o.id} o={o} />)}
               </OrdiniRow>
             ))}
-            {/* Asporto: una riga con ordini e prenotazioni online */}
+            {/* Asporto: ordini + prenotazioni online, ordinati per orario di ritiro (prima a sinistra) */}
             {nAsportoAttivi > 0 && (
-              <OrdiniRow label="Asporto" tipoKey="asporto" count={nAsportoAttivi}
-                totale={ordiniAttiviAsporto.reduce((s, o) => s + o.totale, 0)}>
-                {ordiniAttiviAsporto.map(o => <OrderCell key={o.id} o={o} />)}
-                {appAttiviAsporto.map(a => <AppCell key={a.id} a={a} />)}
+              <OrdiniRow label="Asporto" tipoKey="asporto" count={nAsportoAttivi} totale={totAsportoAttivi}>
+                {asportoAttivi.map(i => i.ord ? <OrderCell key={i.key} o={i.ord} /> : <AppCell key={i.key} a={i.app!} />)}
               </OrdiniRow>
             )}
-            {/* Delivery: una riga con ordini e prenotazioni online */}
+            {/* Delivery: ordini + prenotazioni online, ordinati per orario di consegna (prima a sinistra) */}
             {nDeliveryAttivi > 0 && (
-              <OrdiniRow label="Delivery" tipoKey="delivery" count={nDeliveryAttivi}
-                totale={ordiniAttiviDelivery.reduce((s, o) => s + o.totale, 0)}>
-                {ordiniAttiviDelivery.map(o => <OrderCell key={o.id} o={o} />)}
-                {appAttiviDelivery.map(a => <AppCell key={a.id} a={a} />)}
+              <OrdiniRow label="Delivery" tipoKey="delivery" count={nDeliveryAttivi} totale={totDeliveryAttivi}>
+                {deliveryAttivi.map(i => i.ord ? <OrderCell key={i.key} o={i.ord} /> : <AppCell key={i.key} a={i.app!} />)}
               </OrdiniRow>
             )}
           </div>

@@ -953,7 +953,7 @@ export default function DipendenteDashboard() {
                 <button onClick={() => setGiornoOrario(null)} className="w-7 h-7 flex items-center justify-center rounded-lg text-ink-navy/30 hover:text-ink-navy hover:bg-mist transition-colors text-lg leading-none">×</button>
               </div>
               <div className="px-4 py-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Dalle</label>
                     <OrarioSelect value={g.oraInizio} onChange={v => aggiornaGiorno(giornoOrario, 'oraInizio', v)} className={inp} />
@@ -1007,7 +1007,7 @@ export default function DipendenteDashboard() {
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Giorno (opzionale)</label>
                     <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} className={inp} />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Dalle</label>
                       <OrarioSelect value={form.oraInizio} onChange={v => setForm(f => ({ ...f, oraInizio: v }))} className={inp} />

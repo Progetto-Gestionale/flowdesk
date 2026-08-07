@@ -428,7 +428,7 @@ export default function StaffAreaPage() {
                       {/* Pannello orario espandibile */}
                       {isOpen && (
                         <div className="border-t border-gray-100 px-3 py-3 bg-gray-50 space-y-2">
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <div>
                               <label className="block text-xs text-gray-500 mb-1">Dalle</label>
                               <OrarioSelect value={g.oraInizio}
@@ -544,7 +544,7 @@ export default function StaffAreaPage() {
                     <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
                       className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Dalle</label>
                       <OrarioSelect value={form.oraInizio} onChange={v => setForm(f => ({ ...f, oraInizio: v }))}
