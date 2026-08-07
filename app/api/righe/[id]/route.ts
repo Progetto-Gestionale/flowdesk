@@ -18,6 +18,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const data: Record<string, unknown> = {}
   if ('pagata' in body) data.pagata = !!body.pagata
+  // quantitaPagata: unità pagate della voce, limitato tra 0 e la quantità della riga.
+  if ('quantitaPagata' in body) {
+    const n = Math.floor(Number(body.quantitaPagata))
+    data.quantitaPagata = Math.max(0, Math.min(riga.quantita, Number.isFinite(n) ? n : 0))
+  }
 
   const aggiornata = await prisma.rigaOrdine.update({ where: { id }, data })
   return NextResponse.json({ riga: aggiornata })

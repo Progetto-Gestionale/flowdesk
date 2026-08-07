@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import OrarioSelect from '@/app/components/OrarioSelect'
+import { preparaFoto } from '@/lib/uploadFoto'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
 import { IconUsers, IconTrash, IconPencil } from '@/app/components/icons'
@@ -69,6 +70,49 @@ function toISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// Campo foto dipendente: carica un'immagine dal dispositivo (compressa + su storage,
+// fallback base64), con anteprima e possibilità di rimuoverla. In fondo, opzione URL.
+function CampoFotoDipendente({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const [caricando, setCaricando] = useState(false)
+  async function seleziona(file: File | null) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { alert('Seleziona un file immagine (JPG, PNG…).'); return }
+    setCaricando(true)
+    try {
+      const url = await preparaFoto(file, 400, 0.8)
+      onChange(url)
+    } catch {
+      alert('Non è stato possibile elaborare l\'immagine. Riprova.')
+    } finally {
+      setCaricando(false)
+    }
+  }
+  return (
+    <div>
+      <label className="block text-sm font-medium text-ink-navy/70 mb-1">Foto <span className="text-ink-navy/35 font-normal">(opzionale)</span></label>
+      {value ? (
+        <div className="flex items-center gap-3">
+          <img src={value} alt="foto dipendente" className="h-14 w-14 rounded-full object-cover border border-ink-navy/10" />
+          <button type="button" onClick={() => onChange('')}
+            className="text-xs font-semibold text-red-500 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50">Rimuovi</button>
+        </div>
+      ) : (
+        <label className={`flex flex-col items-center justify-center gap-1 border-2 border-dashed border-ink-navy/15 rounded-xl py-4 transition-colors ${caricando ? 'opacity-60' : 'cursor-pointer hover:bg-mist hover:border-electric-blue/40'}`}>
+          <span className="text-sm font-semibold text-electric-blue">{caricando ? 'Caricamento…' : '📷 Carica foto'}</span>
+          <span className="text-xs text-ink-navy/35">JPG o PNG dal tuo dispositivo</span>
+          <input type="file" accept="image/*" className="hidden" disabled={caricando}
+            onChange={e => { seleziona(e.target.files?.[0] ?? null); e.target.value = '' }} />
+        </label>
+      )}
+      <details className="mt-2">
+        <summary className="text-xs text-ink-navy/40 cursor-pointer select-none">oppure incolla un URL</summary>
+        <input type="url" value={value.startsWith('data:') ? '' : value} onChange={e => onChange(e.target.value)}
+          placeholder="https://..." className="mt-1.5 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+      </details>
+    </div>
+  )
+}
+
 export default function StaffPage() {
   const [tab, setTab] = useState<'turni' | 'dipendenti' | 'richieste' | 'presenze'>('presenze')
   const [qrDip, setQrDip] = useState<{ nome: string; url: string } | null>(null)
@@ -95,6 +139,8 @@ export default function StaffPage() {
   const [showModalTurno, setShowModalTurno] = useState(false)
   const [formDip, setFormDip] = useState({ nome: '', email: '', ruolo: '', fotoUrl: '' })
   const [formTurno, setFormTurno] = useState({ dipendenteId: '', data: '', oraInizio: '09:00', oraFine: '17:00', ruolo: '', note: '' })
+  // Ricorda l'ultimo orario turno inserito nella sessione, per riproporlo sul giorno successivo.
+  const [ultimoOrarioTurno, setUltimoOrarioTurno] = useState({ oraInizio: '09:00', oraFine: '17:00' })
   const [saving, setSaving] = useState(false)
   const [dipPasswordModal, setDipPasswordModal] = useState<Dipendente | null>(null)
   const [nuovaPasswordDip, setNuovaPasswordDip] = useState('')
@@ -293,7 +339,9 @@ export default function StaffPage() {
     })
     setSaving(false)
     setShowModalTurno(false)
-    setFormTurno({ dipendenteId: '', data: '', oraInizio: '09:00', oraFine: '17:00', ruolo: '', note: '' })
+    // Ricorda l'orario appena usato e riproponilo alla prossima aggiunta (giorno successivo).
+    setUltimoOrarioTurno({ oraInizio: formTurno.oraInizio, oraFine: formTurno.oraFine })
+    setFormTurno({ dipendenteId: '', data: '', oraInizio: formTurno.oraInizio, oraFine: formTurno.oraFine, ruolo: '', note: '' })
     fetchAll()
   }
 
@@ -330,6 +378,8 @@ export default function StaffPage() {
       body: JSON.stringify({ dipendenteId: cellModal.dipendenteId, data: cellModal.data, oraInizio: cellModal.oraInizio, oraFine: cellModal.oraFine }),
     })
     setSavingCell(false)
+    // Ricorda l'orario per riproporlo sul giorno successivo nella stessa sessione.
+    setUltimoOrarioTurno({ oraInizio: cellModal.oraInizio, oraFine: cellModal.oraFine })
     setCellModal(null)
     fetchAll()
   }
@@ -575,7 +625,7 @@ export default function StaffPage() {
                     const preferenza = richiesteGiorno.find(r => !tipiAssenza.includes(r.tipo) && r.status !== 'rifiutata')
                     return (
                       <div key={i}
-                        onClick={() => setCellModal({ dipendenteId: dip.id, nome: dip.nome, data: dataStr, dataLabel: g.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }), oraInizio: '09:00', oraFine: '17:00' })}
+                        onClick={() => setCellModal({ dipendenteId: dip.id, nome: dip.nome, data: dataStr, dataLabel: g.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }), oraInizio: ultimoOrarioTurno.oraInizio, oraFine: ultimoOrarioTurno.oraFine })}
                         className={`border-l border-ink-navy/8 min-h-[64px] p-1.5 space-y-1 cursor-pointer transition-colors group ${assenza ? '' : haDisp ? 'bg-green-50/50 hover:bg-green-50' : noDisp ? 'bg-mist hover:bg-mist/60' : 'hover:bg-electric-blue/10'}`}>
                         {/* Indicatore disponibilità */}
                         {!assenza && haDisp && turniGiorno.length === 0 && (
@@ -1161,11 +1211,7 @@ export default function StaffPage() {
                 <input placeholder="es. Cameriere, Chef..." value={formModifica.ruolo} onChange={e => setFormModifica(f => ({ ...f, ruolo: e.target.value }))}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">URL foto <span className="text-ink-navy/35 font-normal">(opzionale)</span></label>
-                <input type="url" placeholder="https://..." value={formModifica.fotoUrl} onChange={e => setFormModifica(f => ({ ...f, fotoUrl: e.target.value }))}
-                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-              </div>
+              <CampoFotoDipendente value={formModifica.fotoUrl} onChange={url => setFormModifica(f => ({ ...f, fotoUrl: url }))} />
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={() => setDipendenteDaModificare(null)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
@@ -1199,11 +1245,7 @@ export default function StaffPage() {
                 <input placeholder="es. Cameriere, Chef, Cassiere..." value={formDip.ruolo} onChange={e => setFormDip(f => ({ ...f, ruolo: e.target.value }))}
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">URL foto <span className="text-ink-navy/35 font-normal">(opzionale)</span></label>
-                <input type="url" placeholder="https://..." value={formDip.fotoUrl} onChange={e => setFormDip(f => ({ ...f, fotoUrl: e.target.value }))}
-                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-              </div>
+              <CampoFotoDipendente value={formDip.fotoUrl} onChange={url => setFormDip(f => ({ ...f, fotoUrl: url }))} />
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={() => setShowModalDip(false)} className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>

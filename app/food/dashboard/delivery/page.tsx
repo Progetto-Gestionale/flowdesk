@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
+import OrarioSelect from '@/app/components/OrarioSelect'
 
 function formatDataLunga(s: string) {
   const d = new Date(`${s}T12:00:00`)
@@ -465,7 +466,7 @@ function NuovoOrdineModal({ tipoIniziale, onClose, onCreated }: {
             </div>
             <div>
               <label className="block text-xs font-medium text-ink-navy/60 mb-1">{isDelivery ? 'Ora consegna' : 'Ora ritiro'}</label>
-              <input type="time" value={ora} onChange={e => setOra(e.target.value)} className={inp} />
+              <OrarioSelect value={ora} onChange={setOra} className={inp} />
             </div>
           </div>
 

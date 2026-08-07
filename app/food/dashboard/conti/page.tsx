@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 
-interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; pagata?: boolean }
+interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; quantitaPagata?: number }
 interface Ordine {
   id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null
   totale: number; note: string | null; status: string; createdAt: string; closedAt?: string | null
-  tipo: string; righe: RigaOrdine[]; clienteInfo?: string | null
+  tipo: string; righe: RigaOrdine[]; clienteInfo?: string | null; coperti?: number | null
 }
 interface Piatto { id: string; nome: string; prezzo: number; descrizione?: string | null }
 interface Categoria { id: string; nome: string; piatti: Piatto[] }
@@ -328,7 +328,8 @@ export default function ContiPage() {
   const [tutti, setTutti] = useState<Ordine[]>([])
   const [chiudendo, setChiudendo] = useState<string | null>(null)
   const [copertiModal, setCopertiModal] = useState<Ordine | null>(null)
-  const [copertiValue, setCopertiValue] = useState(2)
+  const [copertiValue, setCopertiValue] = useState(2)            // coperti REALI del tavolo → chiusura + ANALYTICS
+  const [copertiRomana, setCopertiRomana] = useState(2)          // divisore "paga alla romana" → SOLO calcolo, mai salvato
   const [copertiTotale, setCopertiTotale] = useState(0)          // totale del conto da chiudere
   const [modalStep, setModalStep] = useState<'scelta' | 'romana'>('scelta')
   const [pagatiRomana, setPagatiRomana] = useState<Set<number>>(new Set()) // coperti che hanno pagato
@@ -367,10 +368,11 @@ export default function ContiPage() {
   // 'non_consegnato' (non consegnato / non ritirato) = conto concluso ma NON incassato.
   const isDone = (o: Ordine) => isTavolo(o) ? o.status === 'chiuso' : (o.status === 'consegnato' || o.status === 'chiuso' || o.status === 'non_consegnato')
   const isPagato = (o: Ordine) => o.status === 'pagato'
-  // Una singola voce è pagata se marcata pagata o se l'intero sottogruppo è già 'pagato'.
-  const rigaPagata = (o: Ordine, r: RigaOrdine) => isPagato(o) || !!r.pagata
-  // Rimanente da incassare di un sottogruppo: 0 se pagato tutto, altrimenti la somma delle righe non pagate.
-  const restanteSottogruppo = (o: Ordine) => isPagato(o) ? 0 : o.righe.filter(r => !r.pagata).reduce((s, r) => s + r.prezzo * r.quantita, 0)
+  // Unità pagate di una voce: se il sottogruppo è 'pagato' tutte, altrimenti quantitaPagata (0..quantita).
+  const unitaPagate = (o: Ordine, r: RigaOrdine) => isPagato(o) ? r.quantita : Math.min(r.quantitaPagata ?? 0, r.quantita)
+  const rigaTuttaPagata = (o: Ordine, r: RigaOrdine) => unitaPagate(o, r) >= r.quantita
+  // Rimanente da incassare di un sottogruppo: somma delle UNITÀ non ancora pagate.
+  const restanteSottogruppo = (o: Ordine) => isPagato(o) ? 0 : o.righe.reduce((s, r) => s + (r.quantita - unitaPagate(o, r)) * r.prezzo, 0)
   const matchesFiltro = (o: Ordine) => {
     if (filtroTipo === 'tavolo') return isTavolo(o)
     if (filtroTipo === 'delivery') return o.tipo === 'delivery'
@@ -396,18 +398,25 @@ export default function ContiPage() {
     if (modificando?.id === updated.id) setModificando(updated)
   }
 
-  // Apre il modal di chiusura conto (step "scelta": coperti + Chiudi/Paga alla romana)
-  function apriChiusura(o: Ordine, totale: number) {
+  // Apre il modal di chiusura conto (step "scelta": coperti + Chiudi/Paga alla romana).
+  // copertiIniziali = coperti già impostati (dal cameriere all'apertura del tavolo); modificabili.
+  function apriChiusura(o: Ordine, totale: number, copertiIniziali = 2) {
     setCopertiModal(o)
-    setCopertiValue(2)
+    setCopertiValue(copertiIniziali > 0 ? copertiIniziali : 2)
     setCopertiTotale(totale)
     setModalStep('scelta')
     setPagatiRomana(new Set())
   }
 
-  // Cambia il numero di coperti tenendo coerenti le spunte "pagato" della romana
+  // Coperti REALI del tavolo (step 'scelta'): usati per chiudere il conto e per le ANALYTICS.
   function cambiaCoperti(delta: number) {
-    setCopertiValue(v => {
+    setCopertiValue(v => Math.max(1, v + delta))
+  }
+
+  // Divisore della "paga alla romana" (step 'romana'): SOLO per il calcolo di quanto paga ognuno,
+  // NON viene mai salvato né usato dalle statistiche. Tiene coerenti le spunte "pagato".
+  function cambiaCopertiRomana(delta: number) {
+    setCopertiRomana(v => {
       const nv = Math.max(1, v + delta)
       setPagatiRomana(prev => new Set([...prev].filter(i => i < nv)))
       return nv
@@ -472,22 +481,21 @@ export default function ContiPage() {
     }
   }
 
-  // Segna/annulla il pagamento di una singola voce del conto (aiuto cassa per dividere per piatto).
-  // Update ottimistico + persistenza su /api/righe/[id]. Non chiude il conto: serve solo "Chiudi conto".
-  async function toggleRigaPagata(o: Ordine, r: RigaOrdine) {
-    const nuovo = !r.pagata
+  // Imposta quante unità di una voce sono pagate (0..quantita). Aiuto cassa per dividere per piatto.
+  // Aggiornamento OTTIMISTICO e nessun refetch: la modifica è immediata (niente lag né righe che
+  // "saltano"); il valore è persistito e il polling periodico riconcilia comunque.
+  async function setPagate(o: Ordine, r: RigaOrdine, n: number) {
+    const nuovo = Math.max(0, Math.min(r.quantita, n))
     setTutti(prev => prev.map(x => x.id === o.id
-      ? { ...x, righe: x.righe.map(rr => rr.id === r.id ? { ...rr, pagata: nuovo } : rr) }
+      ? { ...x, righe: x.righe.map(rr => rr.id === r.id ? { ...rr, quantitaPagata: nuovo } : rr) }
       : x))
     try {
       await fetch(`/api/righe/${r.id}`, {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pagata: nuovo }),
+        body: JSON.stringify({ quantitaPagata: nuovo }),
       })
-    } finally {
-      fetchOrdini()
-    }
+    } catch { /* riconcilia il prossimo polling */ }
   }
 
   function toggleUnione(key: string) {
@@ -598,7 +606,7 @@ export default function ContiPage() {
             </button>
             {aperto && (
               isTavolo(o) ? (
-                <button onClick={() => apriChiusura(o, o.totale)} disabled={chiudendo === o.id}
+                <button onClick={() => apriChiusura(o, o.totale, o.coperti ?? 2)} disabled={chiudendo === o.id}
                   className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
                   {chiudendo === o.id ? '…' : 'Chiudi'}
                 </button>
@@ -699,27 +707,35 @@ export default function ContiPage() {
         </div>
         <div className="divide-y divide-ink-navy/6 pl-6">
           {o.righe.map(r => {
-            const paid = rigaPagata(o, r)
-            // Toggle per riga solo su un sottogruppo aperto e non già interamente pagato.
+            const pagate = unitaPagate(o, r)
+            const tutta = rigaTuttaPagata(o, r)
+            // Controllo per riga solo su un sottogruppo aperto e non già interamente pagato.
             const interattiva = !chiuso && !pagato && !modUnione
             return (
               <div key={r.id} className="flex items-center justify-between py-1.5 gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-ink-navy w-5 shrink-0 text-center">{r.quantita}×</span>
-                  <span className={`text-sm truncate ${paid ? 'text-ink-navy/35 line-through' : 'text-ink-navy'}`}>{r.nome}</span>
+                  <span className={`text-sm truncate ${tutta ? 'text-ink-navy/35 line-through' : 'text-ink-navy'}`}>{r.nome}</span>
                   {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+                  {pagate > 0 && !tutta && (
+                    <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">{pagate}/{r.quantita} pagate</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-sm ${paid ? 'text-ink-navy/30 line-through' : 'text-ink-navy/50'}`}>{fmt(r.prezzo * r.quantita)}</span>
-                  {interattiva && (paid ? (
-                    <span className="flex items-center gap-1">
-                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">Pagata</span>
-                      <button onClick={() => toggleRigaPagata(o, r)}
-                        className="text-[11px] font-semibold text-ink-navy/45 hover:text-red-500 underline transition-colors">annulla</button>
-                    </span>
-                  ) : (
-                    <button onClick={() => toggleRigaPagata(o, r)}
+                  <span className={`text-sm ${tutta ? 'text-ink-navy/30 line-through' : 'text-ink-navy/50'}`}>{fmt(r.prezzo * r.quantita)}</span>
+                  {interattiva && (pagate === 0 ? (
+                    <button onClick={() => setPagate(o, r, 1)}
                       className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-electric-blue/30 text-electric-blue hover:bg-electric-blue/10 transition-colors">Paga</button>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <button onClick={() => setPagate(o, r, pagate - 1)}
+                        className="w-5 h-5 rounded-full border border-ink-navy/20 text-ink-navy/60 text-sm font-bold leading-none flex items-center justify-center hover:bg-mist transition-colors">−</button>
+                      <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full text-center">{tutta ? 'Pagata' : `${pagate}/${r.quantita}`}</span>
+                      {!tutta && (
+                        <button onClick={() => setPagate(o, r, pagate + 1)}
+                          className="w-5 h-5 rounded-full bg-electric-blue text-white text-sm font-bold leading-none flex items-center justify-center hover:bg-electric-blue/90 transition-colors">+</button>
+                      )}
+                    </span>
                   ))}
                 </div>
               </div>
@@ -782,7 +798,7 @@ export default function ContiPage() {
                 {chiudendo === conto.key ? '…' : `Paga selezionati (${selN}) · ${fmt(selTot)}`}
               </button>
             )}
-            <button onClick={() => apriChiusura(conto.ordini[0], conto.ordini.reduce((s, o) => s + restanteSottogruppo(o), 0))}
+            <button onClick={() => apriChiusura(conto.ordini[0], conto.ordini.reduce((s, o) => s + restanteSottogruppo(o), 0), Math.max(0, ...conto.ordini.map(o => o.coperti ?? 0)) || 2)}
               disabled={chiudendo === conto.ordini[0].id}
               className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-ink-navy text-white hover:bg-ink-navy/80 disabled:opacity-40 transition-colors">
               Chiudi conto {n > 1 ? '(tutto)' : ''}
@@ -952,12 +968,15 @@ export default function ContiPage() {
                   <button onClick={() => cambiaCoperti(1)}
                     className="w-10 h-10 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-xl font-bold hover:bg-mist transition-colors flex items-center justify-center">+</button>
                 </div>
+                <p className="text-[11px] text-ink-navy/45 text-center -mt-3 mb-4 leading-snug">
+                  ℹ️ Questi coperti verranno usati per le statistiche (analytics).
+                </p>
                 <div className="space-y-2">
                   <button onClick={() => chiudiConto(copertiModal, copertiValue)}
                     className="w-full py-2.5 bg-ink-navy text-white rounded-xl text-sm font-semibold hover:bg-ink-navy/80 transition-colors">
                     Chiudi conto
                   </button>
-                  <button onClick={() => setModalStep('romana')}
+                  <button onClick={() => { setCopertiRomana(copertiValue); setPagatiRomana(new Set()); setModalStep('romana') }}
                     className="w-full py-2.5 bg-electric-blue text-white rounded-xl text-sm font-semibold hover:bg-electric-blue/90 transition-colors">
                     Paga alla romana
                   </button>
@@ -970,19 +989,22 @@ export default function ContiPage() {
             ) : (
               <>
                 <h3 className="text-base font-bold text-ink-navy mb-1">Paga alla romana</h3>
-                <p className="text-sm text-ink-navy/50 mb-4">{fmt(copertiTotale)} diviso {copertiValue} coperti</p>
-                <div className="flex items-center justify-center gap-4 mb-4">
-                  <button onClick={() => cambiaCoperti(-1)}
+                <p className="text-sm text-ink-navy/50 mb-4">{fmt(copertiTotale)} diviso {copertiRomana} coperti</p>
+                <div className="flex items-center justify-center gap-4 mb-2">
+                  <button onClick={() => cambiaCopertiRomana(-1)}
                     className="w-9 h-9 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-lg font-bold hover:bg-mist transition-colors flex items-center justify-center">−</button>
                   <div className="text-center w-28">
-                    <span className="block text-2xl font-bold text-ink-navy">{fmt(copertiTotale / copertiValue)}</span>
-                    <span className="text-xs text-ink-navy/45">a testa · {copertiValue} coperti</span>
+                    <span className="block text-2xl font-bold text-ink-navy">{fmt(copertiTotale / copertiRomana)}</span>
+                    <span className="text-xs text-ink-navy/45">a testa · {copertiRomana} coperti</span>
                   </div>
-                  <button onClick={() => cambiaCoperti(1)}
+                  <button onClick={() => cambiaCopertiRomana(1)}
                     className="w-9 h-9 rounded-xl border border-ink-navy/15 text-ink-navy/60 text-lg font-bold hover:bg-mist transition-colors flex items-center justify-center">+</button>
                 </div>
+                <p className="text-[11px] text-ink-navy/40 text-center mb-3 leading-snug">
+                  Solo per dividere il conto — non cambia i coperti usati dalle statistiche.
+                </p>
                 <div className="max-h-52 overflow-y-auto -mx-1 px-1 mb-3 space-y-1.5">
-                  {Array.from({ length: copertiValue }, (_, i) => {
+                  {Array.from({ length: copertiRomana }, (_, i) => {
                     const pagato = pagatiRomana.has(i)
                     return (
                       <button key={i} onClick={() => setPagatiRomana(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })}
@@ -991,14 +1013,14 @@ export default function ContiPage() {
                           <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[11px] ${pagato ? 'bg-green-500 text-white' : 'border border-ink-navy/25'}`}>{pagato ? '✓' : ''}</span>
                           Coperto {i + 1}
                         </span>
-                        <span>{fmt(copertiTotale / copertiValue)}</span>
+                        <span>{fmt(copertiTotale / copertiRomana)}</span>
                       </button>
                     )
                   })}
                 </div>
                 <div className="flex items-center justify-between text-sm mb-3 px-1">
-                  <span className="text-ink-navy/60 font-medium">Pagato {pagatiRomana.size}/{copertiValue}</span>
-                  <span className="font-bold text-ink-navy">{fmt(copertiTotale / copertiValue * pagatiRomana.size)} di {fmt(copertiTotale)}</span>
+                  <span className="text-ink-navy/60 font-medium">Pagato {pagatiRomana.size}/{copertiRomana}</span>
+                  <span className="font-bold text-ink-navy">{fmt(copertiTotale / copertiRomana * pagatiRomana.size)} di {fmt(copertiTotale)}</span>
                 </div>
                 <div className="space-y-2">
                   <button onClick={() => chiudiConto(copertiModal, copertiValue)}

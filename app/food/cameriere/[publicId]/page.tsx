@@ -39,6 +39,7 @@ export default function CamerierePage() {
   const [noteOrdine, setNoteOrdine] = useState('')
   const [catAttiva, setCatAttiva] = useState<string | null>(null)
   const [vistaCarrello, setVistaCarrello] = useState(false)
+  const [noteAperte, setNoteAperte] = useState<Set<string>>(new Set()) // piatti con il campo nota aperto
   const [inviando, setInviando] = useState(false)
 
   const coloreP = dati?.menuColoreP ?? '#4f46e5'
@@ -135,9 +136,12 @@ export default function CamerierePage() {
   async function inviaOrdine() {
     setInviando(true)
     try {
+      // Se il tavolo è già aperto, non rimando i coperti (restano quelli dell'apertura).
+      const tavoliDb = dati?.tavoli ?? []
+      const aggiuntaATavoloAperto = tavoliDb.some(t => selezionati.includes(t.numero) && t.occupato)
       const res = await fetch('/api/cameriere/ordina', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicId, tavoli: selezionati, coperti, righe: carrello, note: noteOrdine }),
+        body: JSON.stringify({ publicId, tavoli: selezionati, coperti: aggiuntaATavoloAperto ? null : coperti, righe: carrello, note: noteOrdine }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -208,6 +212,9 @@ export default function CamerierePage() {
     const tavoli = dati?.tavoli ?? []
     const sale = dati?.sale ?? []
     const senzaSala = tavoli.filter(t => !t.salaId)
+    // Se sto aggiungendo ordini a un tavolo GIÀ aperto, i coperti sono già stati impostati
+    // all'apertura: non li richiedo di nuovo (e non li sovrascrivo).
+    const aggiuntaATavoloAperto = tavoli.some(t => selezionati.includes(t.numero) && t.occupato)
     const gruppiLabelById = new Map<string, string>()
     dati?.gruppi.forEach(g => g.tavoliIds.forEach(id => gruppiLabelById.set(id, g.label)))
 
@@ -264,16 +271,20 @@ export default function CamerierePage() {
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
             <div className="max-w-lg mx-auto">
               {selezionati.length > 1 && <p className="text-xs text-center text-gray-500 mb-2">🔗 {selezionati.length} tavoli — i conti verranno uniti</p>}
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-gray-700">Coperti</span>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setCoperti(c => Math.max(1, c - 1))}
-                    className="w-9 h-9 rounded-full border-2 flex items-center justify-center font-bold text-lg" style={{ borderColor: coloreP, color: coloreP }}>−</button>
-                  <span className="font-bold text-gray-900 w-6 text-center text-lg">{coperti}</span>
-                  <button onClick={() => setCoperti(c => c + 1)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: coloreP }}>+</button>
+              {aggiuntaATavoloAperto ? (
+                <p className="text-xs text-center text-gray-500 mb-3">Tavolo già aperto — i coperti restano quelli impostati all&apos;apertura.</p>
+              ) : (
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-semibold text-gray-700">Coperti</span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setCoperti(c => Math.max(1, c - 1))}
+                      className="w-9 h-9 rounded-full border-2 flex items-center justify-center font-bold text-lg" style={{ borderColor: coloreP, color: coloreP }}>−</button>
+                    <span className="font-bold text-gray-900 w-6 text-center text-lg">{coperti}</span>
+                    <button onClick={() => setCoperti(c => c + 1)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: coloreP }}>+</button>
+                  </div>
                 </div>
-              </div>
+              )}
               <button onClick={() => setStep('menu')} className="w-full py-3.5 rounded-2xl text-white font-bold shadow-md" style={{ backgroundColor: coloreP }}>
                 Prendi ordine — Tavolo {labelTavoli}
               </button>
@@ -377,10 +388,18 @@ export default function CamerierePage() {
                     </div>
                     <p className="font-bold text-gray-900 text-sm w-14 text-right">€{(r.prezzo * r.quantita).toFixed(2)}</p>
                   </div>
-                  <input type="text" value={r.note} onChange={e => setNota(r.piattoId, e.target.value)}
-                    placeholder="Nota per questo piatto (es. senza cipolla)…"
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2"
-                    style={{ '--tw-ring-color': coloreP } as any} />
+                  {(noteAperte.has(r.piattoId) || r.note) ? (
+                    <input type="text" value={r.note} onChange={e => setNota(r.piattoId, e.target.value)}
+                      autoFocus={noteAperte.has(r.piattoId) && !r.note}
+                      placeholder="Nota (es. senza cipolla)…"
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2"
+                      style={{ '--tw-ring-color': coloreP } as any} />
+                  ) : (
+                    <button type="button" onClick={() => setNoteAperte(prev => new Set(prev).add(r.piattoId))}
+                      className="text-xs font-semibold opacity-70 hover:opacity-100 transition-opacity" style={{ color: coloreP }}>
+                      + aggiungi nota
+                    </button>
+                  )}
                 </div>
               ))}
               <div className="pt-3">
