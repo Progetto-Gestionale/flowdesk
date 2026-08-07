@@ -76,6 +76,8 @@ model MenuCategoria {
   createdAt DateTime     @default(now())
   user      User         @relation(fields: [userId], references: [id])
   piatti    MenuPiatto[]
+
+  @@index([userId, tipo])
 }
 
 model MenuPiatto {
@@ -92,6 +94,9 @@ model MenuPiatto {
   user        User          @relation(fields: [userId], references: [id])
   categoria   MenuCategoria @relation(fields: [categoriaId], references: [id])
   righeOrdine RigaOrdine[]
+
+  @@index([userId])
+  @@index([categoriaId])
 }
 
 model Ordine {
@@ -113,6 +118,10 @@ model Ordine {
   tavoloRel   Tavolo?       @relation(fields: [tavoloId], references: [id])
   gruppoRel   GruppoTavoli? @relation(fields: [gruppoId], references: [id])
   righe       RigaOrdine[]
+
+  @@index([userId, createdAt])
+  @@index([tavoloId])
+  @@index([gruppoId])
 }
 
 model RigaOrdine {
@@ -126,6 +135,9 @@ model RigaOrdine {
   pagata   Boolean     @default(false) // pagamento della singola voce del conto (aiuto cassa per dividere)
   ordine   Ordine      @relation(fields: [ordineId], references: [id])
   piatto   MenuPiatto? @relation(fields: [piattoId], references: [id], onDelete: SetNull)
+
+  @@index([ordineId])
+  @@index([piattoId])
 }
 
 model Lead {
@@ -140,6 +152,8 @@ model Lead {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Content {
@@ -151,6 +165,8 @@ model Content {
   scheduledAt  DateTime?
   createdAt    DateTime  @default(now())
   user         User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Appuntamento {
@@ -175,6 +191,9 @@ model Appuntamento {
   user         User         @relation(fields: [userId], references: [id])
   paziente     Paziente?    @relation(fields: [pazienteId], references: [id])
   tipoSeduta   TipoSeduta?  @relation(fields: [tipoSedutaId], references: [id])
+
+  @@index([userId, data])
+  @@index([tavoloId])
 }
 
 // ── Flowest Care ──────────────────────────────────────────────────────────
@@ -257,6 +276,8 @@ model GruppoTavoli {
   user      User     @relation(fields: [userId], references: [id])
   tavoli    Tavolo[]
   ordini    Ordine[]
+
+  @@index([userId, data])
 }
 
 model Sala {
@@ -268,6 +289,8 @@ model Sala {
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id])
   tavoli      Tavolo[]
+
+  @@index([userId])
 }
 
 model Tavolo {
@@ -291,6 +314,10 @@ model Tavolo {
   user         User           @relation(fields: [userId], references: [id])
   gruppo       GruppoTavoli?  @relation(fields: [gruppoId], references: [id])
   sala         Sala?          @relation(fields: [salaId], references: [id])
+
+  @@index([userId])
+  @@index([gruppoId])
+  @@index([salaId])
 }
 
 model ListaAttesa {
@@ -330,6 +357,7 @@ model Dipendente {
   timbrature       Timbratura[]
 
   @@unique([userId, username])
+  @@index([userId])
 }
 
 model Timbratura {
@@ -339,6 +367,9 @@ model Timbratura {
   userId       String
   tipo         String     // "entrata" | "uscita"
   timestamp    DateTime   @default(now())
+
+  @@index([dipendenteId])
+  @@index([userId])
 }
 
 model Turno {
@@ -353,6 +384,9 @@ model Turno {
   createdAt    DateTime   @default(now())
   dipendente   Dipendente @relation(fields: [dipendenteId], references: [id])
   user         User       @relation(fields: [userId], references: [id])
+
+  @@index([userId, data])
+  @@index([dipendenteId])
 }
 
 model RichiestaDipendente {
@@ -367,6 +401,8 @@ model RichiestaDipendente {
   status       String     @default("in_attesa")
   createdAt    DateTime   @default(now())
   dipendente   Dipendente @relation(fields: [dipendenteId], references: [id])
+
+  @@index([dipendenteId])
 }
 
 model DisponibilitaDipendente {
@@ -412,6 +448,8 @@ model Conversazione {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Preventivo {
@@ -432,4 +470,6 @@ model Preventivo {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
