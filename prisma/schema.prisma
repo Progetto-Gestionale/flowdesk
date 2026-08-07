@@ -123,6 +123,7 @@ model RigaOrdine {
   prezzo   Float
   quantita Int
   note     String?
+  pagata   Boolean     @default(false) // pagamento della singola voce del conto (aiuto cassa per dividere)
   ordine   Ordine      @relation(fields: [ordineId], references: [id])
   piatto   MenuPiatto? @relation(fields: [piattoId], references: [id], onDelete: SetNull)
 }
