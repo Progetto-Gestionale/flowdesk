@@ -2,6 +2,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { IconReceipt } from '@/app/components/icons'
 import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
+import { getCache, setCache } from '@/lib/pageCache'
 
 interface RigaOrdine {
   id: string
@@ -75,6 +76,10 @@ const CELL_THEME = {
   delivery: { border: 'border-teal-200',   bg: 'bg-teal-50/30'   },
 }
 
+// Cache navigazione (stale-while-revalidate): al ritorno mostra subito l'ultimo dato noto.
+const ORDINI_CACHE_KEY = 'food:ordini'
+type OrdiniCache = { ordini: Ordine[]; tavoli: TavoloDb[]; appuntamenti: AppuntamentoOrdine[]; blockAsporto: boolean; blockDelivery: boolean }
+
 export default function OrdiniPage() {
   const [ordini, setOrdini] = useState<Ordine[]>([])
   const [tavoli, setTavoli] = useState<TavoloDb[]>([])
@@ -125,10 +130,26 @@ export default function OrdiniPage() {
   }
 
   useEffect(() => {
+    // Idrata subito dall'ultimo dato in cache (se c'è): niente "Caricamento…" al ritorno.
+    const cached = getCache<OrdiniCache>(ORDINI_CACHE_KEY)
+    if (cached) {
+      setOrdini(cached.ordini)
+      setTavoli(cached.tavoli)
+      setAppuntamenti(cached.appuntamenti)
+      setBlockAsporto(cached.blockAsporto)
+      setBlockDelivery(cached.blockDelivery)
+      setLoading(false)
+    }
     Promise.all([fetchOrdini(), fetchTavoli(), fetchAppuntamenti(), fetchBlocchi()]).finally(() => setLoading(false))
     const interval = setInterval(() => { fetchOrdini(); fetchAppuntamenti() }, 15000)
     return () => clearInterval(interval)
   }, [])
+
+  // Write-through: tiene la cache allineata all'ultimo stato mostrato (incluse le modifiche ottimistiche).
+  useEffect(() => {
+    if (loading) return
+    setCache<OrdiniCache>(ORDINI_CACHE_KEY, { ordini, tavoli, appuntamenti, blockAsporto, blockDelivery })
+  }, [loading, ordini, tavoli, appuntamenti, blockAsporto, blockDelivery])
 
   // La cucina segna l'ordine come "pronto".
   // - delivery: diventa 'pronto', poi il fattorino lo segnerà 'consegnato' (auto-chiusura conto).

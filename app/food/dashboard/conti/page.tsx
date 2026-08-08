@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { getCache, setCache } from '@/lib/pageCache'
+
+// Cache navigazione (solo vista "oggi", il caso caldo): al ritorno mostra subito l'ultimo dato noto.
+const CONTI_CACHE_KEY = 'food:conti:oggi'
 
 interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; quantitaPagata?: number }
 interface Ordine {
@@ -353,13 +357,24 @@ export default function ContiPage() {
     setTutti(data.ordini ?? [])
   }, [isOggi])
 
+  const primoMount = useRef(true)
   useEffect(() => {
-    setLoading(true)
+    // Solo al primissimo mount su "oggi": idrata dalla cache → niente "Caricamento…" al ritorno.
+    const cached = primoMount.current && isOggi ? getCache<Ordine[]>(CONTI_CACHE_KEY) : undefined
+    primoMount.current = false
+    if (cached) { setTutti(cached); setLoading(false) }
+    else setLoading(true)
     fetchOrdini().finally(() => setLoading(false))
     if (!isOggi) return
     const iv = setInterval(fetchOrdini, 15000)
     return () => clearInterval(iv)
   }, [fetchOrdini, isOggi])
+
+  // Write-through: tiene allineata la cache della vista "oggi" all'ultimo stato (incluse le modifiche ottimistiche).
+  useEffect(() => {
+    if (loading || !isOggi) return
+    setCache<Ordine[]>(CONTI_CACHE_KEY, tutti)
+  }, [loading, isOggi, tutti])
 
   const ordini = isOggi ? tutti : tutti.filter(o => getSerataKey(o.createdAt) === dataFiltro)
   const isTavolo = (o: Ordine) => o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
