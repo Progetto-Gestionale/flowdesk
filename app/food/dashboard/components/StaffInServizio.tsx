@@ -1,5 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { getCache, setCache } from '@/lib/pageCache'
+
+const STAFF_SERVIZIO_CACHE_KEY = 'food:staff-in-servizio' // cache navigazione (stale-while-revalidate)
 
 interface Timbratura {
   tipo: 'entrata' | 'uscita'
@@ -19,10 +22,13 @@ export default function StaffInServizio() {
     const oggi = new Date()
     const oggiStr = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-${String(oggi.getDate()).padStart(2, '0')}`
     let attivo = true
+    // Idrata subito dall'ultimo dato in cache (se c'è): niente flash al ritorno sulla pagina.
+    const cached = getCache<Timbratura[]>(STAFF_SERVIZIO_CACHE_KEY)
+    if (cached) setTimbrature(cached)
     const carica = () => {
       fetch(`/api/qr-timbratura/storico?data=${oggiStr}`, { credentials: 'include', cache: 'no-store' })
         .then(r => (r.ok ? r.json() : null))
-        .then(d => { if (attivo) setTimbrature(d?.timbrature ?? []) })
+        .then(d => { if (!attivo) return; const list = d?.timbrature ?? []; setTimbrature(list); setCache(STAFF_SERVIZIO_CACHE_KEY, list) })
         .catch(() => {})
     }
     carica()

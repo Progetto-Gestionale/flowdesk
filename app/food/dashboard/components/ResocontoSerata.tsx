@@ -1,5 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { getCache, setCache } from '@/lib/pageCache'
+
+const RESOCONTO_CACHE_KEY = 'food:resoconto-serata' // cache navigazione (stale-while-revalidate)
 
 interface Serata {
   prenotazioniNum: number
@@ -21,10 +24,13 @@ export default function ResocontoSerata() {
 
   useEffect(() => {
     let attivo = true
+    // Idrata subito dall'ultimo dato in cache (se c'è): niente flash di caricamento al ritorno.
+    const cached = getCache<Serata>(RESOCONTO_CACHE_KEY)
+    if (cached) { setDati(cached); setLoading(false) }
     const carica = () => {
       fetch('/api/analytics/serata', { credentials: 'include', cache: 'no-store' })
         .then(r => (r.ok ? r.json() : null))
-        .then((d: Serata | null) => { if (attivo) setDati(d) })
+        .then((d: Serata | null) => { if (!attivo) return; setDati(d); if (d) setCache(RESOCONTO_CACHE_KEY, d) })
         .catch(() => {})
         .finally(() => { if (attivo) setLoading(false) })
     }

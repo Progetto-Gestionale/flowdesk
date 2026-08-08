@@ -2,6 +2,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
 import OrarioSelect from '@/app/components/OrarioSelect'
+import { getCache, setCache } from '@/lib/pageCache'
+
+const DELIVERY_CACHE_KEY = 'food:delivery' // cache navigazione (stale-while-revalidate)
 
 function formatDataLunga(s: string) {
   const d = new Date(`${s}T12:00:00`)
@@ -66,10 +69,18 @@ export default function AsportoDeliveryPage() {
   }, [])
 
   useEffect(() => {
-    fetchOrdini().finally(() => setLoading(false))
+    // Idrata subito dall'ultimo dato in cache (se c'è): niente "Caricamento…" al ritorno.
+    const cached = getCache<Ordine[]>(DELIVERY_CACHE_KEY)
+    if (cached) { setOrdini(cached); setLoading(false) }
+    fetchOrdini().finally(() => setLoading(false)) // revalidate in background
     const iv = setInterval(fetchOrdini, 15000)
     return () => clearInterval(iv)
   }, [fetchOrdini])
+
+  // Write-through: mantiene la cache allineata all'ultimo stato mostrato.
+  useEffect(() => {
+    if (!loading) setCache<Ordine[]>(DELIVERY_CACHE_KEY, ordini)
+  }, [loading, ordini])
 
   async function setStato(id: string, status: string) {
     setOrdini(prev => prev.map(o => o.id === id ? { ...o, status } : o))
