@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
-import { geocodaIndirizzo, distanzaKm } from '@/lib/geocode'
+import { geocodaIndirizzo, distanzaKm, cercaIndirizzi, type Suggerimento } from '@/lib/geocode'
 import OrarioSelect from '@/app/components/OrarioSelect'
 
 interface Piatto {
@@ -60,30 +60,24 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
   const [inviando, setInviando] = useState(false)
   const [numeroOrdine, setNumeroOrdine] = useState<number | null>(null)
   const [errIndirizzo, setErrIndirizzo] = useState('')
-  const [suggerimenti, setSuggerimenti] = useState<any[]>([])
+  const [suggerimenti, setSuggerimenti] = useState<Suggerimento[]>([])
+  const [coordScelte, setCoordScelte] = useState<{ lat: number; lon: number } | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function cercaIndirizzo(via: string) {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (via.length < 4) { setSuggerimenti([]); return }
+    if (via.trim().length < 3) { setSuggerimenti([]); return }
     debounceRef.current = setTimeout(async () => {
-      const q = encodeURIComponent(`${via}${dati.citta ? ', ' + dati.citta : ''}, Italia`)
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&countrycodes=it&addressdetails=1`, {
-        headers: { 'Accept-Language': 'it', 'User-Agent': 'Flowest/1.0' },
-      }).catch(() => null)
-      if (!res) return
-      const data = await res.json().catch(() => [])
-      setSuggerimenti(data ?? [])
-    }, 400)
+      // Autocomplete via Photon, con priorità agli indirizzi vicini al locale.
+      const q = `${via}${dati.citta ? ', ' + dati.citta : ''}`
+      const sugg = await cercaIndirizzi(q, regole.latLocale, regole.lonLocale)
+      setSuggerimenti(sugg)
+    }, 300)
   }
 
-  function selezionaSuggerimento(s: any) {
-    const a = s.address ?? {}
-    const strada = a.road ?? a.pedestrian ?? a.footway ?? a.residential ?? a.path ?? a.name ?? s.display_name.split(',')[0] ?? ''
-    const via = [strada, a.house_number ?? ''].filter(Boolean).join(' ')
-    const cap = (a.postcode ?? '').replace(/\s/g, '').slice(0, 5)
-    const citta = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? ''
-    setDati(d => ({ ...d, via, cap, citta }))
+  function selezionaSuggerimento(s: Suggerimento) {
+    setDati(d => ({ ...d, via: s.via, cap: s.cap || d.cap, citta: s.citta || d.citta }))
+    setCoordScelte({ lat: s.lat, lon: s.lon }) // coordinate precise dell'indirizzo scelto
     setSuggerimenti([])
     setErrIndirizzo('')
   }
@@ -237,25 +231,30 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
     setInviando(true)
     try {
       if (dati.tipo === 'delivery') {
-        const geo = await geocodaIndirizzo(dati.via, dati.cap, dati.citta)
-        if (!geo) {
-          setErrIndirizzo('Indirizzo non trovato. Controlla via, CAP e città.')
-          setInviando(false)
-          return
-        }
-        // ── Zona di consegna: deve rispettare CAP servito E raggio massimo ──
+        // ── Zona di consegna ──
+        // 1) CAP: criterio PRINCIPALE (esatto, non richiede geocoding).
         const capServiti = (regole.capConsegna ?? '').split(',').map(s => s.trim()).filter(Boolean)
         if (capServiti.length > 0 && !capServiti.includes(dati.cap)) {
           setErrIndirizzo('Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (CAP non coperto). Puoi comunque scegliere il ritiro in negozio (asporto).')
           setInviando(false)
           return
         }
+        // 2) Raggio (se configurato): usa le coordinate dell'indirizzo scelto dall'autocomplete;
+        //    se il cliente ha scritto a mano senza selezionare, provo a geocodificare come fallback.
+        //    Se non riesco a ottenere coordinate NON blocco (il CAP ha già filtrato la zona).
         if (regole.raggioConsegnaKm && regole.latLocale != null && regole.lonLocale != null) {
-          const dist = distanzaKm(regole.latLocale, regole.lonLocale, geo.lat, geo.lon)
-          if (dist > regole.raggioConsegnaKm) {
-            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
-            setInviando(false)
-            return
+          let coords = coordScelte
+          if (!coords) {
+            const geo = await geocodaIndirizzo(dati.via, dati.cap, dati.citta)
+            if (geo) coords = { lat: geo.lat, lon: geo.lon }
+          }
+          if (coords) {
+            const dist = distanzaKm(regole.latLocale, regole.lonLocale, coords.lat, coords.lon)
+            if (dist > regole.raggioConsegnaKm) {
+              setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+              setInviando(false)
+              return
+            }
           }
         }
       }
@@ -566,24 +565,19 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             <div className="relative">
               <label className="block text-xs font-medium text-gray-500 mb-1">Via / Piazza *</label>
               <input value={dati.via}
-                onChange={e => { setDati(d => ({ ...d, via: e.target.value })); cercaIndirizzo(e.target.value); setErrIndirizzo('') }}
+                onChange={e => { setDati(d => ({ ...d, via: e.target.value })); setCoordScelte(null); cercaIndirizzo(e.target.value); setErrIndirizzo('') }}
                 onBlur={() => setTimeout(() => setSuggerimenti([]), 200)}
                 placeholder="Inizia a digitare l'indirizzo…" className={inpFocus} autoComplete="off" />
               {suggerimenti.length > 0 && (
                 <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                  {suggerimenti.map((s, i) => {
-                    const a = s.address ?? {}
-                    const riga1 = [a.road ?? a.pedestrian ?? '', a.house_number ?? ''].filter(Boolean).join(' ')
-                    const riga2 = [a.postcode, a.city ?? a.town ?? a.village].filter(Boolean).join(' ')
-                    return (
-                      <button key={i} type="button"
-                        onPointerDown={e => { e.preventDefault(); selezionaSuggerimento(s) }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-0">
-                        <p className="text-sm font-medium text-gray-800">{riga1 || s.display_name.split(',')[0]}</p>
-                        <p className="text-xs text-gray-400">{riga2}</p>
-                      </button>
-                    )
-                  })}
+                  {suggerimenti.map((s, i) => (
+                    <button key={i} type="button"
+                      onPointerDown={e => { e.preventDefault(); selezionaSuggerimento(s) }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                      <p className="text-sm font-medium text-gray-800">{s.l1}</p>
+                      <p className="text-xs text-gray-400">{s.l2}</p>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

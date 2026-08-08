@@ -59,6 +59,33 @@ export async function geocodaIndirizzo(
   return null
 }
 
+export type Suggerimento = { l1: string; l2: string; via: string; cap: string; citta: string; lat: number; lon: number }
+
+// Autocomplete indirizzi via Photon (OpenStreetMap, gratuito, senza chiave), pensato per il
+// "scrivi e ti suggerisce". Restituisce suggerimenti già normalizzati e con coordinate precise.
+// bias opzionale sulle coordinate del locale: fa uscire prima gli indirizzi vicini.
+export async function cercaIndirizzi(q: string, biasLat?: number | null, biasLon?: number | null): Promise<Suggerimento[]> {
+  if (q.trim().length < 3) return []
+  const bias = biasLat != null && biasLon != null ? `&lat=${biasLat}&lon=${biasLon}` : ''
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=it&limit=5${bias}`
+  const res = await fetch(url).catch(() => null)
+  if (!res || !res.ok) return []
+  const data = await res.json().catch(() => null)
+  const feats = (data?.features ?? []) as any[]
+  return feats
+    .filter(f => String(f.properties?.countrycode ?? 'IT').toUpperCase() === 'IT') // solo Italia
+    .map(f => {
+      const p = f.properties ?? {}
+      const strada = p.street ?? p.name ?? ''
+      const via = [strada, p.housenumber ?? ''].filter(Boolean).join(' ')
+      const citta = p.city ?? p.town ?? p.village ?? p.county ?? ''
+      const cap = String(p.postcode ?? '').replace(/\s/g, '').slice(0, 5)
+      const [lon, lat] = (f.geometry?.coordinates ?? [null, null]) as [number | null, number | null]
+      return { l1: via || p.name || '', l2: [cap, citta].filter(Boolean).join(' '), via, cap, citta, lat: lat as number, lon: lon as number }
+    })
+    .filter(s => typeof s.lat === 'number' && typeof s.lon === 'number' && !!s.via)
+}
+
 // Distanza in km (formula dell'emisenoverso) tra due coordinate.
 export function distanzaKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const toRad = (x: number) => (x * Math.PI) / 180

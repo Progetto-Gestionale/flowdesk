@@ -4,7 +4,7 @@ import Link from 'next/link'
 import QRCode from 'qrcode'
 import { IconTable, IconCheck, IconTrash, IconPencil } from '@/app/components/icons'
 import { ModificaOrdineModal } from '../components/ModificaOrdineModal'
-import { getCache, setCache } from '@/lib/pageCache'
+import { Skeleton } from '@/app/components/Skeleton'
 
 // ── Tipi ─────────────────────────────────────────────────────────────────────
 interface Tavolo { id: string; numero: number; etichetta: string | null; posti: number; note: string | null; gruppoId: string | null; salaId: string | null }
@@ -14,12 +14,6 @@ interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: numbe
 interface Ordine { id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null; totale: number; note: string | null; status: string; createdAt: string; righe: RigaOrdine[] }
 interface MapData { forma: 'quadrato' | 'cerchio'; colore: string; w: number; h: number; x: number; y: number }
 interface Elemento { id: string; tipo: string; label: string; x: number; y: number; w: number; h: number; colore: string }
-
-// Cache navigazione (stale-while-revalidate). Include l'occupazione (ordini+gruppi) così al ritorno
-// la mappa mostra subito l'ultimo stato noto invece di un flash "tutti liberi"; poi ricarica in
-// background (finestra di dato vecchio ~sotto il secondo, il mount rifà sempre le fetch).
-const TAVOLI_CACHE_KEY = 'food:tavoli'
-type TavoliCache = { tavoli: Tavolo[]; sale: Sala[]; salaAttivaId: string | null; ordiniAperti: Ordine[]; ordiniChiusi: Ordine[]; gruppi: Gruppo[] }
 
 // ── Costanti ──────────────────────────────────────────────────────────────────
 // Rosso escluso di proposito: è riservato al segnale "ordine pronto" sui tavoli
@@ -847,14 +841,6 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   }
 
   useEffect(() => {
-    // Idrata subito dall'ultimo stato in cache (struttura + occupazione): niente "Caricamento…"
-    // né flash "tutti liberi" al ritorno. Le fetch qui sotto ricaricano comunque tutto.
-    const cached = getCache<TavoliCache>(TAVOLI_CACHE_KEY)
-    if (cached) {
-      setTavoli(cached.tavoli); setSale(cached.sale); setSalaAttivaId(cached.salaAttivaId)
-      setOrdiniAperti(cached.ordiniAperti); setOrdiniChiusi(cached.ordiniChiusi); setGruppi(cached.gruppi)
-      setLoading(false)
-    }
     // fetchSale prima: può assegnare salaId ai tavoli sul DB (auto-assign).
     // fetchTavoli dopo: così prende i salaId già aggiornati.
     fetchSale().then(() => fetchTavoli())
@@ -873,12 +859,6 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
     }, 15000)
     return () => clearInterval(interval)
   }, [])
-
-  // Write-through: tiene la cache allineata all'ultimo stato mostrato (struttura + occupazione).
-  useEffect(() => {
-    if (loading) return
-    setCache<TavoliCache>(TAVOLI_CACHE_KEY, { tavoli, sale, salaAttivaId, ordiniAperti, ordiniChiusi, gruppi })
-  }, [loading, tavoli, sale, salaAttivaId, ordiniAperti, ordiniChiusi, gruppi])
 
   useEffect(() => { fetchGruppi(giornoSel, turnoSel) }, [giornoSel, turnoSel])
 
@@ -1076,7 +1056,11 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
         )}
       </div>
 
-      {loading ? <p className="text-ink-navy/35 text-sm">Caricamento...</p> : (
+      {loading ? (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+          {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="aspect-square" />)}
+        </div>
+      ) : (
         <>
           <div className={vista !== 'mappa' ? 'hidden' : ''}>
             <VistaMappa ref={mappaRef}

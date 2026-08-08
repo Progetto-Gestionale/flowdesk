@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getCache, setCache } from '@/lib/pageCache'
+import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
 
 // Cache navigazione (solo vista "oggi", il caso caldo): al ritorno mostra subito l'ultimo dato noto.
 const CONTI_CACHE_KEY = 'food:conti:oggi'
@@ -92,7 +93,6 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
 }) {
   const [righe, setRighe] = useState<RigaOrdine[]>([...ordine.righe])
   const [totale, setTotale] = useState(ordine.totale)
-  const [salvando, setSalvando] = useState<string | null>(null) // id operazione in corso
   const [categorie, setCategorie] = useState<Categoria[]>([])
   const [search, setSearch] = useState('')
   const [sezioneMenu, setSezioneMenu] = useState(false)
@@ -103,42 +103,48 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
       .then(r => r.json()).then(d => setCategorie(d.categorie ?? [])).catch(() => {})
   }, [])
 
-  async function callApi(method: string, body: object) {
-    const res = await fetch(`/api/ordini/${ordine.id}/riga`, {
+  // Chiamata API in background. NON sovrascrive lo stato locale (evita flicker e risposte fuori
+  // sequenza con i click rapidi): lo stato ottimistico è la verità, il polling dei Conti riconcilia.
+  function callApi(method: string, body: object): Promise<any> {
+    return fetch(`/api/ordini/${ordine.id}/riga`, {
       method, credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (data.ordine) {
-      const nuoveRighe = data.ordine.righe ?? righe
-      setRighe(nuoveRighe)
-      setTotale(data.ordine.totale)
-      onOrdineUpdated({ ...ordine, righe: nuoveRighe, totale: data.ordine.totale })
-    }
+    }).then(r => r.json()).catch(() => ({}))
   }
 
-  async function rimuovi(rigaId: string) {
-    setSalvando(rigaId)
-    setRighe(prev => prev.filter(r => r.id !== rigaId))
-    await callApi('DELETE', { rigaId })
-    setSalvando(null)
+  // Applica subito le nuove righe: aggiorna modal + totale + lista dietro (all'istante, niente attesa).
+  function propaga(nuoveRighe: RigaOrdine[]) {
+    const tot = nuoveRighe.reduce((s, r) => s + r.prezzo * r.quantita, 0)
+    setRighe(nuoveRighe)
+    setTotale(tot)
+    onOrdineUpdated({ ...ordine, righe: nuoveRighe, totale: tot })
   }
 
-  async function cambiaQ(rigaId: string, delta: number) {
+  function rimuovi(rigaId: string) {
+    if (rigaId.startsWith('tmp-')) return // riga appena aggiunta, non ancora confermata dal server
+    propaga(righe.filter(r => r.id !== rigaId))
+    callApi('DELETE', { rigaId })
+  }
+
+  function cambiaQ(rigaId: string, delta: number) {
     const riga = righe.find(r => r.id === rigaId)
-    if (!riga) return
-    if (riga.quantita + delta <= 0) { rimuovi(rigaId); return }
-    setSalvando(rigaId)
-    setRighe(prev => prev.map(r => r.id === rigaId ? { ...r, quantita: r.quantita + delta } : r))
-    await callApi('PATCH', { rigaId, quantita: riga.quantita + delta })
-    setSalvando(null)
+    if (!riga || rigaId.startsWith('tmp-')) return
+    const nq = riga.quantita + delta
+    if (nq <= 0) { rimuovi(rigaId); return }
+    propaga(righe.map(r => r.id === rigaId ? { ...r, quantita: nq } : r))
+    callApi('PATCH', { rigaId, quantita: nq })
   }
 
   async function aggiungi(p: Piatto) {
-    setSalvando('add-' + p.id)
-    await callApi('POST', { piattoId: p.id, nome: p.nome, prezzo: p.prezzo, quantita: 1 })
-    setSalvando(null)
+    // Ottimistico: il piatto compare SUBITO con un id temporaneo, poi rimpiazzo l'id con quello reale.
+    const tmpId = 'tmp-' + Date.now() + Math.random().toString(36).slice(2)
+    const conNuova = [...righe, { id: tmpId, nome: p.nome, prezzo: p.prezzo, quantita: 1 }]
+    propaga(conNuova)
+    const data = await callApi('POST', { piattoId: p.id, nome: p.nome, prezzo: p.prezzo, quantita: 1 })
+    const serverRighe = (data?.ordine?.righe as RigaOrdine[] | undefined) ?? []
+    const reale = serverRighe.find(sr => !conNuova.some(r => r.id === sr.id)) // la riga nuova = quella non ancora nota
+    if (reale) setRighe(prev => prev.map(r => r.id === tmpId ? { ...r, id: reale.id } : r))
   }
 
   const piattiFiltrati = search.trim()
@@ -169,13 +175,13 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
                 {r.note && <span className="text-xs text-ink-navy/35 shrink-0">({r.note})</span>}
                 <span className="text-sm text-ink-navy/50 shrink-0 w-14 text-right">{fmt(r.prezzo * r.quantita)}</span>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => cambiaQ(r.id, -1)} disabled={!!salvando}
+                  <button onClick={() => cambiaQ(r.id, -1)} disabled={r.id.startsWith('tmp-')}
                     className="w-6 h-6 rounded-full bg-ink-navy/8 hover:bg-ink-navy/15 text-ink-navy font-bold text-sm flex items-center justify-center disabled:opacity-40">−</button>
                   <span className="w-5 text-center text-sm font-semibold text-ink-navy">{r.quantita}</span>
-                  <button onClick={() => cambiaQ(r.id, +1)} disabled={!!salvando}
+                  <button onClick={() => cambiaQ(r.id, +1)} disabled={r.id.startsWith('tmp-')}
                     className="w-6 h-6 rounded-full bg-ink-navy/8 hover:bg-ink-navy/15 text-ink-navy font-bold text-sm flex items-center justify-center disabled:opacity-40">+</button>
                 </div>
-                <button onClick={() => rimuovi(r.id)} disabled={!!salvando}
+                <button onClick={() => rimuovi(r.id)} disabled={r.id.startsWith('tmp-')}
                   className="text-red-400 hover:text-red-600 text-base font-bold disabled:opacity-40 w-5 text-center">✕</button>
               </div>
             ))}
@@ -200,9 +206,9 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
                   <div className="flex flex-wrap gap-1.5">
                     {piattiFiltrati.length === 0 && <p className="text-xs text-ink-navy/30">Nessun risultato</p>}
                     {piattiFiltrati.map(p => (
-                      <button key={p.id} onClick={() => aggiungi(p)} disabled={salvando === 'add-' + p.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-electric-blue/8 hover:bg-electric-blue/15 text-electric-blue text-xs font-semibold transition-colors disabled:opacity-50">
-                        {salvando === 'add-' + p.id ? '…' : p.nome}
+                      <button key={p.id} onClick={() => aggiungi(p)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-electric-blue/8 hover:bg-electric-blue/15 text-electric-blue text-xs font-semibold transition-colors active:scale-95">
+                        {p.nome}
                         <span className="text-electric-blue/60">{fmt(p.prezzo)}</span>
                       </button>
                     ))}
@@ -215,9 +221,9 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
                         <p className="text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider mb-1.5">{cat.nome}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {cat.piatti.map(p => (
-                            <button key={p.id} onClick={() => aggiungi(p)} disabled={salvando === 'add-' + p.id}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-electric-blue/8 hover:bg-electric-blue/15 text-electric-blue text-xs font-semibold transition-colors disabled:opacity-50">
-                              {salvando === 'add-' + p.id ? '…' : p.nome}
+                            <button key={p.id} onClick={() => aggiungi(p)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-electric-blue/8 hover:bg-electric-blue/15 text-electric-blue text-xs font-semibold transition-colors active:scale-95">
+                              {p.nome}
                               <span className="text-electric-blue/60">{fmt(p.prezzo)}</span>
                             </button>
                           ))}
@@ -824,7 +830,12 @@ export default function ContiPage() {
     )
   }
 
-  if (loading) return <div className="p-8 text-ink-navy/40 text-sm text-center">Caricamento…</div>
+  if (loading) return (
+    <div className="p-6 max-w-2xl mx-auto space-y-4">
+      <Skeleton className="h-8 w-32" />
+      <SkeletonCards count={4} />
+    </div>
+  )
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">

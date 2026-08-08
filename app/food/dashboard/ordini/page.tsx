@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { IconReceipt } from '@/app/components/icons'
 import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
 import { getCache, setCache } from '@/lib/pageCache'
+import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
 
 interface RigaOrdine {
   id: string
@@ -259,8 +260,11 @@ export default function OrdiniPage() {
       map.get(key)!.ordini.push(o)
     }
     const gruppi = [...map.values()]
-    for (const g of gruppi) g.ordini.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
-    gruppi.sort((a, b) => +new Date(a.ordini[0].createdAt) - +new Date(b.ordini[0].createdAt))
+    // Ordini dello stesso tavolo: i più RECENTI a sinistra (si notano subito), i vecchi scorrono a destra.
+    for (const g of gruppi) g.ordini.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+    // Ordine delle righe: per prima occupazione del tavolo (ordine più vecchio), così non saltano quando arriva un nuovo ordine.
+    const primaOccupazione = (g: { ordini: Ordine[] }) => Math.min(...g.ordini.map(o => +new Date(o.createdAt)))
+    gruppi.sort((a, b) => primaOccupazione(a) - primaOccupazione(b))
     return gruppi
   }
 
@@ -483,7 +487,12 @@ export default function OrdiniPage() {
     )
   }
 
-  if (loading) return <p className="text-ink-navy/35 text-sm p-8">Caricamento...</p>
+  if (loading) return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <div className="space-y-3"><SkeletonCards count={5} /></div>
+    </div>
+  )
 
   const vuoto = totaleAttivi === 0 && totaleStorico === 0
 

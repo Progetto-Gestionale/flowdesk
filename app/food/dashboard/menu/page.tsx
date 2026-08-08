@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { IconFork, IconPencil, IconTrash } from '@/app/components/icons'
 import { preparaFoto } from '@/lib/uploadFoto'
+import { getCache, setCache } from '@/lib/pageCache'
+import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
 
 interface Piatto {
   id: string
@@ -53,20 +55,29 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   const [copiando, setCopiando] = useState(false)
   const [copiato, setCopiato] = useState(false)
 
+  const cacheKey = `food:menu:${tipo}`
   async function fetchMenu() {
-    setLoading(true)
     try {
       const res = await fetch(`/api/menu/categorie?tipo=${tipo}`, { credentials: 'include' })
       if (!res.ok) { console.error('fetchMenu error:', res.status); setLoading(false); return }
       const data = await res.json()
-      setCategorie(data.categorie ?? [])
+      const cats: Categoria[] = data.categorie ?? []
+      setCategorie(cats)
+      setCache<Categoria[]>(cacheKey, cats)
     } catch (e) {
       console.error('fetchMenu exception:', e)
     }
     setLoading(false)
   }
 
-  useEffect(() => { fetchMenu() }, [tipo])
+  useEffect(() => {
+    // Idrata subito dal menù in cache (se c'è): niente "Caricamento…" al ritorno.
+    const cached = getCache<Categoria[]>(cacheKey)
+    if (cached) { setCategorie(cached); setLoading(false) }
+    else setLoading(true)
+    fetchMenu() // revalidate in background
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo])
 
   async function salvaCategoria() {
     if (!nomeCat.trim()) return
@@ -187,7 +198,10 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
       </div>
 
       {loading ? (
-        <p className="text-ink-navy/35 text-sm">Caricamento...</p>
+        <div className="space-y-4">
+          <Skeleton className="h-6 w-40" />
+          <SkeletonCards count={3} />
+        </div>
       ) : categorie.length === 0 ? (
         <div className="bg-white rounded-2xl border border-ink-navy/10 p-16 text-center shadow-sm">
           <div className="w-12 h-12 rounded-xl bg-electric-blue/10 text-electric-blue flex items-center justify-center p-3 mx-auto mb-4">

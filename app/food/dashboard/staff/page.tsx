@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { preparaFoto } from '@/lib/uploadFoto'
+import { getCache, setCache } from '@/lib/pageCache'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
 import { IconUsers, IconTrash, IconPencil } from '@/app/components/icons'
@@ -192,9 +193,11 @@ export default function StaffPage() {
       fetch(`/api/turni?settimana=${toISO(settimana)}`, { credentials: 'include' }).then(safeJson),
       fetch('/api/richieste-staff', { credentials: 'include' }).then(safeJson),
     ])
-    setDipendenti(d.dipendenti ?? [])
-    setTurni(t.turni ?? [])
-    setRichieste(r.richieste ?? [])
+    const dip = d.dipendenti ?? [], tur = t.turni ?? [], ric = r.richieste ?? []
+    setDipendenti(dip)
+    setTurni(tur)
+    setRichieste(ric)
+    setCache(`food:staff:${toISO(settimana)}`, { dipendenti: dip, turni: tur, richieste: ric })
   }
 
   async function fetchFabbisogno() {
@@ -240,7 +243,13 @@ export default function StaffPage() {
   useEffect(() => { fetchFabbisogno() }, [])
 
 
-  useEffect(() => { fetchAll(); fetchDisp(settimana) }, [settimana])
+  useEffect(() => {
+    // Idrata subito dall'ultimo dato in cache della settimana (se c'è): niente flash vuoto.
+    const cached = getCache<{ dipendenti: typeof dipendenti; turni: typeof turni; richieste: typeof richieste }>(`food:staff:${toISO(settimana)}`)
+    if (cached) { setDipendenti(cached.dipendenti); setTurni(cached.turni); setRichieste(cached.richieste) }
+    fetchAll(); fetchDisp(settimana)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settimana])
   useEffect(() => { if (vistaTurni === 'mese') fetchTurniMese() }, [meseCal, vistaTurni])
   useEffect(() => { if (tab === 'presenze') fetchPresenze(presenzeData) }, [tab, presenzeData])
   useEffect(() => {

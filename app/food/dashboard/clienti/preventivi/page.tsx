@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { useSearchParams } from 'next/navigation'
+import { getCache, setCache } from '@/lib/pageCache'
 
 interface Item {
   descrizione: string
@@ -580,6 +581,7 @@ function Richieste() {
     const data = await res.json()
     const lista: Richiesta[] = data.preventivi ?? []
     setRichieste(lista)
+    setCache('food:preventivi', lista)
     setLoading(false)
 
     // Apri automaticamente la richiesta indicata da query param
@@ -595,6 +597,8 @@ function Richieste() {
   }
 
   useEffect(() => {
+    const cached = getCache<Richiesta[]>('food:preventivi')
+    if (cached) { setRichieste(cached); setLoading(false) }
     fetchRichieste()
     const interval = setInterval(fetchRichieste, 15000)
     fetch('/api/tavoli', { credentials: 'include' }).then(r => r.json()).then(d => setTavoli(d.tavoli ?? []))
