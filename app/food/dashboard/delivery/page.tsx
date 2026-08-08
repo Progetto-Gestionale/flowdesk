@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { getCache, setCache } from '@/lib/pageCache'
+import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
 
 const DELIVERY_CACHE_KEY = 'food:delivery' // cache navigazione (stale-while-revalidate)
 
@@ -217,7 +218,12 @@ export default function AsportoDeliveryPage() {
     )
   }
 
-  if (loading) return <p className="text-ink-navy/35 text-sm p-8">Caricamento...</p>
+  if (loading) return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-56" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start"><SkeletonCards count={6} /></div>
+    </div>
+  )
 
   // Serata di riferimento dell'ordine (data prenotata, o serata di creazione se assente).
   const serataDi = (o: Ordine): string | null => {

@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { getCache, setCache } from '@/lib/pageCache'
+import { Skeleton } from '@/app/components/Skeleton'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -474,11 +476,19 @@ export default function AnalyticsPage() {
     return dettaglioProssimo.getFullYear() > ora.getFullYear()
   })()
 
+  const analyticsMontato = useRef(false)
   useEffect(() => {
-    setLoading(true)
+    // Solo al primo mount: idrata dalla cache del periodo corrente → niente "Caricamento…" al ritorno.
+    // Sui cambi di periodo/riferimento si ricarica normalmente (per non mostrare dati di un altro periodo).
+    const primo = !analyticsMontato.current
+    analyticsMontato.current = true
+    const cached = primo ? getCache<Analytics>(`food:analytics:${periodo}`) : undefined
+    if (cached) { setData(cached); setLoading(false) }
+    else setLoading(true)
     fetch(`/api/analytics?periodo=${periodo}&riferimento=${riferimento.toISOString()}`, { credentials: 'include' })
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false) })
+      .then(d => { setData(d); setCache(`food:analytics:${periodo}`, d); setLoading(false) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo, riferimento])
 
   useEffect(() => {
@@ -552,7 +562,14 @@ export default function AnalyticsPage() {
       .then(d => { setStaff(d.staff ?? []); setLoadingStaff(false) })
   }
 
-  if (loading && !data) return <div className="flex items-center justify-center h-64 text-ink-navy/35">Caricamento...</div>
+  if (loading && !data) return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+      </div>
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
   if (!data) return null
 
   const maxTotale = Math.max(...data.perMese.map(m => m.totale), 1)

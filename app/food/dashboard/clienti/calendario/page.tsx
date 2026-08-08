@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { IconTrash } from '@/app/components/icons'
 import { getCache, setCache } from '@/lib/pageCache'
+import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
 
 // Cache navigazione (stale-while-revalidate): al ritorno sulla pagina mostra subito
 // l'ultimo dato noto invece di "Caricamento…", poi ricarica in background.
@@ -437,7 +438,12 @@ export default function Calendario() {
         </div>
       </div>
 
-      {loading ? <div className="text-center text-ink-navy/35 py-12">Caricamento...</div> : (
+      {loading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><SkeletonCards count={6} /></div>
+        </div>
+      ) : (
 
         vista === 'giorno' ? (
           /* ── VISTA GIORNO ──────────────────────────────────── */
