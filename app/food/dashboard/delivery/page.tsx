@@ -83,21 +83,19 @@ export default function AsportoDeliveryPage() {
     if (!loading) setCache<Ordine[]>(DELIVERY_CACHE_KEY, ordini)
   }, [loading, ordini])
 
-  async function setStato(id: string, status: string) {
-    setOrdini(prev => prev.map(o => o.id === id ? { ...o, status } : o))
-    await fetch(`/api/ordini/${id}`, {
+  function setStato(id: string, status: string) {
+    setOrdini(prev => prev.map(o => o.id === id ? { ...o, status } : o)) // ottimistico
+    fetch(`/api/ordini/${id}`, { // background, niente refetch (il polling a 15s riconcilia)
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     })
-    fetchOrdini()
   }
 
-  async function elimina(id: string) {
-    setOrdini(prev => prev.filter(o => o.id !== id))
+  function elimina(id: string) {
+    setOrdini(prev => prev.filter(o => o.id !== id)) // ottimistico
     setConfermaElimina(null)
-    await fetch(`/api/ordini/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchOrdini()
+    fetch(`/api/ordini/${id}`, { method: 'DELETE', credentials: 'include' })
   }
 
   const t = testi(tipoSel)

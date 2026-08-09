@@ -34,7 +34,83 @@ function fmtDataLong(s: string): string {
 
 type PerGiorno = Record<string, { oraInizio: string; oraFine: string; ore: number }[]>
 
+// Path a curva morbida (Catmull-Rom → Bézier) attraverso una serie di punti.
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return ''
+  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] ?? p2
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+  }
+  return d
+}
+
+// Grafico fasce orarie unico (Asporto blu + Delivery viola) a curve morbide, a tutta larghezza.
+function FasceOrarieChart({ asporto, delivery }: { asporto: { ora: string; count: number }[]; delivery: { ora: string; count: number }[] }) {
+  const ore = (asporto.length >= delivery.length ? asporto : delivery).map(x => x.ora)
+  const mapA = new Map(asporto.map(a => [a.ora, a.count]))
+  const mapD = new Map(delivery.map(x => [x.ora, x.count]))
+  const cA = ore.map(o => mapA.get(o) ?? 0)
+  const cD = ore.map(o => mapD.get(o) ?? 0)
+  const n = ore.length
+  const maxC = Math.max(1, ...cA, ...cD)
+  const vuoto = cA.every(c => c === 0) && cD.every(c => c === 0)
+
+  const W = 1000, H = 240, pad = { l: 12, r: 12, t: 18, b: 26 }
+  const base = H - pad.b
+  const xAt = (i: number) => pad.l + (n <= 1 ? (W - pad.l - pad.r) / 2 : (i / (n - 1)) * (W - pad.l - pad.r))
+  const yAt = (c: number) => base - (c / maxC) * (H - pad.t - pad.b)
+  const ptsA = cA.map((c, i) => ({ x: xAt(i), y: yAt(c) }))
+  const ptsD = cD.map((c, i) => ({ x: xAt(i), y: yAt(c) }))
+  const area = (pts: { x: number; y: number }[]) => pts.length ? `${smoothPath(pts)} L ${pts[pts.length - 1].x.toFixed(1)} ${base} L ${pts[0].x.toFixed(1)} ${base} Z` : ''
+  const step = Math.max(1, Math.round(n / 9))
+  const labels = ore.map((o, i) => ({ i, o })).filter(({ i }) => i % step === 0)
+
+  return (
+    <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <h2 className="text-base font-semibold text-ink-navy">Fasce orarie · Asporto e Delivery</h2>
+        <div className="flex items-center gap-3 text-xs text-ink-navy/50">
+          <span className="flex items-center gap-1.5"><span className="w-3.5 h-1 rounded-full" style={{ background: '#1F52FF' }} />Asporto</span>
+          <span className="flex items-center gap-1.5"><span className="w-3.5 h-1 rounded-full" style={{ background: '#a855f7' }} />Delivery</span>
+        </div>
+      </div>
+      <p className="text-xs text-ink-navy/35 mb-3">Numero di ordini per ora di ritiro / consegna</p>
+      {vuoto ? <p className="text-ink-navy/35 text-sm py-12 text-center">Nessun dato</p> : (
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }} role="img">
+          <line x1={pad.l} y1={base} x2={W - pad.r} y2={base} stroke="#e5e7eb" strokeWidth={1} />
+          <path d={area(ptsA)} fill="#1F52FF" opacity={0.07} />
+          <path d={area(ptsD)} fill="#a855f7" opacity={0.07} />
+          <path d={smoothPath(ptsD)} fill="none" stroke="#a855f7" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          <path d={smoothPath(ptsA)} fill="none" stroke="#1F52FF" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          {labels.map(({ i, o }) => (
+            <text key={i} x={xAt(i)} y={H - 6} textAnchor="middle" fontSize={12} fill="#9ca3af">{o.slice(0, 5)}</text>
+          ))}
+        </svg>
+      )}
+    </div>
+  )
+}
+
+// Apre una finestra SUBITO, dentro il gesto del click (così iOS/Safari su tablet non la blocca
+// come popup: se `window.open` avviene dopo un await, viene bloccata). Ci mette un segnaposto;
+// l'HTML vero si scrive dopo il fetch con scriviStampa().
+function apriStampa(): Window | null {
+  const win = window.open('', '_blank')
+  win?.document.write('<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Generazione…</title></head><body style="font-family:Arial;padding:32px;color:#666">Generazione del report in corso…</body></html>')
+  return win
+}
+function scriviStampa(win: Window | null, html: string, stampa = false) {
+  if (!win) return
+  win.document.open(); win.document.write(html); win.document.close()
+  if (stampa) { win.focus(); setTimeout(() => win.print(), 400) }
+}
+
 function scaricaPdf(
+  win: Window | null,
   nome: string,
   ruolo: string | null,
   rangeLabel: string,
@@ -160,12 +236,7 @@ ${richiesteHtml}
 <div style="margin-top:24px;font-size:11px;color:#aaa;">Generato il ${new Date().toLocaleDateString('it-IT')}</div>
 </body></html>`
 
-  const win = window.open('', '_blank')
-  if (!win) return
-  win.document.write(html)
-  win.document.close()
-  win.focus()
-  setTimeout(() => win.print(), 400)
+  scriviStampa(win, html, true)
 }
 
 // ── tipi ─────────────────────────────────────────────────────────────────────
@@ -415,14 +486,17 @@ export default function AnalyticsPage() {
 
   async function scaricaPdfConScelta() {
     if (!dettaglioDipId || !dettaglio) return
+    const win = apriStampa() // apri SUBITO, nel click: su tablet non viene bloccata
     setPdfLoading(true)
     const rifStr = `${pdfAnno}-${String(pdfMese + 1).padStart(2, '0')}-01`
     try {
       const res = await fetch(`/api/analytics/staff?dipendenteId=${dettaglioDipId}&periodo=mese&riferimento=${rifStr}`, { credentials: 'include' })
       const d: DettaglioDip = await res.json()
       const pg = pdfFonte === 'cartellino' ? d.timbraturePerGiorno : d.turniPerGiorno
-      scaricaPdf(dettaglio.dip.nome, dettaglio.dip.ruolo, d.rangeLabel, 'mese', pg, d.inizioPeriodo, d.ritardi, d.richieste, { includiRitardi: pdfIncludiRitardi, includiRichieste: pdfIncludiRichieste })
+      scaricaPdf(win, dettaglio.dip.nome, dettaglio.dip.ruolo, d.rangeLabel, 'mese', pg, d.inizioPeriodo, d.ritardi, d.richieste, { includiRitardi: pdfIncludiRitardi, includiRichieste: pdfIncludiRichieste })
       setPdfModal(false)
+    } catch {
+      win?.close()
     } finally {
       setPdfLoading(false)
     }
@@ -757,6 +831,7 @@ export default function AnalyticsPage() {
   }
 
   async function scaricaPdfMenu() {
+    const win = apriStampa() // apri SUBITO, nel click: su tablet non viene bloccata
     setPdfMenuLoading(true)
     try {
       const res = await fetch(`/api/analytics/menu?periodo=${pdfMenuPeriodo}&riferimento=${pdfMenuRif.toISOString()}`, { credentials: 'include' })
@@ -796,11 +871,10 @@ export default function AnalyticsPage() {
 </table>
 <div style="margin-top:24px;font-size:11px;color:#aaa;">Generato il ${new Date().toLocaleDateString('it-IT')}</div>
 </body></html>`
-      const win = window.open('', '_blank')
-      if (!win) return
-      win.document.write(html)
-      win.document.close()
+      scriviStampa(win, html)
       setPdfMenuModal(false)
+    } catch {
+      win?.close()
     } finally {
       setPdfMenuLoading(false)
     }
@@ -1158,7 +1232,6 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
             const d = datiOrdiniAdv
             const gb = bucketsGrafico(d.andamento)
             const maxIncTipo = Math.max(...gb.map(b => Math.max(b.incassoAsporto, b.incassoDelivery)), 1)
-            const maxFascia = Math.max(1, ...d.fasceAsporto.map(f => f.count), ...d.fasceDelivery.map(f => f.count))
             return (
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1245,33 +1318,8 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                       )
                     })()}
                   </div>
-                  {([
-                    { titolo: 'Fasce orarie — Asporto', dati: d.fasceAsporto, barra: 'bg-electric-blue' },
-                    { titolo: 'Fasce orarie — Delivery', dati: d.fasceDelivery, barra: 'bg-purple-400' },
-                  ] as const).map(chart => (
-                    <div key={chart.titolo} className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-                      <h2 className="text-base font-semibold text-ink-navy mb-1">{chart.titolo}</h2>
-                      <p className="text-xs text-ink-navy/35 mb-4">Ordini per ora di ritiro/consegna</p>
-                      {chart.dati.every(f => f.count === 0) ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (
-                        <div className="flex items-end gap-1" style={{ height: 120 }}>
-                          {chart.dati.map(f => {
-                            const h = Math.round((f.count / maxFascia) * 100)
-                            const barH = Math.max(h, f.count > 0 ? 3 : 0)
-                            return (
-                              <div key={f.ora} className="flex-1 flex flex-col items-center gap-1">
-                                <div className="w-full relative" style={{ height: '100px' }}>
-                                  {f.count > 0 && <span className="absolute text-xs text-ink-navy/50 font-medium leading-none left-0 right-0 text-center" style={{ bottom: barH + 4 }}>{f.count}</span>}
-                                  <div className={`absolute bottom-0 left-0 right-0 ${chart.barra} rounded-t-sm`} style={{ height: `${barH}px` }} />
-                                </div>
-                                <span className="text-[10px] text-ink-navy/35 leading-none">{f.ora.slice(0, 5)}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ))}
                 </div>
+                <FasceOrarieChart asporto={d.fasceAsporto} delivery={d.fasceDelivery} />
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
                   <div className="px-6 py-4 border-b border-ink-navy/8">
                     <h2 className="text-base font-semibold text-ink-navy">

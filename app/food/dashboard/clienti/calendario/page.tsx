@@ -781,7 +781,7 @@ export default function Calendario() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-ink-navy/70 mb-1">N° persone</label>
-                    <input type="number" min={1} value={formApp.coperti}
+                    <input type="number" min={1} value={formApp.coperti === 0 ? '' : formApp.coperti}
                       onChange={e => setFormApp(f => ({ ...f, coperti: Number(e.target.value) }))} className={inp} />
                   </div>
                   <div>

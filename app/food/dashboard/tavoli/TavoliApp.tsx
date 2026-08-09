@@ -598,7 +598,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
 
       {/* Canvas */}
       <div ref={viewportRef} className="rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden"
-        style={{ width: '100%', height: 680, backgroundColor: '#ffffff', cursor: selectMode ? 'default' : 'grab', position: 'relative', touchAction: 'none', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}
+        style={{ width: '100%', height: 'min(680px, calc(100dvh - 150px))', backgroundColor: '#ffffff', cursor: selectMode ? 'default' : 'grab', position: 'relative', touchAction: 'none', backgroundImage: 'radial-gradient(circle,#e5e7eb 1.5px,transparent 1.5px)', backgroundSize: '30px 30px' }}
         onPointerDown={selectMode ? undefined : startPan}>
         {/* Zoom sovrapposto all'angolo della mappa: compatto, non ruba spazio */}
         <div onPointerDown={e => e.stopPropagation()}
@@ -778,14 +778,19 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   useEffect(() => { giornoSelRef.current = giornoSel }, [giornoSel])
   useEffect(() => { turnoSelRef.current = turnoSel }, [turnoSel])
 
-  // Mappa live: all'ingresso porta la vista direttamente sulla mappa (non sul margine in alto),
-  // così il cameriere vede subito la piantina completa senza dover scorrere. Solo una volta al mount.
+  // Mappa live: all'ingresso porta in alto la riga delle SALE (con la mappa subito sotto), così il
+  // cameriere vede sia le sale sia la piantina senza scorrere. Solo una volta al mount.
+  // Scroll ritardato (la mappa sotto deve finire il layout, specialmente su iPad) per non finire nel
+  // punto sbagliato lasciando le sale fuori vista.
   const mapScrollRef = useRef<HTMLDivElement>(null)
   const didScrollToMap = useRef(false)
   useEffect(() => {
     if (gestione || loading || didScrollToMap.current) return
     didScrollToMap.current = true
-    requestAnimationFrame(() => mapScrollRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' }))
+    const vaiAlleSale = () => mapScrollRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' })
+    requestAnimationFrame(() => requestAnimationFrame(vaiAlleSale))
+    const t = setTimeout(vaiAlleSale, 120) // fallback robusto per iPad
+    return () => clearTimeout(t)
   }, [gestione, loading])
 
   const salaAttiva = sale.find(s => s.id === salaAttivaId) ?? null
@@ -1019,7 +1024,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
       {selBanner}
 
       {/* Tab Mappa/Lista (solo gestione) + switch sale (entrambe le pagine) */}
-      <div ref={mapScrollRef} className="flex items-center gap-2 flex-wrap scroll-mt-4">
+      <div ref={mapScrollRef} className="flex items-center gap-2 flex-wrap scroll-mt-2">
         {gestione && [{ k: 'mappa', l: 'Mappa' }, { k: 'lista', l: 'Lista' }].map(t => (
           <button key={t.k} onClick={() => setVista(t.k as 'mappa' | 'lista')}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${vista === t.k ? 'bg-electric-blue text-white' : 'bg-white border border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>

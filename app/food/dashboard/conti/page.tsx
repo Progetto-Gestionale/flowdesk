@@ -137,6 +137,15 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
   }
 
   async function aggiungi(p: Piatto) {
+    // Se il piatto è già a conto (stessa voce, senza note), unifico subito: +1 alla riga esistente
+    // invece di creare una voce separata. Il server unifica per piattoId+note, quindi la POST
+    // incrementa la stessa riga (coerente con quel che si vede riaprendo il conto).
+    const esistente = righe.find(r => r.nome === p.nome && r.prezzo === p.prezzo && !r.note)
+    if (esistente) {
+      propaga(righe.map(r => r.id === esistente.id ? { ...r, quantita: r.quantita + 1 } : r))
+      callApi('POST', { piattoId: p.id, nome: p.nome, prezzo: p.prezzo, quantita: 1 })
+      return
+    }
     // Ottimistico: il piatto compare SUBITO con un id temporaneo, poi rimpiazzo l'id con quello reale.
     const tmpId = 'tmp-' + Date.now() + Math.random().toString(36).slice(2)
     const conNuova = [...righe, { id: tmpId, nome: p.nome, prezzo: p.prezzo, quantita: 1 }]
@@ -444,20 +453,15 @@ export default function ContiPage() {
     })
   }
 
-  async function chiudiConto(o: Ordine, coperti: number) {
+  function chiudiConto(o: Ordine, coperti: number) {
     setCopertiModal(null)
-    setChiudendo(o.id)
-    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'chiuso' } : x))
-    try {
-      await fetch('/api/tavoli/chiudi-conto', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tavoloId: o.tavoloId, gruppoId: o.gruppoId, coperti }),
-      })
-    } finally {
-      setChiudendo(null)
-      fetchOrdini()
-    }
+    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'chiuso' } : x)) // ottimistico
+    // In background: chiude sul server e riconcilia i tavoli liberati. Non blocca il click.
+    fetch('/api/tavoli/chiudi-conto', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tavoloId: o.tavoloId, gruppoId: o.gruppoId, coperti }),
+    }).finally(() => fetchOrdini())
   }
 
   function toggleSel(id: string) {
@@ -466,40 +470,28 @@ export default function ContiPage() {
 
   // Segna i sottogruppi selezionati come "pagati": restano nel conto con badge Pagato,
   // il conto resta aperto finché non lo si chiude tutto insieme.
-  async function pagaSelezionati(conto: Conto) {
+  function pagaSelezionati(conto: Conto) {
     const daPagare = conto.ordini.filter(o => selezionati.has(o.id) && !isDone(o) && !isPagato(o))
     if (daPagare.length === 0) return
     const ids = daPagare.map(o => o.id)
-    setChiudendo(conto.key)
-    setTutti(prev => prev.map(x => ids.includes(x.id) ? { ...x, status: 'pagato' } : x))
+    setTutti(prev => prev.map(x => ids.includes(x.id) ? { ...x, status: 'pagato' } : x)) // ottimistico
     setSelezionati(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
-    try {
-      await Promise.all(ids.map(id => fetch(`/api/ordini/${id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'pagato' }),
-      })))
-    } finally {
-      setChiudendo(null)
-      fetchOrdini()
-    }
+    ids.forEach(id => fetch(`/api/ordini/${id}`, { // in background, niente refetch (il polling riconcilia)
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'pagato' }),
+    }))
   }
 
   // Annulla il "pagato" di un sottogruppo (in caso di errore): torna aperto e non incassato.
   // Lo riportiamo a 'consegnato' (servito ma da pagare) così non ricompare in cucina.
-  async function annullaPagato(o: Ordine) {
-    setChiudendo(o.id)
-    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'consegnato' } : x))
-    try {
-      await fetch(`/api/ordini/${o.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'consegnato' }),
-      })
-    } finally {
-      setChiudendo(null)
-      fetchOrdini()
-    }
+  function annullaPagato(o: Ordine) {
+    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'consegnato' } : x)) // ottimistico
+    fetch(`/api/ordini/${o.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'consegnato' }),
+    })
   }
 
   // Imposta quante unità di una voce sono pagate (0..quantita). Aiuto cassa per dividere per piatto.
@@ -552,42 +544,29 @@ export default function ContiPage() {
     }
   }
 
-  async function segnaPronte(o: Ordine) {
-    setChiudendo(o.id)
-    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'consegnato' } : x))
-    try {
-      await fetch(`/api/ordini/${o.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'consegnato' }),
-      })
-    } finally {
-      setChiudendo(null)
-      fetchOrdini()
-    }
+  function segnaPronte(o: Ordine) {
+    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'consegnato' } : x)) // ottimistico
+    fetch(`/api/ordini/${o.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'consegnato' }),
+    })
   }
 
   // Asporto non ritirato / delivery non consegnato → conto concluso ma non incassato.
-  async function segnaNonConsegnato(o: Ordine) {
-    setChiudendo(o.id)
-    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'non_consegnato' } : x))
-    try {
-      await fetch(`/api/ordini/${o.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'non_consegnato' }),
-      })
-    } finally {
-      setChiudendo(null)
-      fetchOrdini()
-    }
+  function segnaNonConsegnato(o: Ordine) {
+    setTutti(prev => prev.map(x => x.id === o.id ? { ...x, status: 'non_consegnato' } : x)) // ottimistico
+    fetch(`/api/ordini/${o.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'non_consegnato' }),
+    })
   }
 
-  async function eliminaOrdine(o: Ordine) {
-    setTutti(prev => prev.filter(x => x.id !== o.id))
+  function eliminaOrdine(o: Ordine) {
+    setTutti(prev => prev.filter(x => x.id !== o.id)) // ottimistico
     setConfermaElimina(null)
-    await fetch(`/api/ordini/${o.id}`, { method: 'DELETE', credentials: 'include' })
-    fetchOrdini()
+    fetch(`/api/ordini/${o.id}`, { method: 'DELETE', credentials: 'include' })
   }
 
   function OrdineCard({ o }: { o: Ordine }) {

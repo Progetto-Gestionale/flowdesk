@@ -213,9 +213,9 @@ function NuovaRichiestaModal({ onClose, onSave, initial, onAssegnaTavolo }: {
               <div key={i} className="grid grid-cols-12 gap-2 items-center">
                 <input type="text" value={item.descrizione} onChange={e => updateItem(i, 'descrizione', e.target.value)} placeholder="Descrizione"
                   className="col-span-6 border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-                <input type="number" value={item.quantita} onChange={e => updateItem(i, 'quantita', Number(e.target.value))} min={1}
+                <input type="number" value={item.quantita === 0 ? '' : item.quantita} onChange={e => updateItem(i, 'quantita', Number(e.target.value))} min={1}
                   className="col-span-2 border border-ink-navy/15 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-electric-blue" />
-                <input type="number" value={item.prezzo} onChange={e => updateItem(i, 'prezzo', Number(e.target.value))} min={0} step={0.01}
+                <input type="number" value={item.prezzo === 0 ? '' : item.prezzo} onChange={e => updateItem(i, 'prezzo', Number(e.target.value))} min={0} step={0.01}
                   className="col-span-3 border border-ink-navy/15 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 <button onClick={() => removeItem(i)} disabled={items.length === 1}
                   className="col-span-1 text-ink-navy/25 hover:text-red-400 disabled:opacity-30 text-center">✕</button>

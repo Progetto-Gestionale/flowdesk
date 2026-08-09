@@ -156,41 +156,37 @@ export default function OrdiniPage() {
   // - delivery: diventa 'pronto', poi il fattorino lo segnerà 'consegnato' (auto-chiusura conto).
   // - asporto: diventa 'pronto' e il conto NON viene chiuso: lo chiude il cameriere con "Chiudi conto".
   // - tavolo: va 'consegnato' (servito in sala; il conto del tavolo si gestisce dai Conti).
-  async function avanzaOrdine(o: Ordine) {
+  function avanzaOrdine(o: Ordine) {
     const isTavolo = o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
     const nuovoStatus = isTavolo ? 'consegnato' : 'pronto'
-    // Update ottimistico: la card si sposta subito, senza aspettare il server.
+    // Update ottimistico: la card si sposta subito. API in background, niente refetch (il polling riconcilia).
     setOrdini(prev => prev.map(x => x.id === o.id ? { ...x, status: nuovoStatus } : x))
-    try {
-      await fetch(`/api/ordini/${o.id}`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nuovoStatus }),
-      })
-    } finally {
-      fetchOrdini()
-    }
+    fetch(`/api/ordini/${o.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nuovoStatus }),
+    })
   }
 
 
-  async function cancellaOrdine(id: string) {
-    await fetch(`/api/ordini/${id}`, { method: 'DELETE', credentials: 'include' })
+  function cancellaOrdine(id: string) {
+    setOrdini(prev => prev.filter(o => o.id !== id)) // ottimistico
     setConfermaElimina(null)
-    fetchOrdini()
+    fetch(`/api/ordini/${id}`, { method: 'DELETE', credentials: 'include' })
   }
 
-  async function segnaAppCompletato(id: string) {
-    await fetch(`/api/appuntamenti/${id}`, {
+  function segnaAppCompletato(id: string) {
+    setAppuntamenti(prev => prev.map(a => a.id === id ? { ...a, status: 'completato' } : a)) // ottimistico
+    fetch(`/api/appuntamenti/${id}`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'completato' }),
     })
-    fetchAppuntamenti()
   }
 
-  async function eliminaAppuntamento(id: string) {
-    await fetch(`/api/appuntamenti/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchAppuntamenti()
+  function eliminaAppuntamento(id: string) {
+    setAppuntamenti(prev => prev.filter(a => a.id !== id)) // ottimistico
+    fetch(`/api/appuntamenti/${id}`, { method: 'DELETE', credentials: 'include' })
   }
 
   const { start: serviceStart, end: serviceEnd } = getServiceWindow()
