@@ -75,6 +75,19 @@ function getSerataKey(createdAt: string): string {
   if (d.getUTCHours() < 4) d.setUTCDate(d.getUTCDate() - 1)
   return d.toISOString().slice(0, 10)
 }
+// Giorno a cui appartiene un ordine nei Conti: per asporto/delivery è il giorno di CONSEGNA/RITIRO
+// (data prenotata in clienteInfo), non quello di creazione — così un ordine prenotato in anticipo
+// resta nel conto del giorno giusto anche dopo essere stato segnato consegnato. I tavoli restano
+// sul giorno di creazione.
+function serataDiConto(o: Ordine): string {
+  if (o.tipo === 'asporto' || o.tipo === 'delivery') {
+    try {
+      const ci = JSON.parse(o.clienteInfo ?? '{}')
+      if (ci?.data) return ci.data as string
+    } catch {}
+  }
+  return getSerataKey(o.createdAt)
+}
 function todayKey() { return getSerataKey(new Date().toISOString()) }
 function prevDay(k: string) { const d = new Date(k + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) }
 function nextDay(k: string) { const d = new Date(k + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10) }
@@ -366,7 +379,9 @@ export default function ContiPage() {
   const isOggi = dataFiltro === todayKey()
 
   const fetchOrdini = useCallback(async () => {
-    const url = isOggi ? '/api/ordini?oggi=1' : '/api/ordini?giorni=90'
+    // futuri=1 sulla vista "oggi": include anche gli asporto/delivery prenotati in anticipo la cui
+    // consegna è oggi (compresi quelli già consegnati/chiusi), altrimenti sparirebbero dai conti del giorno.
+    const url = isOggi ? '/api/ordini?oggi=1&futuri=1' : '/api/ordini?giorni=90'
     const res = await fetch(url, { credentials: 'include' })
     const data = await res.json().catch(() => ({}))
     setTutti(data.ordini ?? [])
@@ -391,7 +406,9 @@ export default function ContiPage() {
     setCache<Ordine[]>(CONTI_CACHE_KEY, tutti)
   }, [loading, isOggi, tutti])
 
-  const ordini = isOggi ? tutti : tutti.filter(o => getSerataKey(o.createdAt) === dataFiltro)
+  // Filtra sempre per il giorno selezionato usando la serata di appartenenza (consegna per asporto/delivery):
+  // con futuri=1 la vista "oggi" può ricevere ordini di altri giorni, che qui vengono scartati.
+  const ordini = tutti.filter(o => serataDiConto(o) === dataFiltro)
   const isTavolo = (o: Ordine) => o.tipo === 'tavolo' || o.tavoloId != null || o.gruppoId != null
   // Per i tavoli il conto resta aperto finché non è 'chiuso' (i sottogruppi 'pagato' e
   // 'consegnato' restano visibili nel conto). Per asporto/delivery 'consegnato' = concluso;

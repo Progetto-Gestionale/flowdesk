@@ -9,6 +9,7 @@ import {
 } from '@/app/components/icons'
 import { preparaFoto } from '@/lib/uploadFoto'
 import OrarioSelect from '@/app/components/OrarioSelect'
+import QRCode from 'qrcode'
 
 
 const GIORNI = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
@@ -102,6 +103,21 @@ type SezioneStatus = { saving: boolean; saved: boolean; dirty: boolean; error?: 
 const initStatus = (): SezioneStatus => ({ saving: false, saved: false, dirty: false })
 
 // ── Strumenti menù asporto ────────────────────────────────────────────────────
+// Genera il QR in locale (data URL PNG) invece di chiamare api.qrserver.com: appare subito, senza rete.
+// Usato per <img>, download PNG e "copia URL" nelle sezioni strumenti.
+function useQrPng(url: string | null, size = 512): string | null {
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!url) { setDataUrl(null); return }
+    let vivo = true
+    QRCode.toDataURL(url, { width: size, margin: 2, errorCorrectionLevel: 'M' })
+      .then(u => { if (vivo) setDataUrl(u) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [url, size])
+  return dataUrl
+}
+
 function MenuStrumenti({ publicId }: { publicId: string }) {
   const [copiato, setCopiato] = useState<string | null>(null)
 
@@ -114,8 +130,8 @@ function MenuStrumenti({ publicId }: { publicId: string }) {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const menuUrl = publicId ? `${origin}/food/menu/${publicId}` : null
   const prenotaUrl = publicId ? `${origin}/food/prenota/${publicId}` : null
-  const qrUrl = menuUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(menuUrl)}&size=300x300` : null
-  const qrPrenotaUrl = prenotaUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(prenotaUrl)}&size=300x300` : null
+  const qrUrl = useQrPng(menuUrl)
+  const qrPrenotaUrl = useQrPng(prenotaUrl)
   const embedCode = menuUrl ? `<iframe src="${menuUrl}" width="100%" height="700" frameborder="0" style="border-radius:12px"></iframe>` : null
 
   if (!publicId) return (
@@ -242,7 +258,7 @@ function CamerieriStrumenti({ publicId }: { publicId: string }) {
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const camUrl = publicId ? `${origin}/food/cameriere/${publicId}` : null
-  const qrUrl = camUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(camUrl)}&size=300x300` : null
+  const qrUrl = useQrPng(camUrl)
 
   if (!publicId) return (
     <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mt-4">
@@ -335,7 +351,7 @@ function PrenotazioniStrumenti({ publicId }: { publicId: string }) {
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const prenotaUrl = `${origin}/food/prenota/${publicId}`
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(prenotaUrl)}&size=400x400`
+  const qrUrl = useQrPng(prenotaUrl)
 
   return (
     <div className="space-y-4 mb-4">
@@ -362,13 +378,13 @@ function PrenotazioniStrumenti({ publicId }: { publicId: string }) {
         <p className="font-medium text-ink-navy text-sm">QR Code prenotazioni</p>
         <p className="text-xs text-ink-navy/50">Stampalo e posizionalo all&apos;entrata, sul menu cartaceo o in vetrina.</p>
         <div className="flex gap-6 items-start">
-          <img src={qrUrl} alt="QR prenotazioni" className="w-36 h-36 rounded-xl border border-ink-navy/10 shrink-0" />
+          <img src={qrUrl ?? undefined} alt="QR prenotazioni" className="w-36 h-36 rounded-xl border border-ink-navy/10 shrink-0" />
           <div className="space-y-2 flex-1">
-            <a href={qrUrl} download="prenota-qr.png" target="_blank" rel="noopener noreferrer"
+            <a href={qrUrl ?? '#'} download="prenota-qr.png" target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90">
               ↓ Scarica PNG
             </a>
-            <button onClick={() => copia('qr', qrUrl)}
+            <button onClick={() => qrUrl && copia('qr', qrUrl)}
               className="w-full px-4 py-2 rounded-xl border border-ink-navy/15 text-ink-navy/70 text-sm font-medium hover:bg-mist">
               {copiato === 'qr' ? '✓ Copiato URL' : 'Copia URL QR'}
             </button>

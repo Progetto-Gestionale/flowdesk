@@ -80,8 +80,8 @@ export default function ResocontoSerata() {
   ]
 
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3 mb-3">
+    <div className="h-full flex flex-col">
+      <div className="flex items-baseline justify-between gap-3 mb-3 shrink-0">
         <h2 className="text-lg font-bold text-ink-navy">Resoconto della serata</h2>
         {dati && (
           <span className="text-sm text-ink-navy/50">
@@ -89,18 +89,18 @@ export default function ResocontoSerata() {
           </span>
         )}
       </div>
-      {/* 3 colonne già da tablet (iPad) così tutti e 6 i box stanno in due righe, senza scorrere.
-          Box meno alti (aspect 5/4) per far entrare entrambe le righe nell'altezza dello schermo. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+      {/* 3 colonne già da tablet (iPad): tutti e 6 i box in due righe. Le righe si distendono
+          (auto-rows-fr) per riempire l'altezza disponibile invece di lasciare mezza pagina vuota. */}
+      <div className="flex-1 min-h-0 grid grid-cols-2 sm:grid-cols-3 auto-rows-fr gap-3 sm:gap-4">
         {box.map(it => (
           <div
             key={it.label}
-            className="bg-white border border-ink-navy/10 rounded-2xl shadow-sm p-3 sm:p-4 aspect-square sm:aspect-[5/4] flex flex-col text-center"
+            className="bg-white border border-ink-navy/10 rounded-2xl shadow-sm p-3 sm:p-4 min-h-[120px] flex flex-col text-center"
           >
             {/* Titolo in alto, separato da una riga orizzontale dai dati sottostanti */}
             <p className="text-xs sm:text-sm font-semibold text-ink-navy/45 uppercase tracking-wider leading-tight pb-2 sm:pb-3 border-b border-ink-navy/10">{it.label}</p>
             <div className="flex-1 flex flex-col items-center justify-center gap-1">
-              <p className={`text-2xl sm:text-2xl xl:text-3xl font-extrabold tabular-nums leading-none break-words ${it.accent} ${loading ? 'opacity-30' : ''}`}>{it.value}</p>
+              <p className={`text-2xl sm:text-3xl xl:text-4xl font-extrabold tabular-nums leading-none break-words ${it.accent} ${loading ? 'opacity-30' : ''}`}>{it.value}</p>
               <p className="text-sm text-ink-navy/40">{it.sub}</p>
             </div>
           </div>

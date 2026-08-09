@@ -24,12 +24,22 @@ export async function GET(req: Request) {
     dal.setDate(dal.getDate() - giorni)
   }
 
+  // Finestra "prenotazione anticipata": un asporto/delivery creato fino a N giorni fa può avere
+  // la consegna oggi. Va restituito anche se ORMAI concluso (consegnato/chiuso), altrimenti dopo
+  // averlo segnato consegnato sparirebbe dagli ordini/conti del giorno di consegna (createdAt passato).
+  const recenti = new Date()
+  recenti.setDate(recenti.getDate() - 21)
+
   const where = solo_oggi && includiPendenti
     ? {
         userId: user.id,
         OR: [
           { createdAt: { gte: dal } },
+          // asporto/delivery ancora pendenti, a prescindere da createdAt (anche prenotati molto in anticipo)
           { tipo: { in: ['asporto', 'delivery'] }, status: { in: ['nuovo', 'aperto', 'pronto'] } },
+          // asporto/delivery creati di recente in QUALSIASI stato: il client filtra per data di consegna,
+          // così quelli consegnati oggi (ma creati nei giorni scorsi) restano nel giorno giusto.
+          { tipo: { in: ['asporto', 'delivery'] }, createdAt: { gte: recenti } },
         ],
       }
     : { userId: user.id, createdAt: { gte: dal } }

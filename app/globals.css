@@ -39,6 +39,18 @@ body {
   }
 }
 
+/* I campi nativi — soprattutto input[type="date"]/[time] su iOS/iPad — hanno una larghezza
+   minima intrinseca ampia: dentro una griglia/flex a colonne la traccia non si restringe sotto
+   quel minimo e il campo sfora nella colonna accanto (es. "Data" che si sovrappone a "Ora" nei
+   modali). min-width:0 lascia che il campo si adatti al contenitore; max-width:100% evita comunque
+   lo sforamento. Vale per tutti i modali con campi affiancati. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }

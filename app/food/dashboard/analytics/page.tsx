@@ -1279,7 +1279,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
                     <h2 className="text-base font-semibold text-ink-navy mb-5">Asporto vs Delivery</h2>
                     {d.totaleOrdini === 0 ? <p className="text-ink-navy/35 text-sm py-8 text-center">Nessun dato</p> : (() => {

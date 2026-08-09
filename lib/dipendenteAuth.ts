@@ -60,6 +60,9 @@ export function generateUsername(nome: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '') // rimuove accenti
-    .replace(/\s+/g, '.')
+    .trim()                // via spazi iniziali/finali (altrimenti diventano un punto)
+    .replace(/\s+/g, '.')  // spazi interni → punto
     .replace(/[^a-z0-9.]/g, '')
+    .replace(/\.+/g, '.')      // niente punti doppi
+    .replace(/^\.+|\.+$/g, '') // niente punto a inizio o fine (es. "tommaso.ciccocioppo.")
 }

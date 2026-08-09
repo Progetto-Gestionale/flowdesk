@@ -92,6 +92,22 @@ export default function OrdiniPage() {
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [savingBlocco, setSavingBlocco] = useState(false)
+  // Ordini "nuovi" già notati dalla cucina: mostrano il bannerino rosso finché non ci si clicca sopra.
+  // Persistito in localStorage così il banner non ricompare a ogni polling/refresh.
+  const [ordiniVisti, setOrdiniVisti] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    try { const raw = localStorage.getItem('food:ordini-visti'); if (raw) setOrdiniVisti(new Set(JSON.parse(raw))) } catch {}
+  }, [])
+  function segnaVisto(id: string) {
+    setOrdiniVisti(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev); next.add(id)
+      try { localStorage.setItem('food:ordini-visti', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+  // Un ordine è "nuovo da notare" finché è in stato 'nuovo' e non è ancora stato cliccato.
+  const isNuovoDaNotare = (o: Ordine) => o.status === 'nuovo' && !ordiniVisti.has(o.id)
 
   async function fetchOrdini() {
     const res = await fetch('/api/ordini?oggi=1&futuri=1', { credentials: 'include' })
@@ -372,9 +388,17 @@ export default function OrdiniPage() {
     let ci: { nome?: string; telefono?: string; indirizzo?: string; ora?: string } = {}
     try { ci = JSON.parse(o.clienteInfo ?? '{}') } catch {}
     const nome = ci.nome || 'Ordine online'
+    const nuovo = isNuovoDaNotare(o)
 
     return (
-      <div className={`shrink-0 w-56 rounded-lg border flex flex-col overflow-hidden ${nonConsegnato ? 'border-red-300 bg-red-50/40' : `${cell.border} ${cell.bg}`} ${isDone ? 'opacity-60' : ''}`}>
+      <div
+        onClick={nuovo ? () => segnaVisto(o.id) : undefined}
+        className={`shrink-0 w-56 rounded-lg border flex flex-col overflow-hidden ${nuovo ? 'ring-2 ring-red-400 cursor-pointer' : ''} ${nonConsegnato ? 'border-red-300 bg-red-50/40' : `${cell.border} ${cell.bg}`} ${isDone ? 'opacity-60' : ''}`}>
+        {nuovo && (
+          <p className="px-3 py-1 bg-red-500 text-white text-[10px] font-bold uppercase tracking-wide text-center animate-pulse">
+            ● Nuovo ordine
+          </p>
+        )}
         {nonConsegnato && (
           <p className="px-3 py-1 bg-red-500 text-white text-[10px] font-bold uppercase tracking-wide text-center">
             {tipoKey === 'delivery' ? 'Non consegnato' : 'Non ritirato'}
@@ -385,7 +409,8 @@ export default function OrdiniPage() {
             {isTavolo
               ? <span className="text-xs font-semibold text-ink-navy/50 truncate">{oraArrivo} · €{o.totale.toFixed(2)}</span>
               : <span className="text-sm font-bold text-ink-navy truncate">{nome}</span>}
-            <AzioneOrdine o={o} />
+            {/* i tasti azione restano isolati: cliccarli NON conta come "notato" (stopPropagation) */}
+            <span onClick={e => e.stopPropagation()} className="shrink-0"><AzioneOrdine o={o} /></span>
           </div>
           {!isTavolo && (
             <>

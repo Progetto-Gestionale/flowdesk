@@ -17,9 +17,10 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const { nome, email, ruolo, fotoUrl } = await req.json()
   if (!nome || !email) return NextResponse.json({ error: 'Nome e email obbligatori' }, { status: 400 })
+  const nomePulito = String(nome).trim().replace(/\s+/g, ' ') // via spazi in eccesso (finiscono nell'username)
   try {
     const dipendente = await prisma.dipendente.create({
-      data: { userId: user.id, nome, email, ruolo: ruolo || null, fotoUrl: fotoUrl || null },
+      data: { userId: user.id, nome: nomePulito, email: String(email).trim(), ruolo: ruolo || null, fotoUrl: fotoUrl || null },
     })
     return NextResponse.json({ dipendente })
   } catch (e: any) {
