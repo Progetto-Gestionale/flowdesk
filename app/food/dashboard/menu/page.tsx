@@ -5,6 +5,7 @@ import { IconFork, IconPencil, IconTrash } from '@/app/components/icons'
 import { preparaFoto } from '@/lib/uploadFoto'
 import { getCache, setCache } from '@/lib/pageCache'
 import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
+import { ALLERGENI } from '@/lib/allergeni'
 
 interface Piatto {
   id: string
@@ -12,6 +13,7 @@ interface Piatto {
   descrizione: string | null
   prezzo: number
   immagineUrl: string | null
+  allergeni: string[]
   disponibile: boolean
   ordine: number
 }
@@ -32,7 +34,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   const [editCat, setEditCat] = useState<Categoria | null>(null)
   const [modalPiatto, setModalPiatto] = useState<{ categoriaId: string } | null>(null)
   const [editPiatto, setEditPiatto] = useState<Piatto & { categoriaId: string } | null>(null)
-  const [formPiatto, setFormPiatto] = useState({ nome: '', descrizione: '', prezzo: '', immagineUrl: '' })
+  const [formPiatto, setFormPiatto] = useState<{ nome: string; descrizione: string; prezzo: string; immagineUrl: string; allergeni: string[] }>({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] })
   const [saving, setSaving] = useState(false)
   const [caricandoFoto, setCaricandoFoto] = useState(false)
 
@@ -131,7 +133,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
       })
     }
     setSaving(false); setModalPiatto(null); setEditPiatto(null)
-    setFormPiatto({ nome: '', descrizione: '', prezzo: '', immagineUrl: '' }); fetchMenu()
+    setFormPiatto({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] }); fetchMenu()
   }
 
   async function toggleDisponibile(piatto: Piatto) {
@@ -153,7 +155,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
 
   function apriModificaPiatto(piatto: Piatto, categoriaId: string) {
     setEditPiatto({ ...piatto, categoriaId })
-    setFormPiatto({ nome: piatto.nome, descrizione: piatto.descrizione ?? '', prezzo: piatto.prezzo.toString(), immagineUrl: piatto.immagineUrl ?? '' })
+    setFormPiatto({ nome: piatto.nome, descrizione: piatto.descrizione ?? '', prezzo: piatto.prezzo.toString(), immagineUrl: piatto.immagineUrl ?? '', allergeni: piatto.allergeni ?? [] })
   }
 
   async function copiaDaAltroTipo() {
@@ -356,9 +358,26 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                     className="mt-1.5 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </details>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Allergeni</label>
+                <p className="text-xs text-ink-navy/40 mb-2">Spunta gli allergeni presenti nel piatto: verranno mostrati sul menu digitale.</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {ALLERGENI.map(a => {
+                    const attivo = formPiatto.allergeni.includes(a.key)
+                    return (
+                      <button type="button" key={a.key}
+                        onClick={() => setFormPiatto(f => ({ ...f, allergeni: attivo ? f.allergeni.filter(k => k !== a.key) : [...f.allergeni, a.key] }))}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm text-left transition-colors ${attivo ? 'border-electric-blue bg-electric-blue/10 text-electric-blue font-semibold' : 'border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 ${attivo ? 'bg-electric-blue border-electric-blue text-white' : 'border-ink-navy/25'}`}>{attivo ? '✓' : ''}</span>
+                        <span className="truncate">{a.icon} {a.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => { setModalPiatto(null); setEditPiatto(null); setFormPiatto({ nome: '', descrizione: '', prezzo: '', immagineUrl: '' }) }}
+              <button onClick={() => { setModalPiatto(null); setEditPiatto(null); setFormPiatto({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] }) }}
                 className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
               <button onClick={salvaPiatto} disabled={saving || !formPiatto.nome || !formPiatto.prezzo}
                 className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 text-sm disabled:opacity-50">

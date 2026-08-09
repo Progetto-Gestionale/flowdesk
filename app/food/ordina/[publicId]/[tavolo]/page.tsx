@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { ALLERGENE_LABEL, ALLERGENE_ICON } from '@/lib/allergeni'
 
 interface Piatto {
   id: string
@@ -8,6 +9,7 @@ interface Piatto {
   descrizione: string | null
   prezzo: number
   immagineUrl: string | null
+  allergeni?: string[]
 }
 
 interface Categoria {
@@ -152,7 +154,7 @@ export default function OrdinaPage() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          {logoUrl && <img src={logoUrl} alt="logo" className="h-8 w-8 rounded-lg object-cover" />}
+          {logoUrl && <img src={logoUrl} alt="logo" className="h-12 w-12 rounded-xl object-cover shrink-0" />}
           <div className="flex-1">
             <h1 className="font-bold text-gray-900 text-base">{nomeLocale}</h1>
             <p className="text-xs text-gray-400">Tavolo {tavolo}</p>
@@ -192,6 +194,15 @@ export default function OrdinaPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900">{p.nome}</p>
                         {p.descrizione && <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{p.descrizione}</p>}
+                        {p.allergeni && p.allergeni.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {p.allergeni.map(k => ALLERGENE_LABEL[k] && (
+                              <span key={k} className="inline-flex items-center gap-1 text-[11px] leading-none px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                                <span>{ALLERGENE_ICON[k]}</span>{ALLERGENE_LABEL[k]}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mt-2">
                           <p className="font-bold text-base" style={{ color: coloreP }}>€{p.prezzo.toFixed(2)}</p>
                           {qty === 0 ? (

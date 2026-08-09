@@ -39,7 +39,8 @@ export default function ResocontoSerata() {
     return () => { attivo = false; clearInterval(iv) }
   }, [])
 
-  // Incassi in cima (i due box più importanti a colpo d'occhio), poi tavoli/coperti/prenotazioni.
+  // Incassi in cima (i due box più importanti a colpo d'occhio), poi coperti serviti; sotto
+  // tavoli liberi + coperti liberi affiancati e prenotazioni serata.
   const box: { label: string; value: string; sub: string; accent: string }[] = [
     {
       label: 'Incasso tavoli',
@@ -52,6 +53,12 @@ export default function ResocontoSerata() {
       value: dati ? fmtEur(dati.incassoOrdiniDelivery) : '—',
       sub: 'asporto + delivery',
       accent: 'text-emerald-600',
+    },
+    {
+      label: 'Coperti serviti',
+      value: dati ? String(dati.copertiConti) : '—',
+      sub: 'dai conti chiusi',
+      accent: 'text-ink-navy',
     },
     {
       label: 'Tavoli liberi ora',
@@ -70,12 +77,6 @@ export default function ResocontoSerata() {
       value: dati ? String(dati.prenotazioniNum) : '—',
       sub: dati ? `${dati.prenotazioniNum === 1 ? '1 tavolo' : `${dati.prenotazioniNum} tavoli`} · ${dati.prenotazioniCoperti} coperti` : ' ',
       accent: 'text-electric-blue',
-    },
-    {
-      label: 'Coperti serviti',
-      value: dati ? String(dati.copertiConti) : '—',
-      sub: 'dai conti chiusi',
-      accent: 'text-ink-navy',
     },
   ]
 

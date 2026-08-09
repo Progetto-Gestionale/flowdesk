@@ -67,7 +67,9 @@ export type Suggerimento = { l1: string; l2: string; via: string; cap: string; c
 export async function cercaIndirizzi(q: string, biasLat?: number | null, biasLon?: number | null): Promise<Suggerimento[]> {
   if (q.trim().length < 3) return []
   const bias = biasLat != null && biasLon != null ? `&lat=${biasLat}&lon=${biasLon}` : ''
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=it&limit=5${bias}`
+  // NB: Photon NON supporta più lang=it (accetta solo default/de/en/fr) e con lang=it risponde
+  // con un errore → nessun suggerimento. 'default' restituisce i nomi locali (quindi italiani).
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=default&limit=5${bias}`
   const res = await fetch(url).catch(() => null)
   if (!res || !res.ok) return []
   const data = await res.json().catch(() => null)

@@ -106,8 +106,10 @@ export default function OrdiniPage() {
       return next
     })
   }
-  // Un ordine è "nuovo da notare" finché è in stato 'nuovo' e non è ancora stato cliccato.
-  const isNuovoDaNotare = (o: Ordine) => o.status === 'nuovo' && !ordiniVisti.has(o.id)
+  // Un ordine è "nuovo da notare" finché è appena arrivato e non è ancora stato cliccato.
+  // Gli ordini nascono 'nuovo' (cliente da QR / inserimento manuale) oppure 'aperto' (presi dal
+  // cameriere, tipico dei tavoli): entrambi sono "nuovi in cucina" finché non li si segna pronti.
+  const isNuovoDaNotare = (o: Ordine) => (o.status === 'nuovo' || o.status === 'aperto') && !ordiniVisti.has(o.id)
 
   async function fetchOrdini() {
     const res = await fetch('/api/ordini?oggi=1&futuri=1', { credentials: 'include' })

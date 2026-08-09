@@ -1,8 +1,9 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { geocodaIndirizzo, distanzaKm, cercaIndirizzi, type Suggerimento } from '@/lib/geocode'
+import { distanzaKm, cercaIndirizzi, type Suggerimento } from '@/lib/geocode'
 import OrarioSelect from '@/app/components/OrarioSelect'
+import { ALLERGENE_LABEL, ALLERGENE_ICON } from '@/lib/allergeni'
 
 // ── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ interface Piatto {
   descrizione: string | null
   prezzo: number
   immagineUrl: string | null
+  allergeni?: string[]
 }
 
 interface Categoria {
@@ -387,21 +389,25 @@ export default function PrenotaPage() {
           setInviando(false)
           return
         }
-        // 2) Raggio (se configurato): coordinate dell'indirizzo scelto; fallback geocode se digitato a mano.
-        //    Se non ottengo coordinate NON blocco (il CAP ha già filtrato la zona).
+        // 2) Esistenza indirizzo: se il cliente NON ha scelto un suggerimento (coordScelte), lo
+        //    geocodifico via Photon. Se non è trovabile → rifiuto (evita indirizzi inventati).
+        let coords = coordScelte
+        if (!coords) {
+          const risultati = await cercaIndirizzi(`${dati.via}, ${dati.cap} ${dati.citta}`.trim(), regole.latLocale, regole.lonLocale)
+          if (risultati.length > 0) coords = { lat: risultati[0].lat, lon: risultati[0].lon }
+        }
+        if (!coords) {
+          setErrIndirizzo('Non troviamo questo indirizzo. Controllalo e selezionalo tra i suggerimenti che compaiono mentre digiti.')
+          setInviando(false)
+          return
+        }
+        // 3) Raggio (se configurato): usa le coordinate dell'indirizzo per il controllo zona.
         if (regole.raggioConsegnaKm && regole.latLocale != null && regole.lonLocale != null) {
-          let coords = coordScelte
-          if (!coords) {
-            const geo = await geocodaIndirizzo(dati.via, dati.cap, dati.citta)
-            if (geo) coords = { lat: geo.lat, lon: geo.lon }
-          }
-          if (coords) {
-            const dist = distanzaKm(regole.latLocale, regole.lonLocale, coords.lat, coords.lon)
-            if (dist > regole.raggioConsegnaKm) {
-              setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
-              setInviando(false)
-              return
-            }
+          const dist = distanzaKm(regole.latLocale, regole.lonLocale, coords.lat, coords.lon)
+          if (dist > regole.raggioConsegnaKm) {
+            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            setInviando(false)
+            return
           }
         }
       }
@@ -474,8 +480,8 @@ export default function PrenotaPage() {
             <button onClick={() => setStep('menu')} className="text-gray-400 hover:text-gray-600 text-xl mr-1">←</button>
           )}
           {logoUrl
-            ? <img src={logoUrl} alt="" className="h-8 w-8 rounded-lg object-cover" />
-            : <div className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+            ? <img src={logoUrl} alt="" className="h-12 w-12 rounded-xl object-cover shrink-0" />
+            : <div className="h-12 w-12 rounded-xl flex items-center justify-center text-white text-lg font-bold shrink-0"
                 style={{ background: coloreP }}>{nomeLocale[0]}</div>
           }
           <div className="flex-1">
@@ -755,6 +761,15 @@ export default function PrenotaPage() {
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-gray-900">{p.nome}</p>
                             {p.descrizione && <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{p.descrizione}</p>}
+                            {p.allergeni && p.allergeni.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {p.allergeni.map(k => ALLERGENE_LABEL[k] && (
+                                  <span key={k} className="inline-flex items-center gap-1 text-[11px] leading-none px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                                    <span>{ALLERGENE_ICON[k]}</span>{ALLERGENE_LABEL[k]}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             <div className="flex items-center justify-between mt-2">
                               <p className="font-bold text-base" style={{ color: coloreP }}>€{p.prezzo.toFixed(2)}</p>
                               {q === 0 ? (

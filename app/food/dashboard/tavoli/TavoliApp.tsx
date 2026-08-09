@@ -900,14 +900,20 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   async function fondiTavoli() {
     if (selectedIds.length < 2) return
     setFondendo(true)
-    await fetch('/api/gruppi', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tavoliIds: selectedIds, data: giornoSel, turnoId: turnoSel }) })
+    // Unione LIVE = STESSO flusso dell'unione da Conti: /api/tavoli/unisci-conti crea/riusa il gruppo
+    // di oggi E riaggancia gli ordini aperti al gruppo, così i conti si fondono in un unico conto.
+    // (Prima /api/gruppi creava solo il gruppo senza toccare gli ordini → i conti restavano separati.)
+    await fetch('/api/tavoli/unisci-conti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tavoliIds: selectedIds }) })
     setFondendo(false); setSelectedIds([]); setSelectMode(false)
     await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
   }
 
   async function sciogliGruppo(gruppoId: string) {
+    // Scioglimento speculare all'unione (stesso di Conti): /api/tavoli/sciogli-conto rimette gli ordini
+    // aperti sui singoli tavoli (gruppoId=null, etichetta "T<numero>") ed elimina il gruppo.
+    // (Prima /api/gruppi DELETE eliminava solo il gruppo, lasciando gli ordini con gruppoId orfano.)
     // Nessuna conferma: in modalità "Separa tavoli" (o col tasto Sciogli) l'azione è già esplicita.
-    await fetch(`/api/gruppi/${gruppoId}`, { method: 'DELETE', credentials: 'include' })
+    await fetch('/api/tavoli/sciogli-conto', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gruppoId }) })
     await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
   }
 
