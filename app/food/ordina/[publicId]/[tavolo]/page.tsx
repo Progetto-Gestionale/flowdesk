@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { ALLERGENE_LABEL, ALLERGENE_ICON } from '@/lib/allergeni'
+import { ALLERGENE_LABEL } from '@/lib/allergeni'
 
 interface Piatto {
   id: string
@@ -197,8 +197,8 @@ export default function OrdinaPage() {
                         {p.allergeni && p.allergeni.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {p.allergeni.map(k => ALLERGENE_LABEL[k] && (
-                              <span key={k} className="inline-flex items-center gap-1 text-[11px] leading-none px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                                <span>{ALLERGENE_ICON[k]}</span>{ALLERGENE_LABEL[k]}
+                              <span key={k} className="inline-flex items-center text-[11px] leading-none px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                                {ALLERGENE_LABEL[k]}
                               </span>
                             ))}
                           </div>

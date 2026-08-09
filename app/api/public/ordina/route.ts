@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(req: Request) {
+ try {
   const { publicId, tipo, nome, cognome, email, telefono, data, ora, indirizzo, cap, righe, noteCliente } = await req.json()
 
   if (!publicId || !email || !nome || !data || !ora || !righe?.length) {
@@ -62,4 +63,13 @@ export async function POST(req: Request) {
   })
 
   return NextResponse.json({ ok: true, ordineId: ordine.id })
+ } catch (e) {
+  console.error('[PUBLIC/ORDINA] errore:', e)
+  const code = (e as { code?: string })?.code
+  // P2003 = FK violata / P2025 = record non trovato → piatto eliminato dopo il caricamento del menu
+  if (code === 'P2003' || code === 'P2025') {
+    return NextResponse.json({ error: 'Uno o più piatti non sono più disponibili: aggiorna la pagina del menu e riprova.' }, { status: 409 })
+  }
+  return NextResponse.json({ error: "Non è stato possibile inviare l'ordine. Riprova tra poco; se persiste contatta il locale." }, { status: 500 })
+ }
 }

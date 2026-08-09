@@ -332,6 +332,10 @@ const VistaMappa = forwardRef<VistaMappHandle, {
 }>(function VistaMappa({ tavoli, gruppi, salaAttiva, elementi, onSaveElementi, onModifica, onElimina, selectMode, selectedIds, onToggleSelect, onSciogliGruppo, tavoloAppMap, tavoloCarryMap, tavoloAppsMap, onTavoloClick, tavoliOccupati, tavoliPronti, canEdit, separaMode }, ref) {
   const [editMode, setEditMode] = useState(false)
   const [hoveredTavoloId, setHoveredTavoloId] = useState<string | null>(null)
+  // Su touch/tablet non c'è l'hover: i controlli di modifica (matita/cestino/✕) vanno mostrati sempre,
+  // altrimenti non si possono cancellare gli oggetti come invece si fa col mouse su PC.
+  const [isTouch, setIsTouch] = useState(false)
+  useEffect(() => { try { setIsTouch(window.matchMedia?.('(hover: none)')?.matches ?? ('ontouchstart' in window)) } catch { setIsTouch(false) } }, [])
   const [zoom, setZoom] = useState(() => {
     try { return parseFloat(localStorage.getItem('mappa-zoom') ?? '1') || 1 } catch { return 1 }
   })
@@ -619,7 +623,7 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                 <span style={{ fontSize: el.h < 30 ? 9 : 11, fontWeight: 600, color: '#374151', textAlign: 'center', padding: '0 4px', pointerEvents: 'none' }}>{el.label}</span>
               </div>
               {editMode && <button data-drag="1" onPointerDown={e => e.stopPropagation()} onClick={() => rimuoviElemento(el.id)}
-                className="absolute -top-2 -right-2 hidden group-hover:flex w-5 h-5 bg-white border border-red-200 rounded-full items-center justify-center text-red-400 text-xs font-bold shadow z-10">✕</button>}
+                className={`absolute -top-2 -right-2 ${isTouch ? 'flex' : 'hidden group-hover:flex'} w-5 h-5 bg-white border border-red-200 rounded-full items-center justify-center text-red-400 text-xs font-bold shadow z-10`}>✕</button>}
               {editMode && <div data-drag="1" onPointerDown={e => startResizeEl(e, el.id)} style={{ position: 'absolute', right: -5, bottom: -5, width: 12, height: 12, backgroundColor: '#6366f1', borderRadius: 3, cursor: 'se-resize', opacity: .7, zIndex: 10 }} />}
               {editMode && <div data-drag="1" onPointerDown={e => startResizeEl(e, el.id)} style={hS('ew-resize', { right: -4, top: 6, bottom: 6, width: 8 })} />}
               {editMode && <div data-drag="1" onPointerDown={e => startResizeEl(e, el.id)} style={hS('ns-resize', { bottom: -4, left: 6, right: 6, height: 8 })} />}
@@ -680,8 +684,8 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                     <span style={{ color: '#fff', fontWeight: 700, fontSize: Math.min(w, h) < 80 ? 10 : 13, textAlign: 'center', padding: '0 6px', lineHeight: 1.3, pointerEvents: 'none' }}>{label}</span>
                     <span style={{ color: '#fff', fontSize: Math.min(w, h) < 80 ? 10 : 12, fontWeight: 600, marginTop: 3, pointerEvents: 'none', backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 20, padding: '1px 7px' }}>{t.posti}</span>
                   </div>
-                  {/* Azioni al passaggio del mouse: solo in modifica (scollegamento ora via "Separa tavoli") */}
-                  {editMode && !selectMode && hoveredTavoloId === t.id && (
+                  {/* Azioni in modifica: su desktop al passaggio del mouse, su tablet sempre (niente hover) */}
+                  {editMode && !selectMode && (hoveredTavoloId === t.id || isTouch) && (
                     <div style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 4, zIndex: 30, paddingBottom: 4 }}>
                       <button data-drag="1" onPointerDown={e => e.stopPropagation()} onClick={() => onModifica(t)} className="w-6 h-6 p-1.5 bg-white border border-ink-navy/15 rounded-full text-ink-navy/50 flex items-center justify-center hover:bg-electric-blue/10 shadow"><IconPencil /></button>
                       <button data-drag="1" onPointerDown={e => e.stopPropagation()} onClick={() => onElimina(t.id)} className="w-6 h-6 p-1.5 bg-white border border-red-200 rounded-full flex items-center justify-center hover:bg-red-50 shadow text-red-500"><IconTrash /></button>
@@ -736,6 +740,9 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   // Modal conto da mappa
   const [contoModal, setContoModal] = useState<{ tavoloId: string; gruppoId: string | null; label: string } | null>(null)
   const [contoModificaOrdine, setContoModificaOrdine] = useState<Ordine | null>(null)
+  // Ordini "appena pronti" catturati all'apertura del conto (quelli che avevano il pallino rosso):
+  // vengono evidenziati nel modale così la cucina riconosce cosa ha appena segnato pronto.
+  const [ordiniNuoviConto, setOrdiniNuoviConto] = useState<Set<string>>(new Set())
 
   // Triangolini "ordine pronto": si nascondono una volta aperto il tavolo (flag lato client)
   const [visti, setVisti] = useState<Set<string>>(new Set())
@@ -909,11 +916,14 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   }
 
   async function sciogliGruppo(gruppoId: string) {
+    // Ottimistico: la separazione si vede SUBITO sulla mappa (niente attesa del server, così il tap
+    // su tablet è immediato). Rimuovo il gruppo e libero i tavoli localmente, poi API + refetch riconciliano.
+    setGruppi(prev => prev.filter(g => g.id !== gruppoId))
+    setTavoli(prev => prev.map(t => t.gruppoId === gruppoId ? { ...t, gruppoId: null } : t))
     // Scioglimento speculare all'unione (stesso di Conti): /api/tavoli/sciogli-conto rimette gli ordini
     // aperti sui singoli tavoli (gruppoId=null, etichetta "T<numero>") ed elimina il gruppo.
-    // (Prima /api/gruppi DELETE eliminava solo il gruppo, lasciando gli ordini con gruppoId orfano.)
     // Nessuna conferma: in modalità "Separa tavoli" (o col tasto Sciogli) l'azione è già esplicita.
-    await fetch('/api/tavoli/sciogli-conto', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gruppoId }) })
+    await fetch('/api/tavoli/sciogli-conto', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gruppoId }) }).catch(() => {})
     await Promise.all([fetchTavoli(), fetchGruppi(giornoSel, turnoSel)])
   }
 
@@ -1084,10 +1094,12 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
               onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap}
               tavoliOccupati={tavoliOccupati} tavoliPronti={tavoliPronti} canEdit={gestione} separaMode={separaMode}
               onTavoloClick={(tid, gid, lbl) => {
-                // aprendo il tavolo, segna come visti i suoi ordini pronti → il triangolino sparisce
+                // aprendo il tavolo, segna come visti i suoi ordini pronti → il pallino rosso sparisce
                 const daVedere = ordiniAperti
                   .filter(o => (o.status === 'consegnato' || o.status === 'pronto') && (gid ? o.gruppoId === gid : (o.tavoloId === tid && !o.gruppoId)))
                   .map(o => o.id)
+                // Prima di segnarli visti, li memorizzo per evidenziarli nel conto (solo questa apertura).
+                setOrdiniNuoviConto(new Set(daVedere))
                 segnaVisti(daVedere)
                 setContoModal({ tavoloId: tid, gruppoId: gid, label: lbl })
               }} />
@@ -1110,13 +1122,16 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
         )
         const fmt = (n: number) => `€${n.toFixed(2)}`
         const totale = ordiniConto.reduce((s, o) => s + o.totale, 0)
+        const nuoviQui = ordiniConto.filter(o => ordiniNuoviConto.has(o.id)).length
         return (
           <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4" onClick={() => { setContoModal(null); setContoModificaOrdine(null) }}>
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-ink-navy/8 flex items-center justify-between shrink-0">
                 <div>
                   <h3 className="text-base font-bold text-ink-navy">Conto — {contoModal.label}</h3>
-                  {ordiniConto.length > 1 && <p className="text-xs text-ink-navy/40 mt-0.5">{ordiniConto.length} sottogruppi</p>}
+                  {nuoviQui > 0
+                    ? <p className="text-xs font-semibold text-green-700 mt-0.5">● {nuoviQui === 1 ? '1 ordine appena pronto' : `${nuoviQui} ordini appena pronti`}, evidenziat{nuoviQui === 1 ? 'o' : 'i'} in verde</p>
+                    : ordiniConto.length > 1 && <p className="text-xs text-ink-navy/40 mt-0.5">{ordiniConto.length} sottogruppi</p>}
                 </div>
                 <button onClick={() => { setContoModal(null); setContoModificaOrdine(null) }} className="text-ink-navy/30 hover:text-ink-navy/60 text-xl font-bold leading-none">✕</button>
               </div>
@@ -1125,21 +1140,24 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
               ) : (
                 <>
                   <div className="overflow-y-auto flex-1 divide-y divide-ink-navy/8">
-                    {ordiniConto.map((o, i) => (
-                      <div key={o.id} className="px-5 py-3">
-                        <div className="flex items-center justify-between mb-1.5">
-                          {ordiniConto.length > 1
-                            ? <span className="text-[11px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-full">Sottogruppo {i + 1}</span>
-                            : <span />}
+                    {ordiniConto.map((o, i) => {
+                      const nuovo = ordiniNuoviConto.has(o.id) // ordine appena segnato pronto dalla cucina
+                      return (
+                      <div key={o.id} className={`px-5 py-3 ${nuovo ? 'bg-green-50' : ''}`}>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {ordiniConto.length > 1 && <span className="text-[11px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-full shrink-0">Sottogruppo {i + 1}</span>}
+                            {nuovo && <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">● Appena pronto</span>}
+                          </div>
                           <button onClick={() => setContoModificaOrdine(o)}
-                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors">Modifica</button>
+                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors shrink-0">Modifica</button>
                         </div>
                         <div className="divide-y divide-ink-navy/6">
                           {o.righe.map(r => (
                             <div key={r.id} className="flex items-center justify-between py-1.5 gap-3">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-xs font-bold text-ink-navy/40 w-5 shrink-0 text-center">{r.quantita}×</span>
-                                <span className="text-sm text-ink-navy truncate">{r.nome}</span>
+                                <span className={`text-xs font-bold w-5 shrink-0 text-center ${nuovo ? 'text-green-600' : 'text-ink-navy/40'}`}>{r.quantita}×</span>
+                                <span className={`text-sm truncate ${nuovo ? 'text-ink-navy font-semibold' : 'text-ink-navy'}`}>{r.nome}</span>
                                 {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
                               </div>
                               <span className="text-sm text-ink-navy/60 shrink-0">{fmt(r.prezzo * r.quantita)}</span>
@@ -1148,7 +1166,8 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
                           {o.righe.length === 0 && <p className="py-1.5 text-sm text-ink-navy/30">Nessuna voce</p>}
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                   <div className="px-5 py-4 border-t border-ink-navy/8 shrink-0">
                     <div className="flex items-center justify-between mb-3">

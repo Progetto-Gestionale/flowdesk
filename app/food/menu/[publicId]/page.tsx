@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import { distanzaKm, cercaIndirizzi, type Suggerimento } from '@/lib/geocode'
 import OrarioSelect from '@/app/components/OrarioSelect'
-import { ALLERGENE_LABEL, ALLERGENE_ICON } from '@/lib/allergeni'
+import { ALLERGENE_LABEL } from '@/lib/allergeni'
 
 interface Piatto {
   id: string
@@ -268,12 +268,16 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicId, ...dati, indirizzo: dati.via ? `${dati.via}, ${dati.cap} ${dati.citta}`.trim() : '', righe: carrello }),
       })
-      const json = await res.json()
+      const json = await res.json().catch(() => ({}))
       if (res.ok) {
         setNumeroOrdine(json.numero)
         setStep('inviato')
         setCarrello([])
+      } else {
+        setErrIndirizzo(json.error ?? 'Non è stato possibile inviare la richiesta. Riprova.')
       }
+    } catch {
+      setErrIndirizzo('Errore di connessione. Controlla la rete e riprova.')
     } finally {
       setInviando(false)
     }
@@ -397,8 +401,8 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
                         {p.allergeni && p.allergeni.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {p.allergeni.map(k => ALLERGENE_LABEL[k] && (
-                              <span key={k} className="inline-flex items-center gap-1 text-[11px] leading-none px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                                <span>{ALLERGENE_ICON[k]}</span>{ALLERGENE_LABEL[k]}
+                              <span key={k} className="inline-flex items-center text-[11px] leading-none px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                                {ALLERGENE_LABEL[k]}
                               </span>
                             ))}
                           </div>

@@ -369,7 +369,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                         onClick={() => setFormPiatto(f => ({ ...f, allergeni: attivo ? f.allergeni.filter(k => k !== a.key) : [...f.allergeni, a.key] }))}
                         className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm text-left transition-colors ${attivo ? 'border-electric-blue bg-electric-blue/10 text-electric-blue font-semibold' : 'border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
                         <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 ${attivo ? 'bg-electric-blue border-electric-blue text-white' : 'border-ink-navy/25'}`}>{attivo ? '✓' : ''}</span>
-                        <span className="truncate">{a.icon} {a.label}</span>
+                        <span className="truncate">{a.label}</span>
                       </button>
                     )
                   })}

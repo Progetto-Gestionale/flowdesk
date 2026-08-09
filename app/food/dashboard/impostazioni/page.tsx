@@ -491,6 +491,23 @@ export default function Impostazioni() {
   const [servizi, setServizi] = useState<Servizi>({})
   const [regole, setRegole] = useState<Regole>({ preavvisoMinMinuti: '', preavvisoOrdiniMinMinuti: '', anticipoMaxGiorni: '', copertiMin: '', copertiMax: '', durataMedia: '', fasceOrdini: '', noteAggiuntive: '', bloccoAutoTavoli: false, prenotazioniSospese: false, modalitaOrario: 'libero', tempoMinimoArrivoMinuti: '', capConsegna: '', raggioConsegnaKm: '' })
   const [geoZona, setGeoZona] = useState<{ loading: boolean; msg: string; ok: boolean }>({ loading: false, msg: '', ok: false })
+  // Coordinate manuali del locale: stati stringa (per digitare i decimali senza intoppi),
+  // sincronizzati da `regole` e committati su blur. Fallback quando il geocoding non trova l'indirizzo.
+  const [latStr, setLatStr] = useState('')
+  const [lonStr, setLonStr] = useState('')
+  useEffect(() => { setLatStr(regole.latLocale != null ? String(regole.latLocale) : '') }, [regole.latLocale])
+  useEffect(() => { setLonStr(regole.lonLocale != null ? String(regole.lonLocale) : '') }, [regole.lonLocale])
+  function commitCoord(which: 'lat' | 'lon', raw: string) {
+    const v = raw.trim().replace(',', '.')
+    if (v === '') { setRegole(r => ({ ...r, [which === 'lat' ? 'latLocale' : 'lonLocale']: undefined })); dirty('prenotazioni'); return }
+    const n = Number(v)
+    if (!Number.isFinite(n)) { // input non valido → ripristina il valore corrente
+      const cur = which === 'lat' ? regole.latLocale : regole.lonLocale
+      ;(which === 'lat' ? setLatStr : setLonStr)(cur != null ? String(cur) : '')
+      return
+    }
+    setRegole(r => ({ ...r, [which === 'lat' ? 'latLocale' : 'lonLocale']: n })); dirty('prenotazioni')
+  }
   const [menu, setMenu] = useState<Menu>({ tipoCucina: '', specialita: '', nonDisponibile: '', allergeniGestiti: '' })
   const [info, setInfo] = useState<InfoPratiche>({ parcheggio: '', accessibile: false, animali: false, dresscode: '', altro: '' })
   const [faq, setFaq] = useState<Faq[]>([])
@@ -609,7 +626,7 @@ export default function Impostazioni() {
         headers: { 'Accept-Language': 'it', 'User-Agent': 'Flowest/1.0' },
       }).then(r => r.json()).catch(() => [])
       if (!geo || geo.length === 0) {
-        setGeoZona({ loading: false, ok: false, msg: 'Indirizzo del locale non trovato. Controllalo nella sezione "Locale".' })
+        setGeoZona({ loading: false, ok: false, msg: 'Indirizzo del locale non trovato. Controllalo nella sezione "Locale", oppure inserisci le coordinate manualmente qui sotto.' })
         return
       }
       const lat = parseFloat(geo[0].lat), lon = parseFloat(geo[0].lon)
@@ -882,6 +899,24 @@ export default function Impostazioni() {
                   {regole.raggioConsegnaKm && regole.latLocale == null && (
                     <p className="text-xs text-amber-600">⚠️ Hai impostato un raggio ma non la posizione del locale: il limite di distanza non verrà applicato finché non calcoli la posizione.</p>
                   )}
+                  <details className="pt-1">
+                    <summary className="text-xs text-electric-blue cursor-pointer select-none">Non trova l&apos;indirizzo? Inserisci le coordinate manualmente</summary>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] text-ink-navy/50 mb-1">Latitudine</label>
+                        <input type="text" inputMode="decimal" value={latStr}
+                          onChange={e => setLatStr(e.target.value)} onBlur={() => commitCoord('lat', latStr)}
+                          placeholder="es. 43.1350" className={cls} />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-ink-navy/50 mb-1">Longitudine</label>
+                        <input type="text" inputMode="decimal" value={lonStr}
+                          onChange={e => setLonStr(e.target.value)} onBlur={() => commitCoord('lon', lonStr)}
+                          placeholder="es. 13.0680" className={cls} />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-ink-navy/40 mt-1.5">Come trovarle: apri Google Maps, tasto destro sul punto del locale, poi clicca sulle coordinate in cima al menu per copiarle (prima la latitudine, poi la longitudine). Ricordati di salvare.</p>
+                  </details>
                 </div>
               </div>
             </Section>

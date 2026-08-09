@@ -48,6 +48,7 @@ export async function POST(req: Request) {
             descrizione: piatto.descrizione,
             prezzo: piatto.prezzo,
             immagineUrl: piatto.immagineUrl,
+            allergeni: piatto.allergeni,
             disponibile: piatto.disponibile,
             ordine: piatto.ordine,
           },
