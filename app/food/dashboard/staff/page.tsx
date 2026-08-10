@@ -57,6 +57,9 @@ interface Requisito {
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_LUNGHI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
 const COLORI = ['bg-electric-blue/15 text-electric-blue', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-pink-100 text-pink-700', 'bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700']
+// Colore unico dei turni nella vista settimanale: i turni si distinguono per STATO (normale /
+// fuori disponibilità = ambra / assenza = rosso), NON per dipendente (che è già indicato dalla riga).
+const COLORE_TURNO = 'bg-electric-blue/15 text-electric-blue'
 
 function getLunedi(date: Date) {
   const d = new Date(date)
@@ -653,10 +656,10 @@ export default function StaffPage() {
                           const warnTurno = noDisp || !!fuoriOrario || assenzaApp
                           const warnTitle = assenzaApp ? `${assenza!.tipo.replace('_',' ')} approvata` : noDisp ? 'Non disponibile questo giorno' : fuoriOrario ? `Disponibile ${dispGiorno?.oraInizio}–${dispGiorno?.oraFine}` : undefined
                           return (
-                            <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${assenzaApp ? 'bg-red-100 text-red-700' : warnTurno ? 'bg-amber-100 text-amber-800' : colorMap[dip.id]} relative`}
+                            <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${assenzaApp ? 'bg-red-100 text-red-700' : warnTurno ? 'bg-amber-100 text-amber-800' : COLORE_TURNO} relative`}
                               onClick={e => { e.stopPropagation(); apriEditTurno(t) }}
                               title={warnTitle}>
-                              <p className="font-semibold">{warnTurno ? ' ' : ''}{t.oraInizio}–{t.oraFine}</p>
+                              <p className="font-semibold">{warnTurno ? '⚠ ' : ''}{t.oraInizio}–{t.oraFine}</p>
                               {t.ruolo && <p className="opacity-75 truncate">{t.ruolo}</p>}
                               <button onClick={e => { e.stopPropagation(); eliminaTurno(t.id) }}
                                 className="absolute top-0.5 right-0.5 text-red-400 hover:text-red-600 text-xs leading-none opacity-0 group-hover:opacity-100">✕</button>
@@ -1527,6 +1530,9 @@ export default function StaffPage() {
               </div>
             </div>
             <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setConferma({ msg: 'Eliminare questo turno?', onConfirm: async () => { const id = editTurno.id; setEditTurno(null); setTurnoDettaglio(null); await eliminaTurno(id) } })}
+                className="py-2.5 px-4 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 shrink-0">Elimina</button>
               <button onClick={() => setEditTurno(null)} className="flex-1 py-2.5 rounded-xl border border-ink-navy/10 text-ink-navy/60 text-sm font-medium hover:bg-mist">Annulla</button>
               <button onClick={modificaTurno} disabled={savingEdit}
                 className="flex-1 py-2.5 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 disabled:opacity-50">

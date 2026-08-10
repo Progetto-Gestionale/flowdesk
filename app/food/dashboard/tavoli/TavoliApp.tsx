@@ -1094,9 +1094,11 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
               onSciogliGruppo={sciogliGruppo} tavoloAppMap={tavoloAppMap} tavoloCarryMap={tavoloCarryMap} tavoloAppsMap={tavoloAppsMap}
               tavoliOccupati={tavoliOccupati} tavoliPronti={tavoliPronti} canEdit={gestione} separaMode={separaMode}
               onTavoloClick={(tid, gid, lbl) => {
-                // aprendo il tavolo, segna come visti i suoi ordini pronti → il pallino rosso sparisce
+                // aprendo il tavolo, segna come visti i suoi ordini pronti → il pallino rosso sparisce.
+                // Filtro !visti come per il pallino rosso: così il verde "Appena pronto" compare SOLO
+                // alla prima apertura e non ricompare riaprendo il conto.
                 const daVedere = ordiniAperti
-                  .filter(o => (o.status === 'consegnato' || o.status === 'pronto') && (gid ? o.gruppoId === gid : (o.tavoloId === tid && !o.gruppoId)))
+                  .filter(o => (o.status === 'consegnato' || o.status === 'pronto') && !visti.has(o.id) && (gid ? o.gruppoId === gid : (o.tavoloId === tid && !o.gruppoId)))
                   .map(o => o.id)
                 // Prima di segnarli visti, li memorizzo per evidenziarli nel conto (solo questa apertura).
                 setOrdiniNuoviConto(new Set(daVedere))
@@ -1142,12 +1144,15 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
                   <div className="overflow-y-auto flex-1 divide-y divide-ink-navy/8">
                     {ordiniConto.map((o, i) => {
                       const nuovo = ordiniNuoviConto.has(o.id) // ordine appena segnato pronto dalla cucina
+                      // In preparazione = la cucina non l'ha ancora segnato pronto (né consegnato/chiuso).
+                      const inPreparazione = o.status === 'nuovo' || o.status === 'aperto'
                       return (
                       <div key={o.id} className={`px-5 py-3 ${nuovo ? 'bg-green-50' : ''}`}>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <div className="flex items-center gap-2 min-w-0">
                             {ordiniConto.length > 1 && <span className="text-[11px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-full shrink-0">Sottogruppo {i + 1}</span>}
                             {nuovo && <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">● Appena pronto</span>}
+                            {!nuovo && inPreparazione && <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">◷ In preparazione</span>}
                           </div>
                           <button onClick={() => setContoModificaOrdine(o)}
                             className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors shrink-0">Modifica</button>
