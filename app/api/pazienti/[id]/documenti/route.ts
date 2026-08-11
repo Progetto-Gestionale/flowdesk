@@ -40,6 +40,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!contenuto && !url) return NextResponse.json({ error: 'Serve un file o un link' }, { status: 400 })
 
   // `contenuto` arriva come data URL dal browser: teniamo solo la parte base64
+  // Una seduta svolta è due record: l'appuntamento in agenda e la voce di
+  // cartella clinica. Chi carica il documento ne conosce solo uno, a seconda di
+  // dove si trova. Qui risaliamo all'altro e li valorizziamo entrambi, così il
+  // documento compare sia aprendo la seduta dallo storico sia dal calendario.
+  let idApp: string | null = appuntamentoId || null
+  let idSeduta: string | null = sedutaId || null
+
+  if (idApp && !idSeduta) {
+    const s = await prisma.seduta.findFirst({
+      where: { appuntamentoId: idApp, userId: user.id }, select: { id: true },
+    })
+    idSeduta = s?.id ?? null
+  } else if (idSeduta && !idApp) {
+    const s = await prisma.seduta.findFirst({
+      where: { id: idSeduta, userId: user.id }, select: { appuntamentoId: true },
+    })
+    idApp = s?.appuntamentoId ?? null
+  }
+
   const base64 = contenuto ? String(contenuto).split(',').pop() ?? '' : null
   if (base64) {
     const byte = Math.floor(base64.length * 3 / 4)
@@ -58,8 +77,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       mimeType: base64 ? (mimeType || 'application/octet-stream') : null,
       dimensione: base64 ? (dimensione ?? null) : null,
       tipo: tipo || null,
-      appuntamentoId: appuntamentoId || null,
-      sedutaId: sedutaId || null,
+      appuntamentoId: idApp,
+      sedutaId: idSeduta,
     },
     select: { id: true, nome: true, url: true, tipo: true, mimeType: true, dimensione: true, createdAt: true, appuntamentoId: true, sedutaId: true },
   })
