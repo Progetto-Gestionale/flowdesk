@@ -1,11 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
-} from 'recharts'
 import { IconChartBar } from '@/app/components/icons'
+import { GraficoBarre, Ciambella, VoceLegenda } from '../components/Grafici'
 
 const MESI_BREVI = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
 const GIORNI_BREVI = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
@@ -22,6 +19,7 @@ interface Dati {
   incassoTotale: number
   spesaMediaPaziente: number
   pazientiDistinti: number
+  raggruppa: 'giorno' | 'settimana' | 'mese'
   perGiorno: { giorno: string; sedute: number; incasso: number }[]
   perTipo: { nome: string; sedute: number; incasso: number }[]
 }
@@ -161,17 +159,36 @@ export default function CareAnalyticsPage() {
 
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/care/analytics?da=${intervallo.da}&a=${intervallo.a}`, { credentials: 'include', cache: 'no-store' })
+    const raggruppa = periodo === 'settimana' ? 'giorno' : periodo === 'mese' ? 'settimana' : 'mese'
+    fetch(`/api/care/analytics?da=${intervallo.da}&a=${intervallo.a}&raggruppa=${raggruppa}`, { credentials: 'include', cache: 'no-store' })
       .then(r => r.json())
       .then(d => setDati(d.error ? null : d))
       .catch(() => setDati(null))
       .finally(() => setLoading(false))
-  }, [intervallo.da, intervallo.a])
+  }, [intervallo.da, intervallo.a, periodo])
 
-  const barre = (dati?.perGiorno ?? []).map(g => ({
-    ...g,
-    etichetta: new Date(`${g.giorno}T12:00:00`).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }),
-  }))
+  const barre = (dati?.perGiorno ?? []).map(g => {
+    if (dati?.raggruppa === 'mese') {
+      // "2026-08" → "Ago"
+      return { ...g, etichetta: MESI_BREVI[Number(g.giorno.slice(5, 7)) - 1] ?? g.giorno }
+    }
+    if (dati?.raggruppa === 'settimana') {
+      // "2026-08#2" → "15–21", con l'ultima settimana che arriva a fine mese
+      const [aaaaMm, idx] = g.giorno.split('#')
+      const i = Number(idx)
+      const [aa, mm] = aaaaMm.split('-').map(Number)
+      const giorniMese = new Date(aa, mm, 0).getDate()
+      const primo = i * 7 + 1
+      const ultimo = i === 4 ? giorniMese : Math.min(primo + 6, giorniMese)
+      return { ...g, etichetta: `${primo}–${ultimo}` }
+    }
+    const d = new Date(`${g.giorno}T12:00:00`)
+    return { ...g, etichetta: d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) }
+  })
+
+  const titoloBarre = dati?.raggruppa === 'mese' ? 'Sedute per mese'
+    : dati?.raggruppa === 'settimana' ? 'Sedute per settimana'
+    : 'Sedute per giorno'
 
   const kpi = [
     { label: 'Sedute completate', valore: dati ? String(dati.seduteCompletate) : '—', nota: null as string | null },
@@ -253,60 +270,42 @@ export default function CareAnalyticsPage() {
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="bg-white border border-ink-navy/10 rounded-2xl p-5">
-            <h2 className="font-bold text-ink-navy mb-4">Sedute per giorno</h2>
-            <div style={{ width: '100%', height: 260 }}>
-              <ResponsiveContainer>
-                <BarChart data={barre} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#0B153315" vertical={false} />
-                  <XAxis dataKey="etichetta" tick={{ fontSize: 11, fill: '#0B153370' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#0B153370' }} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    cursor={{ fill: '#1F52FF0D' }}
-                    contentStyle={{ borderRadius: 12, border: '1px solid #0B153315', fontSize: 13 }}
-                    formatter={(v) => [Number(v), 'Sedute'] as [number, string]}
-                  />
-                  <Bar dataKey="sedute" fill="#1F52FF" radius={[6, 6, 0, 0]} maxBarSize={38} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <h2 className="font-bold text-ink-navy mb-4">{titoloBarre}</h2>
+            <GraficoBarre dati={barre.map(b => ({ etichetta: b.etichetta, valore: b.sedute }))} />
           </div>
 
           <div className="bg-white border border-ink-navy/10 rounded-2xl p-5">
-            <h2 className="font-bold text-ink-navy mb-1">Pazienti</h2>
-            <p className="text-xs text-ink-navy/40 mb-3">
-              {dati.pazientiNuovi} {dati.pazientiNuovi === 1 ? 'nuovo' : 'nuovi'} · {dati.pazientiDiRitorno} di ritorno
-            </p>
-            <div style={{ width: '100%', height: 220 }}>
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie data={pazientiTorta} dataKey="valore" nameKey="nome" innerRadius={48} outerRadius={80} paddingAngle={2}>
-                    {pazientiTorta.map((_, i) => <Cell key={i} fill={i === 0 ? '#D6FB3D' : '#1F52FF'} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #0B153315', fontSize: 13 }} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+            <h2 className="font-bold text-ink-navy mb-4">Pazienti</h2>
+            <div className="flex items-center gap-5">
+              <Ciambella dimensione={150} fette={[
+                { nome: 'Nuovi', valore: dati.pazientiNuovi, colore: '#D6FB3D' },
+                { nome: 'Di ritorno', valore: dati.pazientiDiRitorno, colore: '#1F52FF' },
+              ]} />
+              <div className="flex-1 min-w-0 space-y-2">
+                <VoceLegenda nome="Nuovi" valore={dati.pazientiNuovi} colore="#D6FB3D"
+                  percentuale={dati.pazientiDistinti ? Math.round(dati.pazientiNuovi / dati.pazientiDistinti * 100) : 0} />
+                <VoceLegenda nome="Di ritorno" valore={dati.pazientiDiRitorno} colore="#1F52FF"
+                  percentuale={dati.pazientiDistinti ? Math.round(dati.pazientiDiRitorno / dati.pazientiDistinti * 100) : 0} />
+                <p className="text-xs text-ink-navy/35 pt-1 border-t border-ink-navy/8">
+                  Nuovo = prima seduta completata nel periodo
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white border border-ink-navy/10 rounded-2xl p-5">
+          <div className="bg-white border border-ink-navy/10 rounded-2xl p-5 lg:col-span-2">
             <h2 className="font-bold text-ink-navy mb-4">Tipi di seduta</h2>
-            <div style={{ width: '100%', height: 260 }}>
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie data={dati.perTipo} dataKey="sedute" nameKey="nome" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                    {dati.perTipo.map((_, i) => <Cell key={i} fill={COLORI[i % COLORI.length]} />)}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{ borderRadius: 12, border: '1px solid #0B153315', fontSize: 13 }}
-                    formatter={(v, nome) => {
-                      const n = Number(v)
-                      return [`${n} (${Math.round(n / dati.seduteCompletate * 100)}%)`, String(nome)] as [string, string]
-                    }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="flex items-center gap-6 flex-wrap">
+              <Ciambella dimensione={180} fette={dati.perTipo.map((t, i) => ({
+                nome: t.nome, valore: t.sedute, colore: COLORI[i % COLORI.length],
+              }))} />
+              <div className="flex-1 min-w-[260px] space-y-2">
+                {dati.perTipo.map((t, i) => (
+                  <VoceLegenda key={t.nome} nome={t.nome} valore={t.sedute} importo={t.incasso}
+                    colore={COLORI[i % COLORI.length]}
+                    percentuale={Math.round(t.sedute / dati.seduteCompletate * 100)} />
+                ))}
+              </div>
             </div>
           </div>
         </div>

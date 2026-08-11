@@ -29,16 +29,14 @@ export function fasceDaTesto(testo: string): [number, number][] {
 /**
  * Settimana come griglia oraria: le ore in verticale a sinistra, i giorni in
  * orizzontale in alto, gli appuntamenti posizionati sul loro orario reale.
- * Cliccando una cella vuota si crea un appuntamento a quell'ora.
  */
 export default function GrigliaSettimana({
-  giorni, oggi, appuntamentiDi, orarioDi, onNuovo, onApri, onOrari,
+  giorni, oggi, appuntamentiDi, orarioDi, onApri, onOrari,
 }: {
   giorni: Date[]
   oggi: Date
   appuntamentiDi: (giorno: Date) => AppuntamentoBase[]
   orarioDi: (giorno: Date) => OrarioGiorno
-  onNuovo: (giorno: Date, ora: number) => void
   onApri: (app: AppuntamentoBase) => void
   onOrari: (giorno: Date) => void
 }) {
@@ -111,14 +109,13 @@ export default function GrigliaSettimana({
             const fasce = fasceDaTesto(orarioDi(giorno).testo)
             return (
               <div key={i} className={`relative border-l border-ink-navy/8 ${isOggi ? 'bg-electric-blue/[0.03]' : ''}`}>
-                {/* Sfondo: fuori orario in grigio, così si vede quando è chiuso */}
+                {/* Sfondo: fuori orario in grigio, così si vede quando è chiuso.
+                    Non cliccabile: si aggiunge solo dal pulsante in alto. */}
                 {ore.map(h => {
                   const aperto = fasce.some(([a, b]) => h * 60 < b && (h + 1) * 60 > a)
                   return (
-                    <button key={h} onClick={() => onNuovo(giorno, h)}
-                      title={`Nuovo appuntamento — ${giorno.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })} alle ${String(h).padStart(2, '0')}:00`}
-                      style={{ height: ALTEZZA_ORA }}
-                      className={`w-full border-b border-ink-navy/5 transition-colors hover:bg-electric-blue/10 ${aperto ? '' : 'bg-mist/60'}`} />
+                    <div key={h} style={{ height: ALTEZZA_ORA }}
+                      className={`border-b border-ink-navy/5 ${aperto ? '' : 'bg-mist/60'}`} />
                   )
                 })}
 
