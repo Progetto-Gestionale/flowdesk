@@ -13,7 +13,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { testo, fatto } = await req.json()
   const data: Record<string, unknown> = {}
   if (typeof testo === 'string' && testo.trim()) data.testo = testo.trim()
-  if (typeof fatto === 'boolean') data.fatto = fatto
+  if (typeof fatto === 'boolean') {
+    data.fatto = fatto
+    // Il timer delle 24 ore parte da qui, e riparte da zero se la voce
+    // viene rimessa fra le cose da fare
+    data.fattoAt = fatto ? new Date() : null
+  }
 
   await prisma.todo.updateMany({ where: { id, userId: user.id }, data })
   return NextResponse.json({ ok: true })

@@ -14,6 +14,7 @@
     "@prisma/client": "^5.22.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
+    "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
     "jose": "^6.2.3",
     "next": "^16.2.9",
@@ -22,7 +23,6 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "recharts": "^3.9.2",
     "resend": "^6.12.4"
   },
   "devDependencies": {

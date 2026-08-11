@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { IconCalendar, IconClipboard, IconCash, IconCheck, IconArrowRight } from '@/app/components/icons'
 import TodoList from './components/TodoList'
+import { NOTA_SCADENZA } from '@/lib/todoConfig'
 
 interface Numeri {
   seduteOggi: number
@@ -58,10 +59,13 @@ export default function CareDashboardHome() {
 
       <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-ink-navy flex items-center gap-2">
-            <span className="w-4 h-4 text-electric-blue"><IconCheck /></span>
-            To-do List
-          </h2>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h2 className="font-bold text-ink-navy flex items-center gap-2">
+              <span className="w-4 h-4 text-electric-blue"><IconCheck /></span>
+              To-do List
+            </h2>
+            <span className="text-xs text-ink-navy/40">{NOTA_SCADENZA.toLowerCase()}</span>
+          </div>
           <Link href="/care/dashboard/todo"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-electric-blue hover:underline">
             Apri <span className="w-3 h-3"><IconArrowRight /></span>

@@ -73,23 +73,16 @@ function fmtData(d: string) {
   return new Date(d).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function esportaCSV(pazienti: Paziente[]) {
-  const header = ['Nome e cognome', 'Cliente da', 'Numero sedute', 'Email', 'Telefono']
-  const righe = pazienti.map(p => [
-    p.nome,
-    fmtData(p.createdAt),
-    String(p._count?.sedute ?? 0),
-    p.email ?? '',
-    p.telefono ?? '',
-  ])
-  const csv = [header, ...righe]
-    .map(riga => riga.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    .join('\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+/** Il file .xlsx lo genera il server: qui si scarica soltanto. */
+async function esportaExcel(ricerca: string) {
+  const q = ricerca.trim() ? `?q=${encodeURIComponent(ricerca.trim())}` : ''
+  const res = await fetch(`/api/care/pazienti/export${q}`, { credentials: 'include' })
+  if (!res.ok) return
+  const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `pazienti_${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `pazienti_${new Date().toISOString().slice(0, 10)}.xlsx`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -153,7 +146,7 @@ export default function PazientiPage() {
           <p className="text-ink-navy/50 mt-0.5">{pazienti.length} pazienti totali</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => esportaCSV(filtrati)} disabled={filtrati.length === 0}
+          <button onClick={() => esportaExcel(ricerca)} disabled={filtrati.length === 0}
             className="text-sm font-semibold px-4 py-2 rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist transition-colors disabled:opacity-40">
             Esporta Excel
           </button>

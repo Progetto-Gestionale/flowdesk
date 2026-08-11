@@ -17,6 +17,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const da = searchParams.get('da')
   const a = searchParams.get('a')
+  // Come raggruppare le barre: un giorno per la settimana, una settimana per il
+  // mese, un mese per l'anno. Con 365 barre il grafico annuale è illeggibile.
+  const raggruppa = (searchParams.get('raggruppa') ?? 'giorno') as 'giorno' | 'settimana' | 'mese'
   if (!da || !a) return NextResponse.json({ error: 'Periodo mancante' }, { status: 400 })
 
   const inizio = romeWallTimeToDate(da, '00:00')
@@ -44,10 +47,26 @@ export async function GET(req: Request) {
     }),
   ])
 
-  // Sedute e incasso giorno per giorno (l'asse X del grafico a barre)
+  // ── Barre del grafico, raggruppate secondo il periodo scelto ──────────────
+  const p2 = (n: number) => String(n).padStart(2, '0')
+
+  /** Chiave del gruppo a cui appartiene una data (in ora italiana). */
+  function chiaveGruppo(dataIta: string): string {
+    if (raggruppa === 'mese') return dataIta.slice(0, 7)   // "2026-08"
+    if (raggruppa === 'giorno') return dataIta             // "2026-08-05"
+    // Settimane DEL MESE (1-7, 8-14, 15-21, 22-28, 29-fine), non settimane
+    // solari: così ogni barra appartiene al mese che stai guardando e non se
+    // ne vedono due mozzate che sconfinano nel mese prima e in quello dopo.
+    const [, mese, giorno] = dataIta.split('-').map(Number)
+    void mese
+    const indice = Math.min(4, Math.floor((giorno - 1) / 7))
+    return `${dataIta.slice(0, 7)}#${indice}`             // "2026-08#0"
+  }
+
+  // Gruppi pre-inizializzati, così restano visibili anche quelli a zero
   const perGiorno = new Map<string, { sedute: number; incasso: number }>()
   for (let t = new Date(inizio); t < fine; t = new Date(t.getTime() + 24 * 60 * 60 * 1000)) {
-    perGiorno.set(utcToRoma(t).data, { sedute: 0, incasso: 0 })
+    perGiorno.set(chiaveGruppo(utcToRoma(t).data), { sedute: 0, incasso: 0 })
   }
 
   const perTipo = new Map<string, { sedute: number; incasso: number }>()
@@ -59,10 +78,10 @@ export async function GET(req: Request) {
     incassoTotale += prezzo
     if (app.pazienteId) pazienti.add(app.pazienteId)
 
-    const giorno = utcToRoma(app.data).data
-    const rigaG = perGiorno.get(giorno) ?? { sedute: 0, incasso: 0 }
+    const gruppo = chiaveGruppo(utcToRoma(app.data).data)
+    const rigaG = perGiorno.get(gruppo) ?? { sedute: 0, incasso: 0 }
     rigaG.sedute++; rigaG.incasso += prezzo
-    perGiorno.set(giorno, rigaG)
+    perGiorno.set(gruppo, rigaG)
 
     const nome = app.tipoSeduta?.nome ?? app.servizio ?? 'Altro'
     const rigaT = perTipo.get(nome) ?? { sedute: 0, incasso: 0 }
@@ -88,7 +107,10 @@ export async function GET(req: Request) {
     // "Quanto lascia in media un paziente nel periodo", non per singola seduta
     spesaMediaPaziente: pazienti.size ? incassoTotale / pazienti.size : 0,
     pazientiDistinti: pazienti.size,
-    perGiorno: [...perGiorno.entries()].map(([giorno, v]) => ({ giorno, ...v })),
+    raggruppa,
+    perGiorno: [...perGiorno.entries()]
+      .map(([giorno, v]) => ({ giorno, ...v }))
+      .sort((x, y) => x.giorno.localeCompare(y.giorno)),
     perTipo: [...perTipo.entries()]
       .map(([nome, v]) => ({ nome, ...v }))
       .sort((x, y) => y.sedute - x.sedute),

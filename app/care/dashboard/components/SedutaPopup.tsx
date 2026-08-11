@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { IconUpload, IconFile, IconLink, IconTrash } from '@/app/components/icons'
+import { IconUpload, IconFile, IconTrash } from '@/app/components/icons'
 import { segnalaAggiornamento } from './notificheUtil'
 
 const MAX_BYTE = 3 * 1024 * 1024
@@ -165,8 +165,8 @@ export default function SedutaPopup({
             <div className="space-y-1.5">
               {documenti.map(d => (
                 <div key={d.id} className="group flex items-center gap-2 bg-mist rounded-lg px-3 py-2">
-                  <span className="w-4 h-4 shrink-0 text-electric-blue">{d.url ? <IconLink /> : <IconFile />}</span>
-                  <a href={d.url ?? `/api/documenti-paziente/${d.id}/file`} target="_blank" rel="noopener noreferrer"
+                  <span className="w-4 h-4 shrink-0 text-electric-blue"><IconFile /></span>
+                  <a href={`/api/documenti-paziente/${d.id}/file`} target="_blank" rel="noopener noreferrer"
                     className="flex-1 min-w-0 text-sm text-ink-navy truncate hover:text-electric-blue">{d.nome}</a>
                   <span className="text-xs text-ink-navy/35 shrink-0">{fmtPeso(d.dimensione)}</span>
                   <button onClick={() => eliminaDoc(d.id)} aria-label="Elimina allegato"

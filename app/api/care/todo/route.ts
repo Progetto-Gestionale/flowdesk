@@ -1,6 +1,7 @@
 import { getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { ORE_VISIBILITA_FATTE } from '@/lib/todoConfig'
 
 export async function GET() {
   const userId = await getAuthUserId()
@@ -8,6 +9,13 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ todo: [] })
+
+  // Le voci spuntate spariscono da sole dopo 24 ore: la pulizia avviene qui,
+  // così l'utente le vede scomparire esattamente quando scadono e non serve un cron.
+  const scadenza = new Date(Date.now() - ORE_VISIBILITA_FATTE * 60 * 60 * 1000)
+  await prisma.todo.deleteMany({
+    where: { userId: user.id, fatto: true, fattoAt: { lt: scadenza } },
+  })
 
   const todo = await prisma.todo.findMany({
     where: { userId: user.id },

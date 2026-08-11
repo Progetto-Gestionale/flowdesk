@@ -29,6 +29,7 @@ interface Paziente {
   id: string
   nome: string
   email?: string
+  telefono?: string
 }
 
 function startOfWeek(d: Date) {
@@ -145,6 +146,7 @@ export default function CalendarioPage() {
   const [tipiSeduta, setTipiSeduta] = useState<TipoSeduta[]>([])
   const [salvando, setSalvando] = useState(false)
   const [erroreNuovo, setErroreNuovo] = useState('')
+  const [ricercaPaziente, setRicercaPaziente] = useState('')
   const [notaAperta, setNotaAperta] = useState<Appuntamento | null>(null)
   const [orariSettimanali, setOrariSettimanali] = useState<Record<string, string>>({})
   const [overrides, setOverrides] = useState<Override[]>([])
@@ -247,6 +249,7 @@ export default function CalendarioPage() {
   function openNuovo(day: Date) {
     setForm(FORM_VUOTO)
     setErroreNuovo('')
+    setRicercaPaziente('')
     setShowNuovo(day)
   }
 
@@ -324,6 +327,24 @@ export default function CalendarioPage() {
     }
   }
 
+  // Ricerca paziente nel modal: al massimo 5 risultati, aggiornati mentre si scrive
+  const pazienteScelto = pazienti.find(p => p.id === form.pazienteId) ?? null
+  const corrispondenze = (() => {
+    const q = ricercaPaziente.trim().toLowerCase()
+    if (!q) return []
+    return pazienti.filter(p =>
+      p.nome.toLowerCase().includes(q) ||
+      (p.email ?? '').toLowerCase().includes(q) ||
+      (p.telefono ?? '').toLowerCase().includes(q))
+  })()
+  const pazientiTrovati = corrispondenze.slice(0, 5)
+  const pazientiAltri = Math.max(0, corrispondenze.length - 5)
+
+  function azzeraPaziente() {
+    setForm(f => ({ ...f, pazienteId: '' }))
+    setRicercaPaziente('')
+  }
+
   const formValido = form.pazienteId === NUOVO_PAZIENTE
     ? Boolean(form.clienteNome.trim() && form.nuovoEmail.trim() && form.nuovoTelefono.trim())
     : Boolean(form.pazienteId)
@@ -378,13 +399,6 @@ export default function CalendarioPage() {
   function apriGiorno(d: Date) {
     setWeekStart(startOfWeek(d))
     setVista('settimana')
-  }
-
-  /** Nuovo appuntamento cliccando una cella vuota della griglia. */
-  function nuovoAllOra(day: Date, ora: number) {
-    setForm({ ...FORM_VUOTO, ora: `${String(ora).padStart(2, '0')}:00` })
-    setErroreNuovo('')
-    setShowNuovo(day)
   }
 
   /** Il pulsante in alto propone oggi se è nella settimana mostrata. */
@@ -501,7 +515,6 @@ export default function CalendarioPage() {
             const o = orarioEffettivo(day)
             return { testo: o.testo, personalizzato: Boolean(o.override) }
           }}
-          onNuovo={nuovoAllOra}
           onApri={a => openSelected(a as Appuntamento)}
           onOrari={apriModalOrari}
         />
@@ -588,12 +601,53 @@ export default function CalendarioPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Paziente</label>
-                <select value={form.pazienteId} onChange={e => setForm({ ...form, pazienteId: e.target.value })}
-                  className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue">
-                  <option value="">— Seleziona paziente —</option>
-                  {pazienti.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                  <option value={NUOVO_PAZIENTE}>+ Nuovo paziente</option>
-                </select>
+
+                {pazienteScelto ? (
+                  // Già scelto: mostriamo chi è, con la via per cambiarlo
+                  <div className="flex items-center gap-2 border border-electric-blue/30 bg-electric-blue/5 rounded-lg px-3 py-2">
+                    <span className="flex-1 text-sm font-semibold text-ink-navy truncate">{pazienteScelto.nome}</span>
+                    <button onClick={azzeraPaziente}
+                      className="text-xs font-semibold text-electric-blue hover:underline shrink-0">Cambia</button>
+                  </div>
+                ) : form.pazienteId === NUOVO_PAZIENTE ? (
+                  <div className="flex items-center gap-2 border border-electric-blue/30 bg-electric-blue/5 rounded-lg px-3 py-2">
+                    <span className="flex-1 text-sm font-semibold text-ink-navy">Nuovo paziente</span>
+                    <button onClick={azzeraPaziente}
+                      className="text-xs font-semibold text-electric-blue hover:underline shrink-0">Cambia</button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Ricerca invece della tendina: con molti pazienti la lista
+                        completa era ingestibile. Mostriamo al massimo 5 risultati. */}
+                    <input value={ricercaPaziente} onChange={e => setRicercaPaziente(e.target.value)}
+                      placeholder="Cerca per nome, email o telefono..." autoFocus
+                      className="w-full border border-ink-navy/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+
+                    {ricercaPaziente.trim() && (
+                      <div className="mt-1.5 border border-ink-navy/10 rounded-lg overflow-hidden divide-y divide-ink-navy/5">
+                        {pazientiTrovati.length === 0 ? (
+                          <p className="px-3 py-2.5 text-sm text-ink-navy/40">Nessun paziente trovato</p>
+                        ) : pazientiTrovati.map(p => (
+                          <button key={p.id} onClick={() => setForm(f => ({ ...f, pazienteId: p.id }))}
+                            className="w-full text-left px-3 py-2 hover:bg-mist transition-colors">
+                            <p className="text-sm font-medium text-ink-navy">{p.nome}</p>
+                            {p.email && <p className="text-xs text-ink-navy/40">{p.email}</p>}
+                          </button>
+                        ))}
+                        {pazientiAltri > 0 && (
+                          <p className="px-3 py-1.5 text-xs text-ink-navy/35 bg-mist/60">
+                            e altri {pazientiAltri} — restringi la ricerca
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <button onClick={() => setForm(f => ({ ...f, pazienteId: NUOVO_PAZIENTE }))}
+                      className="mt-2 text-sm font-semibold text-electric-blue hover:underline">
+                      + Nuovo paziente
+                    </button>
+                  </>
+                )}
               </div>
               {form.pazienteId === NUOVO_PAZIENTE && (
                 <div className="bg-mist rounded-xl p-3 space-y-3">

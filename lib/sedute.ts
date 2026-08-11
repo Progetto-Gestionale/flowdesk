@@ -27,7 +27,7 @@ export async function sincronizzaSeduta(app: AppuntamentoDaSincronizzare): Promi
   if (!app.pazienteId) return
 
   if (app.status === 'completato') {
-    await prisma.seduta.upsert({
+    const seduta = await prisma.seduta.upsert({
       where: { appuntamentoId: app.id },
       update: { data: app.data, tipo: app.servizio },
       create: {
@@ -37,6 +37,13 @@ export async function sincronizzaSeduta(app: AppuntamentoDaSincronizzare): Promi
         data: app.data,
         tipo: app.servizio,
       },
+    })
+
+    // I documenti allegati all'appuntamento quando la seduta non esisteva ancora
+    // vanno agganciati anche a lei, o dallo storico non si vedrebbero.
+    await prisma.documentoPaziente.updateMany({
+      where: { userId: app.userId, appuntamentoId: app.id, sedutaId: null },
+      data: { sedutaId: seduta.id },
     })
   } else {
     await prisma.seduta.deleteMany({ where: { appuntamentoId: app.id, userId: app.userId } })
