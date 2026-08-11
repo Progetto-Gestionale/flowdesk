@@ -56,7 +56,17 @@ interface Requisito {
 
 const GIORNI_BREVI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 const GIORNI_LUNGHI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
-const COLORI = ['bg-electric-blue/15 text-electric-blue', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-pink-100 text-pink-700', 'bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700']
+// Ogni colore ha `chip` (sfondo+testo del turno/avatar nel calendario) e `dot` (pallino pieno per
+// la legenda / indicatori). Tenerli in coppia garantisce che legenda e calendario coincidano
+// (prima il pallino era derivato con un replace fragile che sull'electric-blue non funzionava).
+const COLORI = [
+  { chip: 'bg-electric-blue/15 text-electric-blue', dot: 'bg-electric-blue' },
+  { chip: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+  { chip: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+  { chip: 'bg-pink-100 text-pink-700', dot: 'bg-pink-500' },
+  { chip: 'bg-sky-100 text-sky-700', dot: 'bg-sky-500' },
+  { chip: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
+]
 // Colore unico dei turni nella vista settimanale: i turni si distinguono per STATO (normale /
 // fuori disponibilità = ambra / assenza = rosso), NON per dipendente (che è già indicato dalla riga).
 const COLORE_TURNO = 'bg-electric-blue/15 text-electric-blue'
@@ -157,7 +167,7 @@ export default function StaffPage() {
   // Vista turni
   const [vistaTurni, setVistaTurni] = useState<'settimana' | 'mese'>('settimana')
   const [meseCal, setMeseCal] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d })
-  const [turnoDettaglio, setTurnoDettaglio] = useState<Turno | null>(null)
+  const [giornoDettaglio, setGiornoDettaglio] = useState<string | null>(null) // data YYYY-MM-DD: modale turni del giorno (vista mese)
 
   // Modal click-su-cella
   const [cellModal, setCellModal] = useState<{ dipendenteId: string; nome: string; data: string; dataLabel: string; oraInizio: string; oraFine: string } | null>(null)
@@ -359,7 +369,7 @@ export default function StaffPage() {
 
   async function eliminaTurno(id: string) {
     await fetch(`/api/turni/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchAll()
+    fetchAll(); fetchTurniMese()
   }
 
   async function modificaTurno() {
@@ -372,7 +382,6 @@ export default function StaffPage() {
     })
     setSavingEdit(false)
     setEditTurno(null)
-    setTurnoDettaglio(null)
     fetchAll(); fetchTurniMese()
   }
 
@@ -475,7 +484,7 @@ export default function StaffPage() {
     return d
   })
 
-  const colorMap: Record<string, string> = {}
+  const colorMap: Record<string, { chip: string; dot: string }> = {}
   dipendenti.forEach((d, i) => { colorMap[d.id] = COLORI[i % COLORI.length] })
 
   const richiesteInAttesa = richieste.filter(r => r.status === 'in_attesa')
@@ -611,7 +620,7 @@ export default function StaffPage() {
               dipendenti.map(dip => (
                 <div key={dip.id} className="grid grid-cols-8 border-b border-ink-navy/8 last:border-0">
                   <div className="p-3 flex items-center gap-2 border-r border-ink-navy/8">
-                    <span className={`w-2 h-2 rounded-full ${colorMap[dip.id].split(' ')[0].replace('100', '500')}`}></span>
+                    <span className={`w-2 h-2 rounded-full ${colorMap[dip.id].dot}`}></span>
                     <div>
                       <p className="text-xs font-semibold text-ink-navy truncate max-w-[80px]">{dip.nome}</p>
                       {dip.ruolo && <p className="text-xs text-ink-navy/35 truncate max-w-[80px]">{dip.ruolo}</p>}
@@ -713,7 +722,9 @@ export default function StaffPage() {
                     const isOggi = dataCorrente === toISO(new Date())
                     const isWeekend = idx % 7 >= 5
                     return (
-                      <div key={idx} className={`min-h-[80px] p-1.5 border-b border-r border-ink-navy/8
+                      <div key={idx}
+                        onClick={isDelMese ? () => setGiornoDettaglio(dataCorrente) : undefined}
+                        className={`min-h-[80px] p-1.5 border-b border-r border-ink-navy/8 ${isDelMese ? 'cursor-pointer hover:bg-electric-blue/10 transition-colors' : ''}
                         ${!isDelMese ? 'bg-mist/60' : isWeekend ? 'bg-electric-blue/5' : 'bg-white'}`}>
                         {isDelMese && (
                           <>
@@ -723,8 +734,7 @@ export default function StaffPage() {
                             </p>
                             {turniGiorno.map((t, i) => (
                               <div key={i}
-                                onClick={() => setTurnoDettaglio(turnoDettaglio?.id === t.id ? null : t)}
-                                className={`rounded px-1.5 py-0.5 text-xs font-semibold mb-0.5 cursor-pointer truncate ${colorMap[t.dipendente.id] ?? 'bg-mist text-ink-navy/60'}`}>
+                                className={`rounded px-1.5 py-0.5 text-xs font-semibold mb-0.5 truncate ${colorMap[t.dipendente.id]?.chip ?? 'bg-mist text-ink-navy/60'}`}>
                                 {t.dipendente.nome.split(' ')[0]} {t.oraInizio}–{t.oraFine}
                               </div>
                             ))}
@@ -738,35 +748,50 @@ export default function StaffPage() {
             )
           })()}
 
-          {/* Dettaglio turno mese */}
-          {vistaTurni === 'mese' && turnoDettaglio && (
-            <div className="bg-white rounded-2xl border border-electric-blue/25 shadow-sm p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold text-ink-navy">{turnoDettaglio.dipendente.nome}</p>
-                  <p className="text-sm text-ink-navy/50 mt-0.5">
-                    {new Date(turnoDettaglio.data).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </p>
-                  <p className="text-electric-blue font-bold text-lg mt-1">{turnoDettaglio.oraInizio} – {turnoDettaglio.oraFine}</p>
-                  {turnoDettaglio.ruolo && <p className="text-ink-navy/50 text-sm mt-0.5">{turnoDettaglio.ruolo}</p>}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => apriEditTurno(turnoDettaglio)}
-                    className="text-xs px-2 py-1 bg-electric-blue/10 text-electric-blue rounded-lg hover:bg-electric-blue/20 font-medium">Modifica</button>
-                  <button onClick={() => eliminaTurno(turnoDettaglio.id).then(() => setTurnoDettaglio(null))}
-                    className="text-xs px-2 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium">Elimina</button>
-                  <button onClick={() => setTurnoDettaglio(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-lg">✕</button>
+          {/* Dettaglio turni del giorno (vista mese) — in sovrimpressione */}
+          {giornoDettaglio && (() => {
+            const turniG = turniMese
+              .filter(t => t.data.split('T')[0] === giornoDettaglio)
+              .sort((a, b) => a.oraInizio.localeCompare(b.oraInizio))
+            return (
+              <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4" onClick={() => setGiornoDettaglio(null)}>
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="px-5 py-4 border-b border-ink-navy/8 flex items-center justify-between shrink-0">
+                    <h3 className="text-base font-bold text-ink-navy capitalize">
+                      {new Date(giornoDettaglio + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </h3>
+                    <button onClick={() => setGiornoDettaglio(null)} className="text-ink-navy/30 hover:text-ink-navy/60 text-xl font-bold leading-none">✕</button>
+                  </div>
+                  <div className="overflow-y-auto flex-1 divide-y divide-ink-navy/8">
+                    {turniG.length === 0 ? (
+                      <p className="px-5 py-8 text-center text-sm text-ink-navy/30">Nessun turno per questo giorno</p>
+                    ) : turniG.map(t => (
+                      <div key={t.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-ink-navy truncate">{t.dipendente.nome}</p>
+                          <p className="text-electric-blue font-bold text-sm">{t.oraInizio} – {t.oraFine}</p>
+                          {t.ruolo && <p className="text-xs text-ink-navy/45 truncate">{t.ruolo}</p>}
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={() => { setGiornoDettaglio(null); apriEditTurno(t) }}
+                            className="text-xs px-2.5 py-1 bg-electric-blue/10 text-electric-blue rounded-lg hover:bg-electric-blue/20 font-medium">Modifica</button>
+                          <button onClick={() => setConferma({ msg: 'Eliminare questo turno?', onConfirm: async () => { await eliminaTurno(t.id) } })}
+                            className="text-xs px-2.5 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium">Elimina</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Legenda colori dipendenti (vista mese) */}
           {vistaTurni === 'mese' && dipendenti.length > 0 && (
             <div className="flex gap-3 flex-wrap">
               {dipendenti.map((d, i) => (
                 <div key={d.id} className="flex items-center gap-1.5">
-                  <span className={`w-3 h-3 rounded-full ${COLORI[i % COLORI.length].split(' ')[0].replace('100','400')}`}></span>
+                  <span className={`w-3 h-3 rounded-full ${COLORI[i % COLORI.length].dot}`}></span>
                   <span className="text-xs text-ink-navy/60">{d.nome}</span>
                 </div>
               ))}
@@ -828,7 +853,7 @@ export default function StaffPage() {
                   {d.fotoUrl ? (
                     <img src={d.fotoUrl} alt={d.nome} className="w-10 h-10 rounded-full object-cover shrink-0" />
                   ) : (
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${COLORI[i % COLORI.length]}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${COLORI[i % COLORI.length].chip}`}>
                       {d.nome[0].toUpperCase()}
                     </div>
                   )}
@@ -1531,7 +1556,7 @@ export default function StaffPage() {
             </div>
             <div className="flex gap-3 mt-5">
               <button
-                onClick={() => setConferma({ msg: 'Eliminare questo turno?', onConfirm: async () => { const id = editTurno.id; setEditTurno(null); setTurnoDettaglio(null); await eliminaTurno(id) } })}
+                onClick={() => setConferma({ msg: 'Eliminare questo turno?', onConfirm: async () => { const id = editTurno.id; setEditTurno(null); await eliminaTurno(id) } })}
                 className="py-2.5 px-4 rounded-xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 shrink-0">Elimina</button>
               <button onClick={() => setEditTurno(null)} className="flex-1 py-2.5 rounded-xl border border-ink-navy/10 text-ink-navy/60 text-sm font-medium hover:bg-mist">Annulla</button>
               <button onClick={modificaTurno} disabled={savingEdit}
