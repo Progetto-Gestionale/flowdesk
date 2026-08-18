@@ -73,7 +73,7 @@ export default function ResocontoSerata() {
       accent: 'text-electric-blue',
     },
     {
-      label: 'Prenotazioni serata',
+      label: 'Prenotazioni giornata',
       value: dati ? String(dati.prenotazioniNum) : '—',
       sub: dati ? `${dati.prenotazioniNum === 1 ? '1 tavolo' : `${dati.prenotazioniNum} tavoli`} · ${dati.prenotazioniCoperti} coperti` : ' ',
       accent: 'text-electric-blue',
@@ -83,7 +83,7 @@ export default function ResocontoSerata() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-baseline justify-between gap-3 mb-3 shrink-0">
-        <h2 className="text-lg font-bold text-ink-navy">Resoconto della serata</h2>
+        <h2 className="text-lg font-bold text-ink-navy">Resoconto della giornata</h2>
         {dati && (
           <span className="text-sm text-ink-navy/50">
             Incasso totale <strong className="text-ink-navy">{fmtEur(dati.incassoTotale)}</strong>

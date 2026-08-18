@@ -413,9 +413,10 @@ export default function OrdiniPage() {
     const nome = ci.nome || 'Ordine online'
     const nuovo = isNuovoDaNotare(o)
 
-    // Coursing: l'ordine è a più mandate se le righe usano più di un numero di mandata.
+    // Coursing: la vista a mandate si usa se ci sono più mandate OPPURE se l'unica mandata non è la 1ª
+    // (così anche un singolo piatto messo in 2ª/3ª mostra la sua mandata).
     const mandate = [...new Set(o.righe.map(r => r.mandata ?? 1))].sort((a, b) => a - b)
-    const isMulti = mandate.length > 1
+    const isMulti = mandate.length > 1 || (mandate[0] ?? 1) > 1
 
     // Riga singola (riusata da vista normale e per-mandata)
     const RigaVoce = ({ r, spenta }: { r: RigaOrdine; spenta?: boolean }) => (

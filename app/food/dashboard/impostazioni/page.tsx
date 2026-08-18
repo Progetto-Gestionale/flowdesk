@@ -9,6 +9,7 @@ import {
 } from '@/app/components/icons'
 import { preparaFoto } from '@/lib/uploadFoto'
 import OrarioSelect from '@/app/components/OrarioSelect'
+import MenuStampaPanel from '@/app/food/dashboard/components/MenuStampaPanel'
 import QRCode from 'qrcode'
 
 
@@ -848,6 +849,8 @@ export default function Impostazioni() {
 
           {sezioneAttiva === 'menu' && (
             <>
+              <MenuStampaPanel />
+
               {/* Aspetto menu */}
               <div className="bg-white border border-ink-navy/10 rounded-xl p-5 space-y-4">
                 <div className="flex items-start justify-between">

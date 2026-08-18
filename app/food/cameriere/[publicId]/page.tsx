@@ -370,7 +370,7 @@ export default function CamerierePage() {
       {totaleArticoli > 0 && !vistaCarrello && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <div className="max-w-lg mx-auto">
-            <button onClick={() => setVistaCarrello(true)} className="w-full py-3.5 rounded-2xl text-white font-bold flex items-center justify-between px-5 shadow-md" style={{ backgroundColor: coloreP }}>
+            <button onClick={() => { setNoteAperte(new Set()); setVistaCarrello(true) }} className="w-full py-3.5 rounded-2xl text-white font-bold flex items-center justify-between px-5 shadow-md" style={{ backgroundColor: coloreP }}>
               <span className="bg-white/20 rounded-lg px-2 py-0.5 text-sm">{totaleArticoli}</span>
               <span>Vedi ordine</span>
               <span>€{totale.toFixed(2)}</span>

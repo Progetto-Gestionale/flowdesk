@@ -475,11 +475,11 @@ function NuovoOrdineModal({ tipoIniziale, onClose, onCreated }: {
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-ink-navy/60 mb-1">Data</label>
               <input type="date" value={data} onChange={e => setData(e.target.value)} className={inp} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-ink-navy/60 mb-1">{isDelivery ? 'Ora consegna' : 'Ora ritiro'}</label>
               <OrarioSelect value={ora} onChange={setOra} className={inp} />
             </div>

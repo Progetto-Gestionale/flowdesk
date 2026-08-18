@@ -1020,11 +1020,11 @@ export default function DipendenteDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Dal</label>
                     <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} className={inp} />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Al (opzionale)</label>
                     <input type="date" value={form.dataFine} onChange={e => setForm(f => ({ ...f, dataFine: e.target.value }))} className={inp} />
                   </div>

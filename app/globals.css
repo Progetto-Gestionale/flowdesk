@@ -51,6 +51,20 @@ textarea {
   max-width: 100%;
 }
 
+/* iOS/iPadOS Safari: i campi data/ora nativi mantengono una larghezza intrinseca fissa e NON
+   rispettano width:100% → dentro una griglia a 2 colonne sforano nella colonna accanto (es. Data↔Ora
+   nel Nuovo ordine, Dal↔Al nelle richieste dipendente). `appearance:none` li fa comportare come box
+   normali che rispettano il contenitore, mantenendo il date-picker nativo al tap.
+   Limitato ai dispositivi touch (pointer:coarse): su desktop col mouse resta l'icona-calendario cliccabile. */
+@media (pointer: coarse) {
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
