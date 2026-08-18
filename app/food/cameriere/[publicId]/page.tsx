@@ -7,7 +7,11 @@ interface Categoria { id: string; nome: string; piatti: Piatto[] }
 interface Sala { id: string; nome: string }
 interface Tavolo { id: string; numero: number; etichetta: string | null; salaId: string | null; posti: number; occupato: boolean }
 interface Gruppo { id: string; label: string; tavoliIds: string[] }
-interface RigaCarrello { piattoId: string; nome: string; prezzo: number; quantita: number; note: string }
+interface RigaCarrello { piattoId: string; nome: string; prezzo: number; quantita: number; note: string; mandata: number }
+
+// Portate/coursing: 1ª antipasti-primi, 2ª secondi, 3ª dolce. Default 1ª = tutto insieme.
+const MANDATE = [1, 2, 3] as const
+const MANDATA_LABEL: Record<number, string> = { 1: '1ª', 2: '2ª', 3: '3ª' }
 
 interface DatiLocale {
   nomeLocale: string
@@ -114,7 +118,7 @@ export default function CamerierePage() {
     setCarrello(prev => {
       const e = prev.find(r => r.piattoId === piatto.id)
       if (e) return prev.map(r => r.piattoId === piatto.id ? { ...r, quantita: r.quantita + 1 } : r)
-      return [...prev, { piattoId: piatto.id, nome: piatto.nome, prezzo: piatto.prezzo, quantita: 1, note: '' }]
+      return [...prev, { piattoId: piatto.id, nome: piatto.nome, prezzo: piatto.prezzo, quantita: 1, note: '', mandata: 1 }]
     })
   }
   function rimuovi(piattoId: string) {
@@ -128,6 +132,12 @@ export default function CamerierePage() {
   function setNota(piattoId: string, nota: string) {
     setCarrello(prev => prev.map(r => r.piattoId === piattoId ? { ...r, note: nota } : r))
   }
+  function setMandata(piattoId: string, mandata: number) {
+    setCarrello(prev => prev.map(r => r.piattoId === piattoId ? { ...r, mandata } : r))
+  }
+  // Le mandate hanno senso solo se il carrello ne usa più d'una: mostro il selettore solo allora,
+  // oppure appena il cameriere sposta qualcosa dalla 1ª (una riga già su 2ª/3ª).
+  const usaMandate = carrello.some(r => r.mandata > 1)
   const qty = (id: string) => carrello.find(r => r.piattoId === id)?.quantita ?? 0
   const totale = carrello.reduce((s, r) => s + r.prezzo * r.quantita, 0)
   const totaleArticoli = carrello.reduce((s, r) => s + r.quantita, 0)
@@ -377,6 +387,11 @@ export default function CamerierePage() {
               <button onClick={() => setVistaCarrello(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-3 space-y-3">
+              {usaMandate && (
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                  🍽️ Le portate su mandate diverse arrivano in cucina separate: la 2ª parte quando segni pronta la 1ª.
+                </p>
+              )}
               {carrello.map(r => (
                 <div key={r.piattoId} className="space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
@@ -388,17 +403,33 @@ export default function CamerierePage() {
                     </div>
                     <p className="font-bold text-gray-900 text-sm w-14 text-right">€{(r.prezzo * r.quantita).toFixed(2)}</p>
                   </div>
-                  {(noteAperte.has(r.piattoId) || r.note) ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Mandata: 1ª = insieme, 2ª/3ª = portate successive */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Mandata</span>
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                        {MANDATE.map(m => (
+                          <button key={m} type="button" onClick={() => setMandata(r.piattoId, m)}
+                            className="px-2.5 py-1 text-xs font-bold transition-colors"
+                            style={r.mandata === m ? { backgroundColor: coloreP, color: '#fff' } : { color: '#6b7280' }}>
+                            {MANDATA_LABEL[m]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {!(noteAperte.has(r.piattoId) || r.note) && (
+                      <button type="button" onClick={() => setNoteAperte(prev => new Set(prev).add(r.piattoId))}
+                        className="text-xs font-semibold opacity-70 hover:opacity-100 transition-opacity" style={{ color: coloreP }}>
+                        + aggiungi nota
+                      </button>
+                    )}
+                  </div>
+                  {(noteAperte.has(r.piattoId) || r.note) && (
                     <input type="text" value={r.note} onChange={e => setNota(r.piattoId, e.target.value)}
                       autoFocus={noteAperte.has(r.piattoId) && !r.note}
                       placeholder="Nota (es. senza cipolla)…"
                       className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2"
                       style={{ '--tw-ring-color': coloreP } as any} />
-                  ) : (
-                    <button type="button" onClick={() => setNoteAperte(prev => new Set(prev).add(r.piattoId))}
-                      className="text-xs font-semibold opacity-70 hover:opacity-100 transition-opacity" style={{ color: coloreP }}>
-                      + aggiungi nota
-                    </button>
                   )}
                 </div>
               ))}

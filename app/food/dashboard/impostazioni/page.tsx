@@ -396,83 +396,6 @@ function PrenotazioniStrumenti({ publicId }: { publicId: string }) {
   )
 }
 
-// ── PDF menu strumenti ────────────────────────────────────────────────────────
-function MenuPdfStrumenti() {
-  const [generando, setGenerando] = useState<string | null>(null)
-
-  async function scaricaPdf(tipo: 'locale' | 'asporto') {
-    setGenerando(tipo)
-    try {
-      const res = await fetch(`/api/menu/categorie?tipo=${tipo}`, { credentials: 'include' })
-      const data = await res.json()
-      const categorie: { nome: string; piatti: { nome: string; descrizione: string | null; prezzo: number; disponibile: boolean }[] }[] = data.categorie ?? []
-      const tipoLabel = tipo === 'locale' ? 'Menu Tavoli' : 'Menu Asporto & Delivery'
-
-      const righe = categorie.map(cat => `
-        <div class="categoria">
-          <div class="cat-header">${cat.nome}</div>
-          ${cat.piatti.filter(p => p.disponibile).map(p => `
-            <div class="piatto">
-              <div class="piatto-info">
-                <span class="piatto-nome">${p.nome}</span>
-                ${p.descrizione ? `<span class="piatto-desc">${p.descrizione}</span>` : ''}
-              </div>
-              <span class="piatto-prezzo">€${p.prezzo.toFixed(2)}</span>
-            </div>
-          `).join('')}
-        </div>
-      `).join('')
-
-      const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
-        <title>${tipoLabel}</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0 }
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1f36; background: #fff; padding: 40px; max-width: 700px; margin: 0 auto }
-          h1 { font-size: 26px; font-weight: 800; color: #1a1f36; margin-bottom: 4px }
-          .subtitle { font-size: 12px; color: #888; margin-bottom: 32px }
-          .categoria { margin-bottom: 28px }
-          .cat-header { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 6px; margin-bottom: 12px }
-          .piatto { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f0f0 }
-          .piatto-info { flex: 1 }
-          .piatto-nome { font-size: 14px; font-weight: 600; display: block }
-          .piatto-desc { font-size: 12px; color: #777; display: block; margin-top: 2px }
-          .piatto-prezzo { font-size: 14px; font-weight: 700; color: #4f46e5; white-space: nowrap }
-          @media print { body { padding: 20px } }
-        </style>
-      </head><body>
-        <h1>${tipoLabel}</h1>
-        <p class="subtitle">Generato il ${new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-        ${righe || '<p style="color:#999;font-size:14px">Nessun piatto disponibile</p>'}
-        <script>window.onload = () => { window.print() }<\/script>
-      </body></html>`
-
-      const w = window.open('', '_blank')
-      if (w) { w.document.write(html); w.document.close() }
-    } finally {
-      setGenerando(null)
-    }
-  }
-
-  return (
-    <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4 mb-4">
-      <div>
-        <p className="font-semibold text-ink-navy text-sm">Scarica PDF menu</p>
-        <p className="text-xs text-ink-navy/50 mt-1">Genera un PDF stampabile con tutti i piatti disponibili.</p>
-      </div>
-      <div className="flex gap-3 flex-wrap">
-        <button onClick={() => scaricaPdf('locale')} disabled={generando === 'locale'}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ink-navy text-white text-sm font-semibold hover:bg-ink-navy/80 disabled:opacity-50 transition-colors">
-          {generando === 'locale' ? 'Generazione...' : '↓ PDF Menu Tavoli'}
-        </button>
-        <button onClick={() => scaricaPdf('asporto')} disabled={generando === 'asporto'}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-electric-blue text-white text-sm font-semibold hover:bg-electric-blue/90 disabled:opacity-50 transition-colors">
-          {generando === 'asporto' ? 'Generazione...' : '↓ PDF Menu Asporto & Delivery'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 export default function Impostazioni() {
   const searchParams = useSearchParams()
   const [sezioneAttiva, setSezioneAttiva] = useState(() => searchParams.get('sezione') ?? 'generale')
@@ -925,8 +848,6 @@ export default function Impostazioni() {
 
           {sezioneAttiva === 'menu' && (
             <>
-              <MenuPdfStrumenti />
-
               {/* Aspetto menu */}
               <div className="bg-white border border-ink-navy/10 rounded-xl p-5 space-y-4">
                 <div className="flex items-start justify-between">

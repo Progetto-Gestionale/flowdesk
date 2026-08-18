@@ -11,7 +11,7 @@ interface Tavolo { id: string; numero: number; etichetta: string | null; posti: 
 interface Sala { id: string; nome: string; ordine: number; mapElementi?: string | null; _count?: { tavoli: number } }
 interface Gruppo { id: string; label: string; tavoli: { id: string; numero: number; etichetta: string | null }[] }
 interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null }
-interface Ordine { id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null; totale: number; note: string | null; status: string; createdAt: string; righe: RigaOrdine[] }
+interface Ordine { id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null; totale: number; note: string | null; status: string; createdAt: string; notatoPronto: boolean; righe: RigaOrdine[] }
 interface MapData { forma: 'quadrato' | 'cerchio'; colore: string; w: number; h: number; x: number; y: number }
 interface Elemento { id: string; tipo: string; label: string; x: number; y: number; w: number; h: number; colore: string }
 
@@ -744,15 +744,16 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   // vengono evidenziati nel modale così la cucina riconosce cosa ha appena segnato pronto.
   const [ordiniNuoviConto, setOrdiniNuoviConto] = useState<Set<string>>(new Set())
 
-  // Triangolini "ordine pronto": si nascondono una volta aperto il tavolo (flag lato client)
-  const [visti, setVisti] = useState<Set<string>>(new Set())
-  useEffect(() => { try { setVisti(new Set(JSON.parse(localStorage.getItem('tavoli_pronti_visti') ?? '[]'))) } catch {} }, [])
+  // Badge "!" ordine pronto: si nasconde una volta aperto il tavolo. L'acknowledgment è ora SUL SERVER
+  // (campo notatoPronto): aprendo il conto su un dispositivo il badge sparisce anche sugli altri al polling
+  // (prima era in localStorage → restava acceso sugli altri schermi).
   function segnaVisti(ids: string[]) {
     if (ids.length === 0) return
-    setVisti(prev => {
-      const n = new Set(prev); ids.forEach(i => n.add(i))
-      try { localStorage.setItem('tavoli_pronti_visti', JSON.stringify([...n])) } catch {}
-      return n
+    setOrdiniAperti(prev => prev.map(o => ids.includes(o.id) ? { ...o, notatoPronto: true } : o)) // ottimistico
+    fetch('/api/ordini/notato', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, campo: 'notatoPronto' }),
     })
   }
 
@@ -899,7 +900,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
   ordiniAperti.forEach(o => {
     const ids = o.gruppoId ? tavoliDiGruppo(o.gruppoId) : (o.tavoloId ? [o.tavoloId] : [])
     ids.forEach(id => tavoliOccupati.add(id))
-    if ((o.status === 'consegnato' || o.status === 'pronto') && !visti.has(o.id)) ids.forEach(id => tavoliPronti.add(id))
+    if ((o.status === 'consegnato' || o.status === 'pronto') && !o.notatoPronto) ids.forEach(id => tavoliPronti.add(id))
   })
 
   function toggleSelect(id: string) { setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]) }
@@ -1098,7 +1099,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
                 // Filtro !visti come per il pallino rosso: così il verde "Appena pronto" compare SOLO
                 // alla prima apertura e non ricompare riaprendo il conto.
                 const daVedere = ordiniAperti
-                  .filter(o => (o.status === 'consegnato' || o.status === 'pronto') && !visti.has(o.id) && (gid ? o.gruppoId === gid : (o.tavoloId === tid && !o.gruppoId)))
+                  .filter(o => (o.status === 'consegnato' || o.status === 'pronto') && !o.notatoPronto && (gid ? o.gruppoId === gid : (o.tavoloId === tid && !o.gruppoId)))
                   .map(o => o.id)
                 // Prima di segnarli visti, li memorizzo per evidenziarli nel conto (solo questa apertura).
                 setOrdiniNuoviConto(new Set(daVedere))

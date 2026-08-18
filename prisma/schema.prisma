@@ -120,6 +120,8 @@ model Ordine {
   createdAt   DateTime      @default(now())
   prontoAt    DateTime?     // quando l'ordine è marcato "pronto" in cucina (per tempo medio consegna)
   closedAt    DateTime?
+  notatoNuovo  Boolean      @default(false) // la board Ordini (cucina) ha notato l'arrivo: spegne il pulse rosso su TUTTI i dispositivi
+  notatoPronto Boolean      @default(false) // la mappa Tavoli ha notato l'ordine pronto (conto aperto): spegne il badge "!" su tutti i dispositivi
   user        User          @relation(fields: [userId], references: [id])
   tavoloRel   Tavolo?       @relation(fields: [tavoloId], references: [id])
   gruppoRel   GruppoTavoli? @relation(fields: [gruppoId], references: [id])
@@ -138,6 +140,8 @@ model RigaOrdine {
   prezzo   Float
   quantita Int
   note     String?
+  mandata  Int       @default(1)       // portata/coursing: 1=antipasti-primi, 2=secondi, 3=dolce. Default 1 = tutto insieme.
+  prontaAt DateTime?                    // quando la mandata di questa riga è marcata pronta in cucina (coursing per portata)
   pagata         Boolean @default(false) // deprecato: sostituito da quantitaPagata (tenuto per compatibilità)
   quantitaPagata Int     @default(0)     // quante unità di questa voce sono state pagate (0..quantita), aiuto cassa
   ordine   Ordine      @relation(fields: [ordineId], references: [id])
@@ -401,6 +405,7 @@ model Dipendente {
   email       String
   ruolo       String?
   fotoUrl     String?
+  ordine      Int                   @default(0) // ordine di visualizzazione scelto dal titolare (turni + lista)
   username    String?
   passwordHash String?
   mustChangePassword Boolean       @default(true)

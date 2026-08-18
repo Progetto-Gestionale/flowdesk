@@ -253,6 +253,13 @@ export default function StaffPage() {
     setTutteDisp(result)
   }
 
+  // Refresh unificato dopo ogni azione sui turni: aggiorna settimana, mese e disponibilità insieme,
+  // così le due viste (settimanale/mensile) non restano mai disallineate e, con più dispositivi,
+  // le modifiche fatte altrove si vedono al polling.
+  async function ricaricaTurni() {
+    await Promise.all([fetchAll(), fetchTurniMese(), fetchDisp(settimana)])
+  }
+
   useEffect(() => { fetchFabbisogno() }, [])
 
 
@@ -270,6 +277,17 @@ export default function StaffPage() {
     const t = setInterval(() => fetchPresenze(oggiStr, true), 15000)
     return () => clearInterval(t)
   }, [tab, presenzeData])
+  // Polling turni ogni 60s: tiene allineati più dispositivi senza refresh manuale.
+  // Silenzioso (aggiorna solo i dati visibili), quindi niente flash di caricamento.
+  useEffect(() => {
+    if (tab !== 'turni') return
+    const t = setInterval(() => {
+      fetchAll(); fetchDisp(settimana)
+      if (vistaTurni === 'mese') fetchTurniMese()
+    }, 60000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, vistaTurni, settimana, meseCal])
 
 
   async function apriDispModal(dip: Dipendente) {
@@ -352,6 +370,20 @@ export default function StaffPage() {
     }})
   }
 
+  // Riordino dipendenti: sposta di una posizione su/giù. L'ordine vale ovunque (lista + griglia turni).
+  async function spostaDipendente(index: number, dir: -1 | 1) {
+    const j = index + dir
+    if (j < 0 || j >= dipendenti.length) return
+    const next = [...dipendenti]
+    ;[next[index], next[j]] = [next[j], next[index]]
+    setDipendenti(next) // ottimistico: la lista si riordina subito
+    await fetch('/api/dipendenti/ordina', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: next.map(d => d.id) }),
+    })
+  }
+
   async function aggiungiTurno() {
     setSaving(true)
     await fetch('/api/turni', {
@@ -364,12 +396,12 @@ export default function StaffPage() {
     // Ricorda l'orario appena usato e riproponilo alla prossima aggiunta (giorno successivo).
     setUltimoOrarioTurno({ oraInizio: formTurno.oraInizio, oraFine: formTurno.oraFine })
     setFormTurno({ dipendenteId: '', data: '', oraInizio: formTurno.oraInizio, oraFine: formTurno.oraFine, ruolo: '', note: '' })
-    fetchAll()
+    ricaricaTurni()
   }
 
   async function eliminaTurno(id: string) {
     await fetch(`/api/turni/${id}`, { method: 'DELETE', credentials: 'include' })
-    fetchAll(); fetchTurniMese()
+    ricaricaTurni()
   }
 
   async function modificaTurno() {
@@ -382,7 +414,7 @@ export default function StaffPage() {
     })
     setSavingEdit(false)
     setEditTurno(null)
-    fetchAll(); fetchTurniMese()
+    ricaricaTurni()
   }
 
   function apriEditTurno(t: Turno) {
@@ -402,7 +434,7 @@ export default function StaffPage() {
     // Ricorda l'orario per riproporlo sul giorno successivo nella stessa sessione.
     setUltimoOrarioTurno({ oraInizio: cellModal.oraInizio, oraFine: cellModal.oraFine })
     setCellModal(null)
-    fetchAll()
+    ricaricaTurni()
   }
 
   async function aggiornaRichiesta(id: string, status: string) {
@@ -441,7 +473,7 @@ export default function StaffPage() {
     ))
     setCancellandoSett(false)
     setConfirmCancella(false)
-    await fetchAll()
+    await ricaricaTurni()
   }
 
   async function copiaDaSettimanaPrec() {
@@ -461,7 +493,7 @@ export default function StaffPage() {
       })
     }))
     setCopiando(false)
-    await fetchAll()
+    await ricaricaTurni()
   }
 
   async function inviaReminder() {
@@ -668,7 +700,7 @@ export default function StaffPage() {
                             <div key={t.id} className={`rounded-lg px-2 py-1 text-xs ${assenzaApp ? 'bg-red-100 text-red-700' : warnTurno ? 'bg-amber-100 text-amber-800' : COLORE_TURNO} relative`}
                               onClick={e => { e.stopPropagation(); apriEditTurno(t) }}
                               title={warnTitle}>
-                              <p className="font-semibold">{warnTurno ? '⚠ ' : ''}{t.oraInizio}–{t.oraFine}</p>
+                              <p className="font-semibold">{t.oraInizio}–{t.oraFine}</p>
                               {t.ruolo && <p className="opacity-75 truncate">{t.ruolo}</p>}
                               <button onClick={e => { e.stopPropagation(); eliminaTurno(t.id) }}
                                 className="absolute top-0.5 right-0.5 text-red-400 hover:text-red-600 text-xs leading-none opacity-0 group-hover:opacity-100">✕</button>
@@ -868,6 +900,14 @@ export default function StaffPage() {
                   </div>
                   <span className="text-ink-navy/20 group-hover:text-electric-blue/40 transition-colors text-lg shrink-0">›</span>
                 </Link>
+
+                {/* Riordino: sposta su/giù. L'ordine si riflette nella griglia turni. */}
+                <div className="flex flex-col shrink-0 -my-1">
+                  <button onClick={() => spostaDipendente(i, -1)} disabled={i === 0} aria-label="Sposta su"
+                    className="text-ink-navy/30 hover:text-electric-blue disabled:opacity-25 disabled:hover:text-ink-navy/30 leading-none px-1 py-0.5 text-[11px]">▲</button>
+                  <button onClick={() => spostaDipendente(i, 1)} disabled={i === dipendenti.length - 1} aria-label="Sposta giù"
+                    className="text-ink-navy/30 hover:text-electric-blue disabled:opacity-25 disabled:hover:text-ink-navy/30 leading-none px-1 py-0.5 text-[11px]">▼</button>
+                </div>
 
                 {/* Azioni rapide */}
                 <div className="flex gap-1.5 shrink-0">
@@ -1513,7 +1553,23 @@ export default function StaffPage() {
       )}
 
       {/* Modal modifica turno */}
-      {editTurno && (
+      {editTurno && (() => {
+        // Stesse info di disponibilità mostrate sulla cella vuota: così anche modificando un turno
+        // già assegnato vedi subito se quel giorno il dipendente è assente / non disponibile / ha un orario.
+        const dataStrEdit = toISO(new Date(editTurno.data))
+        const dispEdit = (tutteDisp.find(d => d.dipendenteId === editTurno.dipendente.id)?.giorni ?? []).find(gd => gd.data === dataStrEdit)
+        const hasDispEdit = tutteDisp.some(d => d.dipendenteId === editTurno.dipendente.id)
+        const noDispEdit = hasDispEdit && !dispEdit
+        const fuoriOrarioEdit = dispEdit?.oraInizio && (editForm.oraInizio < dispEdit.oraInizio || editForm.oraFine > dispEdit.oraFine)
+        const tipiAssenzaEdit = ['assenza', 'malattia', 'permesso', 'ferie']
+        const assenzaApprovataEdit = richieste.find(r =>
+          r.dipendente.id === editTurno.dipendente.id &&
+          r.status === 'approvata' &&
+          tipiAssenzaEdit.includes(r.tipo) &&
+          r.data && dataStrEdit >= r.data.split('T')[0] &&
+          dataStrEdit <= (r.dataFine ? r.dataFine.split('T')[0] : r.data.split('T')[0])
+        )
+        return (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-navy/40" onClick={() => setEditTurno(null)}>
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl p-6 w-full sm:max-w-sm mx-0 sm:mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
@@ -1526,6 +1582,21 @@ export default function StaffPage() {
               </div>
               <button onClick={() => setEditTurno(null)} className="text-ink-navy/35 hover:text-ink-navy/60 text-xl">✕</button>
             </div>
+            {assenzaApprovataEdit && (
+              <div className="mb-3 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700 font-medium">
+                {editTurno.dipendente.nome.split(' ')[0]} ha {assenzaApprovataEdit.tipo.replace('_', ' ')} approvata in questo giorno.
+              </div>
+            )}
+            {!assenzaApprovataEdit && noDispEdit && (
+              <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
+                Questo dipendente non ha dichiarato disponibilità per questo giorno.
+              </div>
+            )}
+            {!assenzaApprovataEdit && fuoriOrarioEdit && (
+              <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 font-medium">
+                Disponibile solo dalle {dispEdit?.oraInizio} alle {dispEdit?.oraFine}.
+              </div>
+            )}
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
@@ -1566,7 +1637,8 @@ export default function StaffPage() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {conferma && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConferma(null)}>

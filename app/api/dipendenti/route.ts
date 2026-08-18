@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
   const dipendenti = await prisma.dipendente.findMany({
     where: { userId: user.id },
-    orderBy: { nome: 'asc' },
+    orderBy: [{ ordine: 'asc' }, { nome: 'asc' }], // ordine scelto dal titolare, poi alfabetico come fallback
   })
   return NextResponse.json({ dipendenti })
 }

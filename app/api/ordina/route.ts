@@ -114,6 +114,7 @@ export async function POST(req: Request) {
         create: righe.map((r: any) => ({
           piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
           quantita: r.quantita, note: r.note ?? '',
+          mandata: Number.isFinite(r.mandata) && r.mandata >= 1 ? Math.floor(r.mandata) : 1,
         })),
       },
     },

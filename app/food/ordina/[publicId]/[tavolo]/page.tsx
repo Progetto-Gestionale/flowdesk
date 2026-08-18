@@ -24,7 +24,12 @@ interface RigaCarrello {
   prezzo: number
   quantita: number
   note: string
+  mandata: number
 }
+
+// Portate/coursing: 1ª antipasti-primi, 2ª secondi, 3ª dolce. Default 1ª = tutto insieme.
+const MANDATE = [1, 2, 3] as const
+const MANDATA_LABEL: Record<number, string> = { 1: '1ª', 2: '2ª', 3: '3ª' }
 
 export default function OrdinaPage() {
   const { publicId, tavolo } = useParams<{ publicId: string; tavolo: string }>()
@@ -65,7 +70,7 @@ export default function OrdinaPage() {
     setCarrello(prev => {
       const esiste = prev.find(r => r.piattoId === piatto.id)
       if (esiste) return prev.map(r => r.piattoId === piatto.id ? { ...r, quantita: r.quantita + 1 } : r)
-      return [...prev, { piattoId: piatto.id, nome: piatto.nome, prezzo: piatto.prezzo, quantita: 1, note: '' }]
+      return [...prev, { piattoId: piatto.id, nome: piatto.nome, prezzo: piatto.prezzo, quantita: 1, note: '', mandata: 1 }]
     })
   }
 
@@ -81,6 +86,11 @@ export default function OrdinaPage() {
   function quantitaInCarrello(piattoId: string) {
     return carrello.find(r => r.piattoId === piattoId)?.quantita ?? 0
   }
+
+  function setMandata(piattoId: string, mandata: number) {
+    setCarrello(prev => prev.map(r => r.piattoId === piattoId ? { ...r, mandata } : r))
+  }
+  const usaMandate = carrello.some(r => r.mandata > 1)
 
   const totale = carrello.reduce((s, r) => s + r.prezzo * r.quantita, 0)
   const totaleArticoli = carrello.reduce((s, r) => s + r.quantita, 0)
@@ -255,22 +265,42 @@ export default function OrdinaPage() {
               <button onClick={() => setVistaCarrello(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
             <div className="overflow-y-auto flex-1 px-5 py-3 space-y-3">
+              {usaMandate && (
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                  🍽️ Scegli quando vuoi ogni portata: la 2ª mandata parte in cucina dopo la 1ª.
+                </p>
+              )}
               {carrello.map(r => (
-                <div key={r.piattoId} className="flex items-center justify-between gap-3">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 text-sm">{r.nome}</p>
-                    <p className="text-gray-500 text-xs">€{r.prezzo.toFixed(2)} cad.</p>
+                <div key={r.piattoId} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900 text-sm">{r.nome}</p>
+                      <p className="text-gray-500 text-xs">€{r.prezzo.toFixed(2)} cad.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => rimuoviDalCarrello(r.piattoId)}
+                        className="w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold"
+                        style={{ borderColor: coloreP, color: coloreP }}>−</button>
+                      <span className="font-bold text-gray-900 w-4 text-center text-sm">{r.quantita}</span>
+                      <button onClick={() => aggiungiAlCarrello({ id: r.piattoId, nome: r.nome, prezzo: r.prezzo, descrizione: null, immagineUrl: null })}
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold"
+                        style={{ backgroundColor: coloreP }}>+</button>
+                    </div>
+                    <p className="font-bold text-gray-900 text-sm w-14 text-right">€{(r.prezzo * r.quantita).toFixed(2)}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => rimuoviDalCarrello(r.piattoId)}
-                      className="w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold"
-                      style={{ borderColor: coloreP, color: coloreP }}>−</button>
-                    <span className="font-bold text-gray-900 w-4 text-center text-sm">{r.quantita}</span>
-                    <button onClick={() => aggiungiAlCarrello({ id: r.piattoId, nome: r.nome, prezzo: r.prezzo, descrizione: null, immagineUrl: null })}
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold"
-                      style={{ backgroundColor: coloreP }}>+</button>
+                  {/* Mandata: 1ª = insieme, 2ª/3ª = portate successive */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Mandata</span>
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                      {MANDATE.map(m => (
+                        <button key={m} type="button" onClick={() => setMandata(r.piattoId, m)}
+                          className="px-2.5 py-1 text-xs font-bold transition-colors"
+                          style={r.mandata === m ? { backgroundColor: coloreP, color: '#fff' } : { color: '#6b7280' }}>
+                          {MANDATA_LABEL[m]}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <p className="font-bold text-gray-900 text-sm w-14 text-right">€{(r.prezzo * r.quantita).toFixed(2)}</p>
                 </div>
               ))}
               <div className="pt-3">

@@ -11,7 +11,12 @@ interface RigaOrdine {
   prezzo: number
   quantita: number
   note: string
+  mandata: number
+  prontaAt: string | null
 }
+
+// Portate/coursing: 1ª, 2ª, 3ª. Le righe con la stessa mandata escono e si segnano pronte insieme.
+const MANDATA_LABEL: Record<number, string> = { 1: '1ª', 2: '2ª', 3: '3ª' }
 
 interface TavoloDb {
   id: string
@@ -32,6 +37,7 @@ interface Ordine {
   note: string | null
   createdAt: string
   closedAt: string | null
+  notatoNuovo: boolean
   righe: RigaOrdine[]
 }
 
@@ -92,24 +98,21 @@ export default function OrdiniPage() {
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [savingBlocco, setSavingBlocco] = useState(false)
-  // Ordini "nuovi" già notati dalla cucina: mostrano il bannerino rosso finché non ci si clicca sopra.
-  // Persistito in localStorage così il banner non ricompare a ogni polling/refresh.
-  const [ordiniVisti, setOrdiniVisti] = useState<Set<string>>(() => new Set())
-  useEffect(() => {
-    try { const raw = localStorage.getItem('food:ordini-visti'); if (raw) setOrdiniVisti(new Set(JSON.parse(raw))) } catch {}
-  }, [])
+  // Ordini "nuovi" già notati dalla cucina: mostrano il bannerino rosso pulsante finché non ci si clicca.
+  // L'acknowledgment è ora SUL SERVER (campo notatoNuovo): così se un dispositivo lo nota, il pulse
+  // si spegne anche sugli altri al prossimo polling (prima era in localStorage → solo su quel device).
   function segnaVisto(id: string) {
-    setOrdiniVisti(prev => {
-      if (prev.has(id)) return prev
-      const next = new Set(prev); next.add(id)
-      try { localStorage.setItem('food:ordini-visti', JSON.stringify([...next])) } catch {}
-      return next
+    setOrdini(prev => prev.map(o => o.id === id && !o.notatoNuovo ? { ...o, notatoNuovo: true } : o)) // ottimistico
+    fetch(`/api/ordini/${id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notatoNuovo: true }),
     })
   }
-  // Un ordine è "nuovo da notare" finché è appena arrivato e non è ancora stato cliccato.
+  // Un ordine è "nuovo da notare" finché è appena arrivato e non è ancora stato notato.
   // Gli ordini nascono 'nuovo' (cliente da QR / inserimento manuale) oppure 'aperto' (presi dal
   // cameriere, tipico dei tavoli): entrambi sono "nuovi in cucina" finché non li si segna pronti.
-  const isNuovoDaNotare = (o: Ordine) => (o.status === 'nuovo' || o.status === 'aperto') && !ordiniVisti.has(o.id)
+  const isNuovoDaNotare = (o: Ordine) => (o.status === 'nuovo' || o.status === 'aperto') && !o.notatoNuovo
 
   async function fetchOrdini() {
     const res = await fetch('/api/ordini?oggi=1&futuri=1', { credentials: 'include' })
@@ -183,6 +186,24 @@ export default function OrdiniPage() {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nuovoStatus }),
+    })
+  }
+
+  // Coursing: segna pronta (o annulla) una singola mandata di un ordine.
+  // Se dopo l'update tutte le righe sono pronte, l'ordine si conclude (esce dagli attivi).
+  function marcaMandata(o: Ordine, mandata: number, annulla: boolean) {
+    const now = new Date().toISOString()
+    setOrdini(prev => prev.map(x => {
+      if (x.id !== o.id) return x
+      const righe = x.righe.map(r => r.mandata === mandata ? { ...r, prontaAt: annulla ? null : now } : r)
+      const tuttePronte = righe.length > 0 && righe.every(r => r.prontaAt != null)
+      const status = tuttePronte ? 'consegnato' : (annulla && x.status === 'consegnato' ? 'aperto' : x.status)
+      return { ...x, righe, status }
+    }))
+    fetch(`/api/ordini/${o.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mandataPronta: mandata, annulla }),
     })
   }
 
@@ -392,6 +413,21 @@ export default function OrdiniPage() {
     const nome = ci.nome || 'Ordine online'
     const nuovo = isNuovoDaNotare(o)
 
+    // Coursing: l'ordine è a più mandate se le righe usano più di un numero di mandata.
+    const mandate = [...new Set(o.righe.map(r => r.mandata ?? 1))].sort((a, b) => a - b)
+    const isMulti = mandate.length > 1
+
+    // Riga singola (riusata da vista normale e per-mandata)
+    const RigaVoce = ({ r, spenta }: { r: RigaOrdine; spenta?: boolean }) => (
+      <div className={`flex items-start gap-1.5 px-3 py-1.5 ${spenta ? 'opacity-40' : ''}`}>
+        <span className="text-sm font-extrabold text-ink-navy shrink-0">{r.quantita}×</span>
+        <div className="min-w-0">
+          <span className={`text-sm font-bold text-ink-navy break-words ${spenta ? 'line-through' : ''}`}>{r.nome}</span>
+          {r.note && <span className="ml-1.5 text-[11px] font-semibold text-red-600 break-words">— {r.note}</span>}
+        </div>
+      </div>
+    )
+
     return (
       <div
         onClick={nuovo ? () => segnaVisto(o.id) : undefined}
@@ -411,8 +447,11 @@ export default function OrdiniPage() {
             {isTavolo
               ? <span className="text-xs font-semibold text-ink-navy/50 truncate">{oraArrivo} · €{o.totale.toFixed(2)}</span>
               : <span className="text-sm font-bold text-ink-navy truncate">{nome}</span>}
-            {/* i tasti azione restano isolati: cliccarli NON conta come "notato" (stopPropagation) */}
-            <span onClick={e => e.stopPropagation()} className="shrink-0"><AzioneOrdine o={o} /></span>
+            {/* Multi-mandata attivo: niente "Pronto" globale, comandano i tasti per mandata.
+                Concluso: AzioneOrdine mostra "Elimina". i tasti azione non contano come "notato" (stopPropagation). */}
+            {(!isMulti || isDone) && (
+              <span onClick={e => e.stopPropagation()} className="shrink-0"><AzioneOrdine o={o} /></span>
+            )}
           </div>
           {!isTavolo && (
             <>
@@ -426,18 +465,41 @@ export default function OrdiniPage() {
             </>
           )}
         </div>
-        <div className="divide-y divide-ink-navy/6 flex-1">
-          {o.righe.map(r => (
-            <div key={r.id} className="flex items-start gap-1.5 px-3 py-1.5">
-              <span className="text-sm font-extrabold text-ink-navy shrink-0">{r.quantita}×</span>
-              <div className="min-w-0">
-                <span className="text-sm font-bold text-ink-navy break-words">{r.nome}</span>
-                {r.note && <span className="ml-1.5 text-[11px] font-semibold text-red-600 break-words">— {r.note}</span>}
-              </div>
-            </div>
-          ))}
-          {o.righe.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
-        </div>
+        {isMulti ? (
+          /* Coursing: una sezione impilata per ogni mandata (1ª sopra, poi 2ª, poi 3ª) */
+          <div className="flex-1">
+            {mandate.map(m => {
+              const righeM = o.righe.filter(r => (r.mandata ?? 1) === m)
+              const prontaM = righeM.every(r => r.prontaAt != null)
+              return (
+                <div key={m} className="border-b border-ink-navy/8 last:border-0">
+                  <div className={`flex items-center justify-between gap-2 px-3 py-1 ${prontaM ? 'bg-green-50' : 'bg-ink-navy/[0.04]'}`}>
+                    <span className={`text-[11px] font-bold uppercase tracking-wide ${prontaM ? 'text-green-600' : 'text-ink-navy/55'}`}>
+                      {MANDATA_LABEL[m] ?? `${m}ª`} mandata
+                    </span>
+                    {!isDone && (
+                      <button
+                        onClick={e => { e.stopPropagation(); marcaMandata(o, m, prontaM) }}
+                        className={`text-[11px] font-bold rounded-lg transition-colors shrink-0 ${prontaM
+                          ? 'text-green-600 hover:text-green-700 px-1.5 py-0.5'
+                          : 'px-2 py-0.5 bg-ink-navy text-white hover:bg-ink-navy/80'}`}>
+                        {prontaM ? '✓ Pronta' : 'Pronta'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="divide-y divide-ink-navy/6">
+                    {righeM.map(r => <RigaVoce key={r.id} r={r} spenta={prontaM} />)}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="divide-y divide-ink-navy/6 flex-1">
+            {o.righe.map(r => <RigaVoce key={r.id} r={r} />)}
+            {o.righe.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
+          </div>
+        )}
         {o.note && <p className="px-3 py-1.5 text-xs font-bold text-red-600 break-words border-t border-red-200 bg-red-50/60">{o.note}</p>}
       </div>
     )
