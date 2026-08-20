@@ -51,20 +51,29 @@ export async function GET(req: Request) {
       quantita: true,
       prezzo: true,
       piattoId: true,
+      reparto: true, // snapshot al momento dell'ordine: robusto anche per piatti poi eliminati
       piatto: {
         select: {
-          categoria: { select: { nome: true, ordine: true } },
+          categoria: { select: { nome: true, ordine: true, reparto: true } },
         },
       },
     },
   })
 
+  // Reparti considerati "bevande": esclusi dalla classifica top/bottom piatti (le bevande non sono
+  // piatti preparati in cucina). Restano invece nella classifica per categoria.
+  const REPARTI_BEVANDE = ['Bar']
+
   // Aggrega per piatto
-  const piattoMap: Record<string, { nome: string; quantita: number; incasso: number; categoria: string; categoriaOrdine: number }> = {}
+  const piattoMap: Record<string, { nome: string; quantita: number; incasso: number; categoria: string; categoriaOrdine: number; bevanda: boolean }> = {}
   for (const r of righe) {
     // Piatti eliminati hanno piattoId null: raggruppa per nome così le vendite
     // storiche restano distinte e non finiscono tutte in un'unica riga.
     const key = r.piattoId ?? `nome:${r.nome}`
+    // Reparto della riga: prima lo snapshot (regge anche se il piatto è stato eliminato),
+    // poi il reparto attuale della categoria come fallback.
+    const rep = r.reparto ?? r.piatto?.categoria?.reparto ?? null
+    const bev = !!rep && REPARTI_BEVANDE.includes(rep)
     if (!piattoMap[key]) {
       piattoMap[key] = {
         nome: r.nome,
@@ -72,15 +81,20 @@ export async function GET(req: Request) {
         incasso: 0,
         categoria: r.piatto?.categoria?.nome ?? 'Altro',
         categoriaOrdine: r.piatto?.categoria?.ordine ?? 999,
+        bevanda: false,
       }
     }
     piattoMap[key].quantita += r.quantita
     piattoMap[key].incasso += r.prezzo * r.quantita
+    if (bev) piattoMap[key].bevanda = true
   }
 
   const piatti = Object.entries(piattoMap)
     .map(([id, v]) => ({ id, ...v }))
     .sort((a, b) => b.quantita - a.quantita)
+
+  // Classifica migliori/peggiori: solo piatti, niente bevande (reparto Bar).
+  const piattiClassifica = piatti.filter(p => !p.bevanda)
 
   // Raggruppa per categoria (ordinata)
   const catMap: Record<string, { nome: string; ordine: number; piatti: typeof piatti }> = {}
@@ -90,8 +104,8 @@ export async function GET(req: Request) {
   }
   const categorie = Object.values(catMap).sort((a, b) => a.ordine - b.ordine)
 
-  const top5 = piatti.slice(0, 5)
-  const bottom5 = piatti.length > 5 ? piatti.slice(-5).reverse() : []
+  const top5 = piattiClassifica.slice(0, 5)
+  const bottom5 = piattiClassifica.length > 5 ? piattiClassifica.slice(-5).reverse() : []
 
   return NextResponse.json({ top5, bottom5, categorie, totale: piatti.length })
 }

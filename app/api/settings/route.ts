@@ -22,6 +22,7 @@ export async function GET(req: Request) {
       infoPratiche: user.infoPratiche,
       faq: user.faq,
       turniServizio: user.turniServizio,
+      reparti: user.reparti,
       fabbisognoStaff: user.fabbisognoStaff,
       mapElementi: user.mapElementi,
       qrTimbraturaFisso: user.qrTimbraturaFisso,
@@ -41,7 +42,7 @@ export async function PATCH(req: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
     const data = await req.json()
-    const allowed = ['nomeLocale', 'indirizzo', 'telefono', 'sitoWeb', 'descrizioneBot', 'maxCoperti', 'orariApertura', 'publicId', 'serviziOfferti', 'regolePrenotazione', 'menuOfferta', 'pagamenti', 'infoPratiche', 'faq', 'menuLogoUrl', 'menuColoreP', 'menuColoreS', 'turniServizio', 'fabbisognoStaff', 'mapElementi', 'qrTimbraturaFisso']
+    const allowed = ['nomeLocale', 'indirizzo', 'telefono', 'sitoWeb', 'descrizioneBot', 'maxCoperti', 'orariApertura', 'publicId', 'serviziOfferti', 'regolePrenotazione', 'menuOfferta', 'pagamenti', 'infoPratiche', 'faq', 'menuLogoUrl', 'menuColoreP', 'menuColoreS', 'turniServizio', 'reparti', 'fabbisognoStaff', 'mapElementi', 'qrTimbraturaFisso']
     const update: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in data) update[key] = data[key]

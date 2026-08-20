@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { repartoPerPiatti } from '@/lib/reparti'
 
 // POST pubblico — il cameriere invia un ordine per uno o più tavoli.
 // body: { publicId, tavoli: number[], righe, note }
@@ -78,6 +79,7 @@ export async function POST(req: Request) {
 
     const totale = righe.reduce((sum: number, r: any) => sum + r.prezzo * r.quantita, 0)
     const tavoloId = tavoliRecord[0].id
+    const repMap = await repartoPerPiatti(righe.map((r: any) => r.piattoId))
 
     const ordine = await prisma.ordine.create({
       data: {
@@ -94,6 +96,7 @@ export async function POST(req: Request) {
             piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
             quantita: r.quantita, note: r.note ?? '',
             mandata: Number.isFinite(r.mandata) && r.mandata >= 1 ? Math.floor(r.mandata) : 1,
+            reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
           })),
         },
       },

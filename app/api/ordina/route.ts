@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { repartoPerPiatti } from '@/lib/reparti'
 
 // GET — menu
 export async function GET(req: Request) {
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
   // allo stesso tavolo/gruppo. Il "conto" del tavolo = tutti gli Ordini aperti di quel
   // tavolo/gruppo; ciascun Ordine (ogni invio, es. da telefoni diversi) è un sottogruppo
   // pagabile singolarmente. Niente più fusione delle righe in un unico Ordine.
+  const repMap = await repartoPerPiatti(righe.map((r: any) => r.piattoId))
   const ordine = await prisma.ordine.create({
     data: {
       userId: user.id,
@@ -115,6 +117,7 @@ export async function POST(req: Request) {
           piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
           quantita: r.quantita, note: r.note ?? '',
           mandata: Number.isFinite(r.mandata) && r.mandata >= 1 ? Math.floor(r.mandata) : 1,
+          reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
         })),
       },
     },

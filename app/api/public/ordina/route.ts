@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { repartoPerPiatti } from '@/lib/reparti'
 
 export async function POST(req: Request) {
  try {
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
   })
 
   // Trova o crea i piatti — le righe dal menu pubblico hanno già piattoId
+  const repMap = await repartoPerPiatti(righe.map((r: { piattoId: string }) => r.piattoId))
   const ordine = await prisma.ordine.create({
     data: {
       userId: user.id,
@@ -57,6 +59,7 @@ export async function POST(req: Request) {
           nome: r.nome,
           prezzo: r.prezzo,
           quantita: r.quantita,
+          reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
         })),
       },
     },

@@ -22,7 +22,14 @@ interface Categoria {
   id: string
   nome: string
   ordine: number
+  reparto: string | null
   piatti: Piatto[]
+}
+
+const DEFAULT_REPARTI = ['Cucina', 'Bar']
+function parseReparti(json?: string | null): string[] {
+  if (!json) return [...DEFAULT_REPARTI]
+  try { const a = JSON.parse(json); const l = Array.isArray(a) ? a.map((x: unknown) => String(x).trim()).filter(Boolean) : []; return l.length ? l : [...DEFAULT_REPARTI] } catch { return [...DEFAULT_REPARTI] }
 }
 
 // ── Reusable menu editor (locale | asporto) ──────────────────────────────────
@@ -32,6 +39,9 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   const [modalCat, setModalCat] = useState(false)
   const [nomeCat, setNomeCat] = useState('')
   const [editCat, setEditCat] = useState<Categoria | null>(null)
+  // Reparti / centri di produzione del locale (Cucina, Bar, Pizzeria…) e reparto scelto per la categoria.
+  const [reparti, setReparti] = useState<string[]>(DEFAULT_REPARTI)
+  const [repartoCat, setRepartoCat] = useState<string>('Cucina')
   const [modalPiatto, setModalPiatto] = useState<{ categoriaId: string } | null>(null)
   const [editPiatto, setEditPiatto] = useState<Piatto & { categoriaId: string } | null>(null)
   const [formPiatto, setFormPiatto] = useState<{ nome: string; descrizione: string; prezzo: string; immagineUrl: string; allergeni: string[] }>({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] })
@@ -81,6 +91,21 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo])
 
+  // Carica i reparti del locale (per il menu a tendina nella categoria).
+  useEffect(() => {
+    fetch('/api/settings', { credentials: 'include' }).then(r => r.json()).then(s => setReparti(parseReparti(s.reparti))).catch(() => {})
+  }, [])
+
+  // Salva la lista reparti sul locale (quando se ne crea uno nuovo al volo).
+  async function salvaReparti(nuovi: string[]) {
+    setReparti(nuovi)
+    await fetch('/api/settings', {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reparti: JSON.stringify(nuovi) }),
+    }).catch(() => {})
+  }
+
   async function salvaCategoria() {
     if (!nomeCat.trim()) return
     setSaving(true)
@@ -89,14 +114,14 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
         const res = await fetch(`/api/menu/categorie/${editCat.id}`, {
           method: 'PATCH', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nome: nomeCat }),
+          body: JSON.stringify({ nome: nomeCat, reparto: repartoCat }),
         })
         if (!res.ok) throw new Error(`PATCH failed: ${res.status}`)
       } else {
         const res = await fetch('/api/menu/categorie', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nome: nomeCat, tipo }),
+          body: JSON.stringify({ nome: nomeCat, tipo, reparto: repartoCat }),
         })
         if (!res.ok) throw new Error(`POST failed: ${res.status}`)
       }
@@ -186,7 +211,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
-          <button onClick={() => { setEditCat(null); setNomeCat(''); setModalCat(true) }}
+          <button onClick={() => { setEditCat(null); setNomeCat(''); setRepartoCat(reparti[0] ?? 'Cucina'); setModalCat(true) }}
             className="bg-electric-blue text-white px-4 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
             + Categoria
           </button>
@@ -212,7 +237,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
           <h3 className="text-lg font-semibold text-ink-navy">Nessuna categoria</h3>
           <p className="text-ink-navy/50 text-sm mt-2">Crea una categoria per iniziare ad aggiungere piatti</p>
           <div className="flex gap-2 justify-center mt-4">
-            <button onClick={() => { setEditCat(null); setNomeCat(''); setModalCat(true) }}
+            <button onClick={() => { setEditCat(null); setNomeCat(''); setRepartoCat(reparti[0] ?? 'Cucina'); setModalCat(true) }}
               className="bg-electric-blue text-white px-5 py-2 rounded-xl font-medium hover:bg-electric-blue/90 text-sm">
               + Aggiungi categoria
             </button>
@@ -228,11 +253,12 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
         categorie.map(cat => (
           <div key={cat.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-ink-navy/8 bg-mist">
-              <h2 className="font-bold text-ink-navy">{cat.nome}
-                <span className="ml-2 text-xs font-normal text-ink-navy/35">{cat.piatti.length} piatt{cat.piatti.length === 1 ? 'o' : 'i'}</span>
+              <h2 className="font-bold text-ink-navy flex items-center gap-2">{cat.nome}
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-electric-blue/10 text-electric-blue">{cat.reparto || 'Cucina'}</span>
+                <span className="text-xs font-normal text-ink-navy/35">{cat.piatti.length} piatt{cat.piatti.length === 1 ? 'o' : 'i'}</span>
               </h2>
               <div className="flex gap-2">
-                <button onClick={() => { setEditCat(cat); setNomeCat(cat.nome); setModalCat(true) }}
+                <button onClick={() => { setEditCat(cat); setNomeCat(cat.nome); setRepartoCat(cat.reparto || reparti[0] || 'Cucina'); setModalCat(true) }}
                   className="text-xs px-2.5 py-1 rounded-lg text-ink-navy/50 hover:bg-ink-navy/10 transition-colors">Rinomina</button>
                 <button onClick={() => setModalPiatto({ categoriaId: cat.id })}
                   className="text-xs px-3 py-1 rounded-lg bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/15 font-medium transition-colors">+ Piatto</button>
@@ -292,11 +318,31 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
       {modalCat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-lg font-bold text-ink-navy">{editCat ? 'Rinomina categoria' : 'Nuova categoria'}</h3>
+            <h3 className="text-lg font-bold text-ink-navy">{editCat ? 'Modifica categoria' : 'Nuova categoria'}</h3>
             <input value={nomeCat} onChange={e => setNomeCat(e.target.value)}
               placeholder="es. Antipasti, Primi, Dolci..."
               className="w-full border border-ink-navy/15 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue"
               autoFocus onKeyDown={e => e.key === 'Enter' && nomeCat.trim() && salvaCategoria()} />
+            <div>
+              <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Reparto (dove si prepara)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {reparti.map(r => (
+                  <button key={r} type="button" onClick={() => setRepartoCat(r)}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${repartoCat === r ? 'bg-electric-blue text-white border-electric-blue' : 'border-ink-navy/15 text-ink-navy/60 hover:bg-mist'}`}>
+                    {r}
+                  </button>
+                ))}
+                <button type="button" onClick={() => {
+                  const nome = prompt('Nome del nuovo reparto (es. Pizzeria, Griglia)')?.trim()
+                  if (!nome) return
+                  if (!reparti.includes(nome)) salvaReparti([...reparti, nome])
+                  setRepartoCat(nome)
+                }} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-dashed border-electric-blue/40 text-electric-blue hover:bg-electric-blue/5">
+                  + Nuovo reparto
+                </button>
+              </div>
+              <p className="text-[11px] text-ink-navy/40 mt-1.5">Es. le bevande al Bar, i piatti in Cucina. Instrada gli ordini alla postazione giusta.</p>
+            </div>
             <div className="flex gap-3">
               <button onClick={() => { setModalCat(false); setNomeCat(''); setEditCat(null) }}
                 className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>

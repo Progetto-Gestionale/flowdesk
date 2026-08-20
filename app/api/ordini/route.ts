@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
+import { repartoPerPiatti } from '@/lib/reparti'
 
 export async function GET(req: Request) {
   const user = await getAuthUser()
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
     ora: ora || null,
   })
 
+  const repMap = await repartoPerPiatti(righe.map((r: { piattoId?: string | null }) => r.piattoId))
   const ordine = await prisma.ordine.create({
     data: {
       userId: user.id,
@@ -91,6 +93,7 @@ export async function POST(req: Request) {
           prezzo: r.prezzo,
           quantita: r.quantita,
           note: r.note ?? '',
+          reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
         })),
       },
     },

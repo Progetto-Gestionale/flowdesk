@@ -56,6 +56,7 @@ model User {
   menuColoreP        String?           @default("#4f46e5")
   menuColoreS        String?           @default("#ffffff")
   turniServizio      String?           // JSON: [{id, nome, oraInizio, oraFine}]
+  reparti            String?           // JSON: string[] reparti/centri di produzione (es. ["Cucina","Bar"]); null = default Cucina/Bar
   fabbisognoStaff   String?           // JSON: [{giorno: 0-6, ruolo: string, persone: number, oraInizio: string, oraFine: string}]
   mapElementi        String?           // JSON: [{id, tipo, label, x, y, w, h, colore}]
   blockAsporto       Boolean           @default(false)
@@ -78,6 +79,7 @@ model MenuCategoria {
   nome      String
   ordine    Int          @default(0)
   tipo      String       @default("locale") // "locale" | "asporto"
+  reparto   String?      // reparto/centro di produzione a cui vanno i piatti (Cucina, Bar, Pizzeria…); null = Cucina
   createdAt DateTime     @default(now())
   user      User         @relation(fields: [userId], references: [id])
   piatti    MenuPiatto[]
@@ -141,6 +143,7 @@ model RigaOrdine {
   quantita Int
   note     String?
   mandata  Int       @default(1)       // portata/coursing: 1=antipasti-primi, 2=secondi, 3=dolce. Default 1 = tutto insieme.
+  reparto  String?                     // snapshot del reparto (Cucina/Bar/…) al momento dell'ordine → instradamento coerente anche per ordini passati
   prontaAt DateTime?                    // quando la mandata di questa riga è marcata pronta in cucina (coursing per portata)
   pagata         Boolean @default(false) // deprecato: sostituito da quantitaPagata (tenuto per compatibilità)
   quantitaPagata Int     @default(0)     // quante unità di questa voce sono state pagate (0..quantita), aiuto cassa

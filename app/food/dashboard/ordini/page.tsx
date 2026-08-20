@@ -12,11 +12,19 @@ interface RigaOrdine {
   quantita: number
   note: string
   mandata: number
+  reparto: string | null
   prontaAt: string | null
 }
 
 // Portate/coursing: 1ª, 2ª, 3ª. Le righe con la stessa mandata escono e si segnano pronte insieme.
 const MANDATA_LABEL: Record<number, string> = { 1: '1ª', 2: '2ª', 3: '3ª' }
+
+// Reparti / centri di produzione. La board può filtrare per reparto (la cucina vede i piatti, il bar le bevande).
+const DEFAULT_REPARTI = ['Cucina', 'Bar']
+function parseReparti(json?: string | null): string[] {
+  if (!json) return [...DEFAULT_REPARTI]
+  try { const a = JSON.parse(json); const l = Array.isArray(a) ? a.map((x: unknown) => String(x).trim()).filter(Boolean) : []; return l.length ? l : [...DEFAULT_REPARTI] } catch { return [...DEFAULT_REPARTI] }
+}
 
 interface TavoloDb {
   id: string
@@ -95,6 +103,9 @@ export default function OrdiniPage() {
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [vista, setVista] = useState<'attuali' | 'passati'>('attuali')
   const [filtroStorico, setFiltroStorico] = useState<'tavolo' | 'asporto' | 'delivery'>('tavolo')
+  // Instradamento per reparto: 'tutti' = tutto insieme, oppure un reparto specifico (Cucina/Bar/…).
+  const [reparti, setReparti] = useState<string[]>(DEFAULT_REPARTI)
+  const [repartoAttivo, setRepartoAttivo] = useState<string>('tutti')
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [savingBlocco, setSavingBlocco] = useState(false)
@@ -150,6 +161,10 @@ export default function OrdiniPage() {
     const data = await res.json().catch(() => ({}))
     setAppuntamenti(data.appuntamenti ?? [])
   }
+
+  useEffect(() => {
+    fetch('/api/settings', { credentials: 'include' }).then(r => r.json()).then(s => setReparti(parseReparti(s.reparti))).catch(() => {})
+  }, [])
 
   useEffect(() => {
     // Idrata subito dall'ultimo dato in cache (se c'è): niente "Caricamento…" al ritorno.
@@ -261,10 +276,18 @@ export default function OrdiniPage() {
   // Solo gli ordini della serata corrente arrivano in board (i futuri sono altrove, i passati già gestiti/scaduti).
   const ordiniBoard = ordini.filter(o => serataDiOrdine(o) === oggi)
 
-  const ordiniAttivi = ordiniBoard.filter(o => !isDoneOrdine(o))
-  const ordiniStorico = ordiniBoard.filter(o => isDoneOrdine(o))
-  const appAttivi = appOggi.filter(a => !isDoneApp(a))
-  const appStorico = appOggi.filter(a => isDoneApp(a))
+  // Instradamento per reparto. Le righe senza reparto (ordini vecchi) ricadono nel reparto principale,
+  // così gli ordini passati restano coerenti. Il filtro vale sia per "Attuali" sia per "Passati".
+  const repartoPrincipale = reparti[0] ?? 'Cucina'
+  const repartoDiRiga = (r: RigaOrdine) => r.reparto || repartoPrincipale
+  const filtroReparto = repartoAttivo !== 'tutti'
+  const ordineNelReparto = (o: Ordine) => !filtroReparto || o.righe.some(r => repartoDiRiga(r) === repartoAttivo)
+
+  const ordiniAttivi = ordiniBoard.filter(o => !isDoneOrdine(o) && ordineNelReparto(o))
+  const ordiniStorico = ordiniBoard.filter(o => isDoneOrdine(o) && ordineNelReparto(o))
+  // Le prenotazioni online non hanno voci/reparto: con un reparto specifico attivo non si mostrano.
+  const appAttivi = (filtroReparto ? [] : appOggi).filter(a => !isDoneApp(a))
+  const appStorico = (filtroReparto ? [] : appOggi).filter(a => isDoneApp(a))
 
   const totaleAttivi = ordiniAttivi.length + appAttivi.length
   const totaleStorico = ordiniStorico.length + appStorico.length
@@ -413,9 +436,12 @@ export default function OrdiniPage() {
     const nome = ci.nome || 'Ordine online'
     const nuovo = isNuovoDaNotare(o)
 
+    // Con un reparto attivo mostro SOLO le sue voci (instradamento: la cucina vede i piatti, il bar le bevande).
+    const righeVisibili = filtroReparto ? o.righe.filter(r => repartoDiRiga(r) === repartoAttivo) : o.righe
+
     // Coursing: la vista a mandate si usa se ci sono più mandate OPPURE se l'unica mandata non è la 1ª
     // (così anche un singolo piatto messo in 2ª/3ª mostra la sua mandata).
-    const mandate = [...new Set(o.righe.map(r => r.mandata ?? 1))].sort((a, b) => a - b)
+    const mandate = [...new Set(righeVisibili.map(r => r.mandata ?? 1))].sort((a, b) => a - b)
     const isMulti = mandate.length > 1 || (mandate[0] ?? 1) > 1
 
     // Riga singola (riusata da vista normale e per-mandata)
@@ -450,7 +476,7 @@ export default function OrdiniPage() {
               : <span className="text-sm font-bold text-ink-navy truncate">{nome}</span>}
             {/* Multi-mandata attivo: niente "Pronto" globale, comandano i tasti per mandata.
                 Concluso: AzioneOrdine mostra "Elimina". i tasti azione non contano come "notato" (stopPropagation). */}
-            {(!isMulti || isDone) && (
+            {(!isMulti || isDone) && !filtroReparto && (
               <span onClick={e => e.stopPropagation()} className="shrink-0"><AzioneOrdine o={o} /></span>
             )}
           </div>
@@ -470,7 +496,7 @@ export default function OrdiniPage() {
           /* Coursing: una sezione impilata per ogni mandata (1ª sopra, poi 2ª, poi 3ª) */
           <div className="flex-1">
             {mandate.map(m => {
-              const righeM = o.righe.filter(r => (r.mandata ?? 1) === m)
+              const righeM = righeVisibili.filter(r => (r.mandata ?? 1) === m)
               const prontaM = righeM.every(r => r.prontaAt != null)
               return (
                 <div key={m} className="border-b border-ink-navy/8 last:border-0">
@@ -478,7 +504,7 @@ export default function OrdiniPage() {
                     <span className={`text-[11px] font-bold uppercase tracking-wide ${prontaM ? 'text-green-600' : 'text-ink-navy/55'}`}>
                       {MANDATA_LABEL[m] ?? `${m}ª`} mandata
                     </span>
-                    {!isDone && (
+                    {!isDone && !filtroReparto && (
                       <button
                         onClick={e => { e.stopPropagation(); marcaMandata(o, m, prontaM) }}
                         className={`text-[11px] font-bold rounded-lg transition-colors shrink-0 ${prontaM
@@ -497,8 +523,8 @@ export default function OrdiniPage() {
           </div>
         ) : (
           <div className="divide-y divide-ink-navy/6 flex-1">
-            {o.righe.map(r => <RigaVoce key={r.id} r={r} />)}
-            {o.righe.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
+            {righeVisibili.map(r => <RigaVoce key={r.id} r={r} />)}
+            {righeVisibili.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
           </div>
         )}
         {o.note && <p className="px-3 py-1.5 text-xs font-bold text-red-600 break-words border-t border-red-200 bg-red-50/60">{o.note}</p>}
@@ -607,6 +633,23 @@ export default function OrdiniPage() {
           ↻ Aggiorna
         </button>
       </div>
+
+      {/* Filtro reparto (instradamento): mostra solo le voci del reparto scelto. Solo se ci sono più reparti. */}
+      {reparti.length > 1 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex gap-1 bg-mist rounded-xl p-1">
+            {(['tutti', ...reparti]).map(r => (
+              <button key={r} onClick={() => setRepartoAttivo(r)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${repartoAttivo === r ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                {r === 'tutti' ? 'Tutti' : r}
+              </button>
+            ))}
+          </div>
+          {filtroReparto && (
+            <span className="text-xs text-ink-navy/45">Vista <b className="text-ink-navy/70">{repartoAttivo}</b>: solo le sue voci · segna “Pronto” dalla vista <b>Tutti</b>.</span>
+          )}
+        </div>
+      )}
 
       {/* Switch blocco asporto/delivery */}
       <div className="bg-white border border-ink-navy/10 rounded-2xl px-4 py-3 flex flex-wrap gap-4 items-center shadow-sm">

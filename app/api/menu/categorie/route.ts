@@ -18,10 +18,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
-  const { nome, tipo = 'locale' } = await req.json()
+  const { nome, tipo = 'locale', reparto } = await req.json()
   const count = await prisma.menuCategoria.count({ where: { userId: user.id, tipo } })
   const categoria = await prisma.menuCategoria.create({
-    data: { userId: user.id, nome, ordine: count, tipo },
+    data: { userId: user.id, nome, ordine: count, tipo, reparto: reparto || null },
   })
   return NextResponse.json({ categoria })
 }
