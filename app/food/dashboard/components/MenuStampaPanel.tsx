@@ -94,6 +94,8 @@ interface PanelCat { id: string; nome: string; piatti: PanelPiatto[] }
 // Dimensioni testo disponibili
 const SIZES: [string, number][] = [['XS', 0.8], ['S', 0.9], ['M', 1], ['L', 1.15], ['XL', 1.3]]
 const LOGO_POS: [LogoPos, string][] = [['nessuno', 'Nessuno'], ['sx', 'Alto sx'], ['centro', 'Centro'], ['dx', 'Alto dx']]
+// Palette di colori per il menu (accenti + neutri scuri per i dettagli).
+const PALETTE = ['#dc2626', '#ea580c', '#d97706', '#ca8a04', '#16a34a', '#0d9488', '#0284c7', '#2563eb', '#4f46e5', '#7c3aed', '#db2777', '#111827', '#6b7280', '#000000']
 
 export default function MenuStampaPanel() {
   const [tipo, setTipo] = useState<'locale' | 'asporto'>('locale')
@@ -104,7 +106,7 @@ export default function MenuStampaPanel() {
   const [footer, setFooter] = useState('')
   const [accent, setAccent] = useState('#dc2626')
   const [coloreCategorie, setColoreCategorie] = useState('#dc2626')
-  const [coloreDettagli, setColoreDettagli] = useState('#1a1f36')
+  const [coloreDettagli, setColoreDettagli] = useState('#111827')
   const [logoPos, setLogoPos] = useState<LogoPos>('centro')
   const [mostraData, setMostraData] = useState(true)
   const [textScale, setTextScale] = useState(1)
@@ -189,16 +191,23 @@ export default function MenuStampaPanel() {
   }
 
   const inputCls = 'w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30'
-  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
-    <div>
-      <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">{label}</label>
-      <div className="flex items-center gap-2 mt-1.5">
-        <input type="color" value={value} onChange={e => onChange(e.target.value)}
-          className="w-9 h-9 rounded-lg border border-ink-navy/15 cursor-pointer bg-white p-0.5" />
-        <span className="text-xs text-ink-navy/45 font-mono">{value}</span>
+  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => {
+    const cur = (value || '').toLowerCase()
+    // Se il colore corrente (es. quello salvato del locale) non è nella palette, lo mostro come prima pastiglia.
+    const swatches = PALETTE.some(c => c.toLowerCase() === cur) ? PALETTE : [value, ...PALETTE]
+    return (
+      <div className="min-w-0">
+        <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">{label}</label>
+        <div className="flex flex-wrap gap-1.5 mt-1.5">
+          {swatches.map(c => (
+            <button key={c} type="button" onClick={() => onChange(c)} title={c} aria-label={`Colore ${c}`}
+              style={{ backgroundColor: c }}
+              className={`w-6 h-6 rounded-full transition-transform ${cur === c.toLowerCase() ? 'ring-2 ring-offset-1 ring-ink-navy/50 scale-110' : 'border border-black/10 hover:scale-110'}`} />
+          ))}
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 mb-4">

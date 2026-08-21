@@ -134,6 +134,38 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
     await fetchMenu()
   }
 
+  // Riordino categorie e piatti con le frecce (ordine salvato sul server). Update ottimistico.
+  async function spostaCategoria(index: number, dir: -1 | 1) {
+    const j = index + dir
+    if (j < 0 || j >= categorie.length) return
+    const next = [...categorie]
+    ;[next[index], next[j]] = [next[j], next[index]]
+    setCategorie(next)
+    setCache<Categoria[]>(cacheKey, next)
+    await fetch('/api/menu/categorie/ordina', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: next.map(c => c.id) }),
+    }).catch(() => {})
+  }
+
+  async function spostaPiatto(catId: string, index: number, dir: -1 | 1) {
+    const cat = categorie.find(c => c.id === catId)
+    if (!cat) return
+    const j = index + dir
+    if (j < 0 || j >= cat.piatti.length) return
+    const nuoviPiatti = [...cat.piatti]
+    ;[nuoviPiatti[index], nuoviPiatti[j]] = [nuoviPiatti[j], nuoviPiatti[index]]
+    const next = categorie.map(c => c.id === catId ? { ...c, piatti: nuoviPiatti } : c)
+    setCategorie(next)
+    setCache<Categoria[]>(cacheKey, next)
+    await fetch('/api/menu/piatti/ordina', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: nuoviPiatti.map(p => p.id) }),
+    }).catch(() => {})
+  }
+
   async function eliminaCategoria(id: string) {
     setConferma({ msg: 'Eliminare questa categoria e tutti i suoi piatti?', onConfirm: async () => {
       const res = await fetch(`/api/menu/categorie/${id}`, { method: 'DELETE', credentials: 'include' })
@@ -250,13 +282,21 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
           </div>
         </div>
       ) : (
-        categorie.map(cat => (
+        categorie.map((cat, ci) => (
           <div key={cat.id} className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-ink-navy/8 bg-mist">
-              <h2 className="font-bold text-ink-navy flex items-center gap-2">{cat.nome}
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-electric-blue/10 text-electric-blue">{cat.reparto || 'Cucina'}</span>
-                <span className="text-xs font-normal text-ink-navy/35">{cat.piatti.length} piatt{cat.piatti.length === 1 ? 'o' : 'i'}</span>
-              </h2>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-col shrink-0 -my-1">
+                  <button onClick={() => spostaCategoria(ci, -1)} disabled={ci === 0} aria-label="Sposta categoria su"
+                    className="text-ink-navy/30 hover:text-electric-blue disabled:opacity-20 leading-none px-1 text-[11px]">▲</button>
+                  <button onClick={() => spostaCategoria(ci, 1)} disabled={ci === categorie.length - 1} aria-label="Sposta categoria giù"
+                    className="text-ink-navy/30 hover:text-electric-blue disabled:opacity-20 leading-none px-1 text-[11px]">▼</button>
+                </div>
+                <h2 className="font-bold text-ink-navy flex items-center gap-2 min-w-0">{cat.nome}
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-electric-blue/10 text-electric-blue shrink-0">{cat.reparto || 'Cucina'}</span>
+                  <span className="text-xs font-normal text-ink-navy/35 shrink-0">{cat.piatti.length} piatt{cat.piatti.length === 1 ? 'o' : 'i'}</span>
+                </h2>
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => { setEditCat(cat); setNomeCat(cat.nome); setRepartoCat(cat.reparto || reparti[0] || 'Cucina'); setModalCat(true) }}
                   className="text-xs px-2.5 py-1 rounded-lg text-ink-navy/50 hover:bg-ink-navy/10 transition-colors">Rinomina</button>
@@ -274,8 +314,14 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {cat.piatti.map(p => (
+                {cat.piatti.map((p, pi) => (
                   <div key={p.id} className={`flex items-center gap-4 px-5 py-3.5 ${!p.disponibile ? 'opacity-50' : ''}`}>
+                    <div className="flex flex-col shrink-0 -my-1">
+                      <button onClick={() => spostaPiatto(cat.id, pi, -1)} disabled={pi === 0} aria-label="Sposta piatto su"
+                        className="text-ink-navy/30 hover:text-electric-blue disabled:opacity-20 leading-none px-1 text-[11px]">▲</button>
+                      <button onClick={() => spostaPiatto(cat.id, pi, 1)} disabled={pi === cat.piatti.length - 1} aria-label="Sposta piatto giù"
+                        className="text-ink-navy/30 hover:text-electric-blue disabled:opacity-20 leading-none px-1 text-[11px]">▼</button>
+                    </div>
                     {p.immagineUrl ? (
                       <img src={p.immagineUrl} alt={p.nome} className="w-14 h-14 rounded-xl object-cover shrink-0" />
                     ) : (

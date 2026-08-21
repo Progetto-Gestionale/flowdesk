@@ -105,7 +105,13 @@ export default function OrdiniPage() {
   const [filtroStorico, setFiltroStorico] = useState<'tavolo' | 'asporto' | 'delivery'>('tavolo')
   // Instradamento per reparto: 'tutti' = tutto insieme, oppure un reparto specifico (Cucina/Bar/…).
   const [reparti, setReparti] = useState<string[]>(DEFAULT_REPARTI)
+  // La scelta del reparto è PER-DISPOSITIVO (localStorage), non sincronizzata: così in sala tengono
+  // "Bar" e in cucina "Cucina", e resta impostata anche cambiando pagina e tornando.
   const [repartoAttivo, setRepartoAttivo] = useState<string>('tutti')
+  function cambiaReparto(r: string) {
+    setRepartoAttivo(r)
+    try { localStorage.setItem('food:ordini-reparto', r) } catch {}
+  }
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [savingBlocco, setSavingBlocco] = useState(false)
@@ -163,7 +169,14 @@ export default function OrdiniPage() {
   }
 
   useEffect(() => {
-    fetch('/api/settings', { credentials: 'include' }).then(r => r.json()).then(s => setReparti(parseReparti(s.reparti))).catch(() => {})
+    // Ripristina la scelta salvata su QUESTO dispositivo (se ancora valida rispetto ai reparti attuali).
+    let salvato: string | null = null
+    try { salvato = localStorage.getItem('food:ordini-reparto') } catch {}
+    fetch('/api/settings', { credentials: 'include' }).then(r => r.json()).then(s => {
+      const list = parseReparti(s.reparti)
+      setReparti(list)
+      if (salvato && (salvato === 'tutti' || list.includes(salvato))) setRepartoAttivo(salvato)
+    }).catch(() => { if (salvato) setRepartoAttivo(salvato) })
   }, [])
 
   useEffect(() => {
@@ -639,7 +652,7 @@ export default function OrdiniPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex gap-1 bg-mist rounded-xl p-1">
             {(['tutti', ...reparti]).map(r => (
-              <button key={r} onClick={() => setRepartoAttivo(r)}
+              <button key={r} onClick={() => cambiaReparto(r)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize ${repartoAttivo === r ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
                 {r === 'tutti' ? 'Tutti' : r}
               </button>

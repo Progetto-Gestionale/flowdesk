@@ -16,7 +16,7 @@ interface MapData { forma: 'quadrato' | 'cerchio'; colore: string; w: number; h:
 interface Elemento { id: string; tipo: string; label: string; x: number; y: number; w: number; h: number; colore: string }
 
 // ── Costanti ──────────────────────────────────────────────────────────────────
-// Rosso escluso di proposito: è riservato al segnale "ordine pronto" sui tavoli
+// Rosso escluso di proposito: è riservato al bordo dei tavoli occupati (l'"ordine pronto" ora è ambra)
 const COLORI_PRESET = ['#6366f1','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#64748b']
 const DEFAULT_VISUAL: Omit<MapData,'x'|'y'> = { forma: 'quadrato', colore: '#6366f1', w: 110, h: 110 }
 const CANVAS_W = 1400
@@ -670,12 +670,13 @@ const VistaMappa = forwardRef<VistaMappHandle, {
                   )}
                   {isSelected && <div style={{ position: 'absolute', inset: -5, borderRadius: isC ? '50%' : 14, border: '3px solid #6366f1', pointerEvents: 'none', zIndex: 5 }} />}
                   {!isSelected && tavoliOccupati?.has(t.id) && (
-                    <div style={{ position: 'absolute', inset: -4, borderRadius: isC ? '50%' : 13, border: '2.5px solid #22c55e', pointerEvents: 'none', zIndex: 4, opacity: 0.95 }} />
+                    <div style={{ position: 'absolute', inset: -4, borderRadius: isC ? '50%' : 13, border: '2.5px solid #ef4444', pointerEvents: 'none', zIndex: 4, opacity: 0.95 }} />
                   )}
                   {/* Riquadro tratteggiato dei tavoli uniti rimosso: l'unione si capisce già dall'etichetta (es. T2+3). */}
-                  {/* Segnale "ordine pronto" dentro il riquadro (sparisce una volta aperto il tavolo) */}
+                  {/* Segnale "ordine pronto" dentro il riquadro (sparisce una volta aperto il tavolo).
+                      Ambra e non rosso: il rosso è ora il bordo del tavolo occupato. */}
                   {tavoliPronti?.has(t.id) && (
-                    <div title="Ordine pronto" style={{ position: 'absolute', top: 6, right: 6, zIndex: 6, width: 22, height: 22, borderRadius: '50%', backgroundColor: '#dc2626', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, lineHeight: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.45)', border: '1.5px solid #fff', pointerEvents: 'none' }}>!</div>
+                    <div title="Ordine pronto" style={{ position: 'absolute', top: 6, right: 6, zIndex: 6, width: 22, height: 22, borderRadius: '50%', backgroundColor: '#f59e0b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, lineHeight: 1, boxShadow: '0 1px 4px rgba(0,0,0,0.45)', border: '1.5px solid #fff', pointerEvents: 'none' }}>!</div>
                   )}
                   <div data-drag={editMode && !selectMode ? "1" : undefined}
                     onPointerDown={editMode && !selectMode ? e => startDragT(e, t.id) : selectMode ? e => { e.stopPropagation(); onToggleSelect(t.id) } : separaMode ? e => e.stopPropagation() : undefined}
@@ -1063,7 +1064,7 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
                   {(s._count?.tavoli ?? 0) > 0 && <span className="ml-1.5 text-xs opacity-60">{s._count?.tavoli}</span>}
                   {salaHaPronti && (
                     <span title="Ordine pronto in questa sala"
-                      className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 border-2 border-white shadow animate-pulse" />
+                      className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-500 border-2 border-white shadow animate-pulse" />
                   )}
                 </button>
               )
