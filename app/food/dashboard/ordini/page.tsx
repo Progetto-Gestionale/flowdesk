@@ -235,6 +235,27 @@ export default function OrdiniPage() {
     })
   }
 
+  // Instradamento per reparto: segna pronte (o annulla) un insieme di righe (quelle visibili nella
+  // vista reparto attiva). Quando tutte le righe dell'ordine sono pronte, l'ordine si conclude.
+  function marcaRighe(o: Ordine, rigaIds: string[], annulla: boolean) {
+    const now = new Date().toISOString()
+    const idset = new Set(rigaIds)
+    setOrdini(prev => prev.map(x => {
+      if (x.id !== o.id) return x
+      const righe = x.righe.map(r => idset.has(r.id) ? { ...r, prontaAt: annulla ? null : now } : r)
+      const tuttePronte = righe.length > 0 && righe.every(r => r.prontaAt != null)
+      const isTav = x.tipo === 'tavolo' || x.tavoloId != null || x.gruppoId != null
+      const status = tuttePronte ? (isTav ? 'consegnato' : 'pronto')
+        : (annulla && (x.status === 'consegnato' || x.status === 'pronto') ? 'aperto' : x.status)
+      return { ...x, righe, status }
+    }))
+    fetch(`/api/ordini/${o.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ righePronte: rigaIds, annulla }),
+    })
+  }
+
 
   function cancellaOrdine(id: string) {
     setOrdini(prev => prev.filter(o => o.id !== id)) // ottimistico
@@ -451,6 +472,8 @@ export default function OrdiniPage() {
 
     // Con un reparto attivo mostro SOLO le sue voci (instradamento: la cucina vede i piatti, il bar le bevande).
     const righeVisibili = filtroReparto ? o.righe.filter(r => repartoDiRiga(r) === repartoAttivo) : o.righe
+    // Nella vista reparto: il reparto è "pronto" quando tutte le sue voci visibili sono segnate pronte.
+    const repartoPronto = filtroReparto && righeVisibili.length > 0 && righeVisibili.every(r => r.prontaAt != null)
 
     // Coursing: la vista a mandate si usa se ci sono più mandate OPPURE se l'unica mandata non è la 1ª
     // (così anche un singolo piatto messo in 2ª/3ª mostra la sua mandata).
@@ -492,6 +515,15 @@ export default function OrdiniPage() {
             {(!isMulti || isDone) && !filtroReparto && (
               <span onClick={e => e.stopPropagation()} className="shrink-0"><AzioneOrdine o={o} /></span>
             )}
+            {/* Vista reparto: "Pronto" che segna pronte SOLO le voci di questo reparto. */}
+            {filtroReparto && !isDone && (
+              <button onClick={e => { e.stopPropagation(); marcaRighe(o, righeVisibili.map(r => r.id), repartoPronto) }}
+                className={`text-xs font-bold rounded-lg transition-colors shrink-0 ${repartoPronto
+                  ? 'text-green-600 hover:text-green-700 px-1.5 py-1'
+                  : 'px-2.5 py-1 bg-ink-navy text-white hover:bg-ink-navy/80'}`}>
+                {repartoPronto ? '✓ Pronto' : 'Pronto'}
+              </button>
+            )}
           </div>
           {!isTavolo && (
             <>
@@ -505,7 +537,13 @@ export default function OrdiniPage() {
             </>
           )}
         </div>
-        {isMulti ? (
+        {filtroReparto ? (
+          /* Vista reparto: lista piatta delle sole voci del reparto; le pronte barrate. */
+          <div className="divide-y divide-ink-navy/6 flex-1">
+            {righeVisibili.map(r => <RigaVoce key={r.id} r={r} spenta={r.prontaAt != null} />)}
+            {righeVisibili.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
+          </div>
+        ) : isMulti ? (
           /* Coursing: una sezione impilata per ogni mandata (1ª sopra, poi 2ª, poi 3ª) */
           <div className="flex-1">
             {mandate.map(m => {
@@ -536,7 +574,7 @@ export default function OrdiniPage() {
           </div>
         ) : (
           <div className="divide-y divide-ink-navy/6 flex-1">
-            {righeVisibili.map(r => <RigaVoce key={r.id} r={r} />)}
+            {righeVisibili.map(r => <RigaVoce key={r.id} r={r} spenta={r.prontaAt != null} />)}
             {righeVisibili.length === 0 && <p className="px-3 py-2 text-xs text-ink-navy/30">Nessuna voce</p>}
           </div>
         )}
@@ -659,7 +697,7 @@ export default function OrdiniPage() {
             ))}
           </div>
           {filtroReparto && (
-            <span className="text-xs text-ink-navy/45">Vista <b className="text-ink-navy/70">{repartoAttivo}</b>: solo le sue voci · segna “Pronto” dalla vista <b>Tutti</b>.</span>
+            <span className="text-xs text-ink-navy/45">Vista <b className="text-ink-navy/70">{repartoAttivo}</b>: solo le sue voci · “Pronto” segna pronte solo queste; l'ordine si chiude quando tutti i reparti sono pronti.</span>
           )}
         </div>
       )}

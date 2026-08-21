@@ -21,12 +21,12 @@ interface PdfOpts {
   logoUrl: string | null
   logoPos: LogoPos
   mostraData: boolean
+  dataLabel: string        // data già formattata da mostrare (se mostraData)
 }
 
 // Documento HTML del menu: usato sia per l'anteprima (iframe) sia per la stampa/PDF (nuova finestra).
 function buildMenuDoc(o: PdfOpts, forPrint: boolean): string {
   const base = 15 * o.textScale
-  const dataLabel = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
   const righe = o.categorie.map(cat => {
     const piatti = cat.piatti.filter(p => p.disponibile)
     if (piatti.length === 0) return ''
@@ -49,7 +49,7 @@ function buildMenuDoc(o: PdfOpts, forPrint: boolean): string {
   return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(o.tipoLabel)}${o.nomeLocale ? ' — ' + escapeHtml(o.nomeLocale) : ''}</title>
   <style>
-    @page { size: A4; margin: 0 }
+    @page { size: A4 portrait; margin: 0 }
     * { box-sizing: border-box; margin: 0; padding: 0 }
     html, body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact }
     body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1f36; font-size: ${base}px }
@@ -77,7 +77,7 @@ function buildMenuDoc(o: PdfOpts, forPrint: boolean): string {
       <div class="top">
         ${logoImg}
         <h1>${escapeHtml(o.header || o.nomeLocale || 'Menù')}</h1>
-        ${o.mostraData ? `<div class="sub">${dataLabel}</div>` : ''}
+        ${o.mostraData && o.dataLabel ? `<div class="sub">${escapeHtml(o.dataLabel)}</div>` : ''}
       </div>
       ${righe || '<p class="empty">Nessun piatto disponibile in questo menu</p>'}
       ${o.footer.trim() ? `<div class="foot">${escapeHtml(o.footer)}</div>` : ''}
@@ -109,6 +109,7 @@ export default function MenuStampaPanel() {
   const [coloreDettagli, setColoreDettagli] = useState('#111827')
   const [logoPos, setLogoPos] = useState<LogoPos>('centro')
   const [mostraData, setMostraData] = useState(true)
+  const [dataScelta, setDataScelta] = useState<string>(() => new Date().toISOString().slice(0, 10)) // yyyy-mm-dd, default oggi
   const [textScale, setTextScale] = useState(1)
 
   // Anteprima scalata: misuro il contenitore e adatto l'iframe A4 (794px) con transform.
@@ -177,10 +178,15 @@ export default function MenuStampaPanel() {
     nome: c.nome,
     piatti: c.piatti.filter(p => p.on).map(p => ({ nome: p.nome, descrizione: p.descrizione, prezzo: p.prezzo, disponibile: true })),
   }))
+  // Data scelta, formattata in esteso (T12:00 per non spostare il giorno per fuso orario).
+  const dataLabel = (() => {
+    const d = new Date(dataScelta + 'T12:00:00')
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+  })()
   const opts: PdfOpts = {
     tipoLabel, nomeLocale: settings?.nomeLocale ?? '', categorie: pdfCategorie,
     header, footer, accent, coloreCategorie, coloreDettagli, textScale,
-    logoUrl: settings?.menuLogoUrl ?? null, logoPos, mostraData,
+    logoUrl: settings?.menuLogoUrl ?? null, logoPos, mostraData, dataLabel,
   }
   const previewDoc = buildMenuDoc(opts, false)
 
@@ -277,10 +283,20 @@ export default function MenuStampaPanel() {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-ink-navy/70 cursor-pointer select-none">
-            <input type="checkbox" checked={mostraData} onChange={e => setMostraData(e.target.checked)} className="w-4 h-4 rounded accent-electric-blue" />
-            Mostra data di oggi
-          </label>
+          <div>
+            <label className="flex items-center gap-2 text-sm text-ink-navy/70 cursor-pointer select-none">
+              <input type="checkbox" checked={mostraData} onChange={e => setMostraData(e.target.checked)} className="w-4 h-4 rounded accent-electric-blue" />
+              Mostra la data
+            </label>
+            {mostraData && (
+              <div className="flex items-center gap-2 mt-2 pl-6 flex-wrap">
+                <input type="date" value={dataScelta} onChange={e => setDataScelta(e.target.value)}
+                  className="border border-ink-navy/15 rounded-lg px-2.5 py-1.5 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+                <button type="button" onClick={() => setDataScelta(new Date().toISOString().slice(0, 10))}
+                  className="text-xs font-semibold text-electric-blue hover:underline">Oggi</button>
+              </div>
+            )}
+          </div>
 
           <button onClick={scarica} disabled={totSelezionati === 0}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"

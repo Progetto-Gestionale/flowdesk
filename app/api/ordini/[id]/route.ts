@@ -32,6 +32,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ordine })
   }
 
+  // Instradamento per reparto: marca pronte (o annulla) un insieme di righe (quelle visibili in una
+  // vista reparto, es. Bar). { righePronte: string[], annulla?: boolean }. Quando TUTTE le righe
+  // dell'ordine sono pronte l'ordine si conclude (tavolo → 'consegnato', asporto/delivery → 'pronto').
+  if ('righePronte' in body) {
+    const ids: string[] = Array.isArray(body.righePronte) ? body.righePronte : []
+    const annulla = body.annulla === true
+    if (ids.length) {
+      await prisma.rigaOrdine.updateMany({
+        where: { ordineId: id, id: { in: ids } },
+        data: { prontaAt: annulla ? null : new Date() },
+      })
+    }
+    const ord = await prisma.ordine.findUnique({
+      where: { id },
+      select: { tipo: true, tavoloId: true, gruppoId: true, righe: { select: { prontaAt: true } } },
+    })
+    const tuttePronte = !!ord && ord.righe.length > 0 && ord.righe.every(r => r.prontaAt != null)
+    const isTav = !!ord && (ord.tipo === 'tavolo' || ord.tavoloId != null || ord.gruppoId != null)
+    const patch: Record<string, unknown> = {}
+    if (tuttePronte) {
+      if (isTav) { patch.status = 'consegnato'; patch.closedAt = new Date() }
+      else { patch.status = 'pronto'; patch.prontoAt = new Date() }
+    } else if (annulla) {
+      patch.status = 'aperto'; patch.closedAt = null
+    }
+    if (Object.keys(patch).length) await prisma.ordine.update({ where: { id }, data: patch })
+    const ordine = await prisma.ordine.findUnique({
+      where: { id },
+      include: { righe: { orderBy: [{ mandata: 'asc' }, { id: 'asc' }] } },
+    })
+    return NextResponse.json({ ordine })
+  }
+
   const data: Record<string, unknown> = {}
   if ('status' in body) {
     data.status = body.status
