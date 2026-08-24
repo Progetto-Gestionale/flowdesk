@@ -12,15 +12,61 @@ const SUGGERIMENTI = [
   'Quali piatti vendo di meno questo mese?',
 ]
 
+// Memoria locale della chat (per-dispositivo): resta salvata ~24h, così uscendo
+// e rientrando la conversazione non sparisce. Superato il tempo, riparte pulita.
+const STORAGE_KEY = 'food:copilot-chat'
+const TTL_MS = 24 * 60 * 60 * 1000
+
+function caricaChat(): Msg[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const { ts, messages } = JSON.parse(raw)
+    if (!ts || Date.now() - ts > TTL_MS) {
+      localStorage.removeItem(STORAGE_KEY)
+      return []
+    }
+    return Array.isArray(messages) ? messages : []
+  } catch {
+    return []
+  }
+}
+
+function salvaChat(messages: Msg[]) {
+  if (typeof window === 'undefined') return
+  try {
+    // Teniamo al massimo gli ultimi 40 messaggi per non gonfiare lo storage.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ts: Date.now(), messages: messages.slice(-40) }))
+  } catch {}
+}
+
 export default function AssistentePage() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const idratato = useRef(false)
+
+  // Al primo caricamento recuperiamo la conversazione salvata (se non scaduta).
+  useEffect(() => {
+    setMessages(caricaChat())
+    idratato.current = true
+  }, [])
+
+  // A ogni nuovo messaggio la salviamo (solo dopo l'idratazione, per non sovrascrivere).
+  useEffect(() => {
+    if (idratato.current && messages.length > 0) salvaChat(messages)
+  }, [messages])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, loading])
+
+  function nuovaChat() {
+    setMessages([])
+    try { localStorage.removeItem(STORAGE_KEY) } catch {}
+  }
 
   async function invia(testo: string) {
     const domanda = testo.trim()
@@ -55,10 +101,18 @@ export default function AssistentePage() {
         <div className="w-9 h-9 rounded-[28%] bg-electric-blue flex items-center justify-center shrink-0 text-white">
           <span className="w-[20px] h-[20px]"><IconBot /></span>
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-base font-extrabold text-ink-navy leading-tight">Assistente AI</h1>
           <p className="text-xs text-ink-navy/50">Fai domande sul tuo locale e sul gestionale</p>
         </div>
+        {messages.length > 0 && (
+          <button
+            onClick={nuovaChat}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:border-electric-blue hover:text-electric-blue transition-colors shrink-0"
+          >
+            Nuova chat
+          </button>
+        )}
       </div>
 
       {/* Conversazione */}
