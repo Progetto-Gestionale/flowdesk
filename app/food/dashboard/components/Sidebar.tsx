@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   IconGrid, IconUsers, IconClipboard, IconCalendar,
   IconFork, IconReceipt, IconTable, IconChartBar, IconSettings,
-  IconClock, IconCash, IconDelivery,
+  IconClock, IconCash, IconDelivery, IconBot,
 } from '@/app/components/icons'
 
 const navFood = [
@@ -33,6 +33,7 @@ const navFood = [
   {
     section: 'Account',
     items: [
+      { label: 'Assistente AI', href: '/food/dashboard/assistente', Icon: IconBot },
       { label: 'Impostazioni', href: '/food/dashboard/impostazioni', Icon: IconSettings },
     ],
   },
