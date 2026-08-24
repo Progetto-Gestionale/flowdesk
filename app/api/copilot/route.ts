@@ -6,9 +6,10 @@ import { copilotTools, eseguiCopilotTool } from '@/lib/copilot/tools'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// Modello: default alla capacità più alta. Per ridurre i costi su volumi elevati
-// si può passare a 'claude-sonnet-5' cambiando SOLO questa riga.
-const MODEL = 'claude-opus-4-8'
+// Modello: Sonnet 5 — ottimo per questo uso (tool-use + risposte dalla guida) e
+// ~40% più economico di Opus. Per la massima qualità si può tornare a
+// 'claude-opus-4-8' cambiando SOLO questa riga.
+const MODEL = 'claude-sonnet-5'
 const MAX_ITERAZIONI = 6 // quanti giri di tool use al massimo per messaggio
 
 type MsgIn = { role: 'user' | 'assistant'; content: string }

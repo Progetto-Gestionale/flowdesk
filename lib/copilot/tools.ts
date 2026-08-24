@@ -42,6 +42,25 @@ export const copilotTools = [
       required: ['dal', 'al'],
     },
   },
+  {
+    name: 'lista_dipendenti',
+    description:
+      'Elenca i dipendenti del locale (nome, ruolo, email). Usalo quando il titolare chiede chi lavora, quanti dipendenti ha, i loro ruoli, o prima di parlare di turni.',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+  {
+    name: 'turni_periodo',
+    description:
+      'Elenca i turni programmati in un intervallo di date, con dipendente, giorno e orario. Usalo per "chi lavora domani/questa settimana", "che turni ho impostato".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        dal: { type: 'string', description: 'Data inizio inclusa, formato YYYY-MM-DD' },
+        al: { type: 'string', description: 'Data fine inclusa, formato YYYY-MM-DD' },
+      },
+      required: ['dal', 'al'],
+    },
+  },
 ] as const
 
 // Converte "YYYY-MM-DD" nell'istante di mezzanotte UTC (coerente con Analytics).
@@ -124,6 +143,42 @@ async function classificaPiatti(
   }
 }
 
+async function listaDipendenti(userId: string) {
+  const dip = await prisma.dipendente.findMany({
+    where: { userId },
+    orderBy: [{ ordine: 'asc' }, { nome: 'asc' }],
+    select: { nome: true, ruolo: true, email: true },
+  })
+  return {
+    numero_dipendenti: dip.length,
+    dipendenti: dip.map((d) => ({ nome: d.nome, ruolo: d.ruolo || 'non specificato', email: d.email })),
+    nota: dip.length === 0
+      ? 'Nessun dipendente ancora inserito. Si aggiungono in Staff → scheda Dipendenti → Nuovo dipendente.'
+      : undefined,
+  }
+}
+
+async function turniPeriodo(userId: string, dal: string, al: string) {
+  const { from, to } = intervallo(dal, al)
+  const turni = await prisma.turno.findMany({
+    where: { userId, data: { gte: from, lt: to } },
+    orderBy: [{ data: 'asc' }, { oraInizio: 'asc' }],
+    include: { dipendente: { select: { nome: true } } },
+  })
+  return {
+    periodo: `dal ${dal} al ${al}`,
+    numero_turni: turni.length,
+    turni: turni.map((t) => ({
+      data: t.data.toISOString().slice(0, 10),
+      dipendente: t.dipendente?.nome ?? '—',
+      dalle: t.oraInizio,
+      alle: t.oraFine,
+      ruolo: t.ruolo || undefined,
+    })),
+    nota: turni.length === 0 ? 'Nessun turno programmato nel periodo indicato.' : undefined,
+  }
+}
+
 // Dispatcher: esegue lo strumento richiesto da Claude. Sempre scoped su userId.
 export async function eseguiCopilotTool(
   name: string,
@@ -138,6 +193,12 @@ export async function eseguiCopilotTool(
       const ordine = input.ordine === 'basso' ? 'basso' : 'alto'
       const limite = Number.isFinite(Number(input.limite)) ? Math.max(1, Math.min(20, Number(input.limite))) : 5
       return await classificaPiatti(userId, String(input.dal), String(input.al), ordine, limite)
+    }
+    if (name === 'lista_dipendenti') {
+      return await listaDipendenti(userId)
+    }
+    if (name === 'turni_periodo') {
+      return await turniPeriodo(userId, String(input.dal), String(input.al))
     }
     return { errore: `Strumento sconosciuto: ${name}` }
   } catch (e) {
