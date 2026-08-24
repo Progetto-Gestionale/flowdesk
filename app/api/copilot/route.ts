@@ -76,7 +76,11 @@ export async function POST(req: Request) {
       const response = await client.messages.create({
         model: MODEL,
         max_tokens: 1500,
-        system,
+        // La guida + gli strumenti (parte stabile e pesante) vanno in cache: il
+        // breakpoint sull'ultimo blocco system copre anche i tools. Così, nei
+        // giri di tool-use e nei messaggi successivi (entro 5 min), quella parte
+        // si paga al ~10% invece che piena. Grosso risparmio sui costi.
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         tools: copilotTools as any,
         messages: convo,
