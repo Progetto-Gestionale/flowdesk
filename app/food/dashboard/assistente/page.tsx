@@ -45,13 +45,19 @@ export default function AssistentePage() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [costoEur, setCostoEur] = useState(0) // spesa del mese del locale (dal server)
   const scrollRef = useRef<HTMLDivElement>(null)
   const idratato = useRef(false)
 
-  // Al primo caricamento recuperiamo la conversazione salvata (se non scaduta).
+  // Al primo caricamento recuperiamo la conversazione salvata (se non scaduta)
+  // e il totale della spesa del mese dal server (comune a tutti i dispositivi).
   useEffect(() => {
     setMessages(caricaChat())
     idratato.current = true
+    fetch('/api/copilot/spesa', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => { if (typeof d.costoEur === 'number') setCostoEur(d.costoEur) })
+      .catch(() => {})
   }, [])
 
   // A ogni nuovo messaggio la salviamo (solo dopo l'idratazione, per non sovrascrivere).
@@ -65,6 +71,7 @@ export default function AssistentePage() {
 
   function nuovaChat() {
     setMessages([])
+    // La spesa NON si azzera: è il totale del mese del locale, non della chat.
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
@@ -87,6 +94,9 @@ export default function AssistentePage() {
         ? (data.text || 'Non ho una risposta per questa domanda.')
         : `⚠️ ${data.error || 'Si è verificato un errore.'}`
       setMessages([...nuoviMessaggi, { role: 'assistant', content: risposta }])
+      if (res.ok && typeof data.spesaMese?.costoEur === 'number') {
+        setCostoEur(data.spesaMese.costoEur)
+      }
     } catch {
       setMessages([...nuoviMessaggi, { role: 'assistant', content: '⚠️ Errore di connessione. Riprova.' }])
     } finally {
@@ -104,6 +114,15 @@ export default function AssistentePage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-base font-extrabold text-ink-navy leading-tight">Assistente AI</h1>
           <p className="text-xs text-ink-navy/50">Fai domande sul tuo locale e sul gestionale</p>
+        </div>
+        <div
+          className="text-right shrink-0 leading-tight"
+          title="Spesa stimata dell'Assistente AI in questo mese, sommata su tutti i dispositivi del locale. È una stima (fatturazione reale in $ nella Console)."
+        >
+          <p className="font-mono text-sm font-bold text-ink-navy tabular-nums">
+            €{costoEur < 0.01 && costoEur > 0 ? costoEur.toFixed(4) : costoEur.toFixed(2)}
+          </p>
+          <p className="text-[10px] text-ink-navy/40">spesa del mese</p>
         </div>
         {messages.length > 0 && (
           <button

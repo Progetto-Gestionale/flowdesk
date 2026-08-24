@@ -71,6 +71,23 @@ model User {
   disponibilitaOverride DisponibilitaOverride[]
   notifiche          Notifica[]
   todo               Todo[]
+  copilotUsage       CopilotUsage[]
+}
+
+// Spesa dell'Assistente AI aggregata per locale e per mese (tutti i dispositivi
+// dell'account confluiscono nella stessa riga). costoUsd è la stima in dollari.
+model CopilotUsage {
+  id          String   @id @default(cuid())
+  userId      String
+  mese        String   // "YYYY-MM" (mese in fuso Europe/Rome)
+  costoUsd    Float    @default(0)
+  tokenInput  Int      @default(0)
+  tokenOutput Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, mese])
+  @@index([userId])
 }
 
 model MenuCategoria {
