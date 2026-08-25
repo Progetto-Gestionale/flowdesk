@@ -72,6 +72,17 @@ model User {
   notifiche          Notifica[]
   todo               Todo[]
   copilotUsage       CopilotUsage[]
+  menuStampaConfig   MenuStampaConfig?
+}
+
+// Scelte del menu stampabile (PDF) del locale, condivise tra tutti i dispositivi.
+// "dati" è un JSON con config (colori, opzioni) e layout dei piatti per tipo.
+model MenuStampaConfig {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  dati      String   // JSON
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 // Spesa dell'Assistente AI aggregata per locale e per mese (tutti i dispositivi

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 // ── Menu da stampare (PDF) ────────────────────────────────────────────────────
@@ -97,34 +97,21 @@ const LOGO_POS: [LogoPos, string][] = [['nessuno', 'Nessuno'], ['sx', 'Alto sx']
 // Palette di colori per il menu (accenti + neutri scuri per i dettagli).
 const PALETTE = ['#dc2626', '#ea580c', '#d97706', '#ca8a04', '#16a34a', '#0d9488', '#0284c7', '#2563eb', '#4f46e5', '#7c3aed', '#db2777', '#111827', '#6b7280', '#000000']
 
-// ── Persistenza (per-dispositivo) delle scelte del menu stampabile ────────────
+// ── Persistenza (sul server, condivisa tra tutti i dispositivi del locale) ─────
 // Tutto ciò che l'utente imposta (colori, opzioni, selezione e ordine dei piatti)
-// resta salvato, così uscendo e rientrando non si azzera.
-const CFG_KEY = 'food:menu-pdf-config'
+// viene salvato lato server, così è uguale su ogni dispositivo dell'account.
 type SavedCfg = {
   tipo?: 'locale' | 'asporto'; header?: string; footer?: string
   accent?: string; coloreCategorie?: string; coloreDettagli?: string
   textScale?: number; logoPos?: LogoPos; mostraData?: boolean
 }
-function loadCfg(): SavedCfg | null {
-  if (typeof window === 'undefined') return null
-  try { const r = localStorage.getItem(CFG_KEY); return r ? JSON.parse(r) : null } catch { return null }
-}
-function saveCfg(c: SavedCfg) { try { localStorage.setItem(CFG_KEY, JSON.stringify(c)) } catch {} }
-
 type SavedLayout = { cats: { id: string; piatti: { id: string; on: boolean }[] }[] }
-const layoutKey = (tipo: string) => `food:menu-pdf-layout:${tipo}`
-function loadLayout(tipo: string): SavedLayout | null {
-  if (typeof window === 'undefined') return null
-  try { const r = localStorage.getItem(layoutKey(tipo)); return r ? JSON.parse(r) : null } catch { return null }
-}
-function saveLayout(tipo: string, items: PanelCat[]) {
-  try {
-    localStorage.setItem(layoutKey(tipo), JSON.stringify({
-      cats: items.map(c => ({ id: c.id, piatti: c.piatti.map(p => ({ id: p.id, on: p.on })) })),
-    }))
-  } catch {}
-}
+type SavedData = { cfg?: SavedCfg; layouts?: Record<string, SavedLayout> }
+
+const toLayout = (items: PanelCat[]): SavedLayout => ({
+  cats: items.map(c => ({ id: c.id, piatti: c.piatti.map(p => ({ id: p.id, on: p.on })) })),
+})
+
 // Fonde i dati del menu dal server con le scelte salvate: applica ordine e on/off
 // salvati, i piatti nuovi entrano attivi in fondo, quelli tolti dal menu spariscono.
 function reconcile(cats: FetchedCat[], saved: SavedLayout | null): PanelCat[] {
@@ -145,20 +132,25 @@ function reconcile(cats: FetchedCat[], saved: SavedLayout | null): PanelCat[] {
 }
 
 export default function MenuStampaPanel() {
-  const cfg0 = useMemo(() => loadCfg(), []) // scelte salvate (una volta, al mount)
-  const [tipo, setTipo] = useState<'locale' | 'asporto'>(cfg0?.tipo ?? 'locale')
+  const [tipo, setTipo] = useState<'locale' | 'asporto'>('locale')
   const [settings, setSettings] = useState<{ nomeLocale?: string; menuLogoUrl?: string | null; menuColoreP?: string } | null>(null)
   const [catByTipo, setCatByTipo] = useState<Record<string, FetchedCat[]>>({})
   const [items, setItems] = useState<PanelCat[]>([])
-  const [header, setHeader] = useState(cfg0?.header ?? '')
-  const [footer, setFooter] = useState(cfg0?.footer ?? '')
-  const [accent, setAccent] = useState(cfg0?.accent ?? '#dc2626')
-  const [coloreCategorie, setColoreCategorie] = useState(cfg0?.coloreCategorie ?? '#dc2626')
-  const [coloreDettagli, setColoreDettagli] = useState(cfg0?.coloreDettagli ?? '#111827')
-  const [logoPos, setLogoPos] = useState<LogoPos>(cfg0?.logoPos ?? 'centro')
-  const [mostraData, setMostraData] = useState(cfg0?.mostraData ?? true)
+  const [header, setHeader] = useState('')
+  const [footer, setFooter] = useState('')
+  const [accent, setAccent] = useState('#dc2626')
+  const [coloreCategorie, setColoreCategorie] = useState('#dc2626')
+  const [coloreDettagli, setColoreDettagli] = useState('#111827')
+  const [logoPos, setLogoPos] = useState<LogoPos>('centro')
+  const [mostraData, setMostraData] = useState(true)
   const [dataScelta, setDataScelta] = useState<string>(() => new Date().toISOString().slice(0, 10)) // yyyy-mm-dd, default oggi
-  const [textScale, setTextScale] = useState(cfg0?.textScale ?? 1)
+  const [textScale, setTextScale] = useState(1)
+
+  // Persistenza server: layout piatti per tipo (ref), flag "caricato" e un
+  // contatore per far scattare il salvataggio quando il layout cambia.
+  const layoutsRef = useRef<Record<string, SavedLayout>>({})
+  const [caricato, setCaricato] = useState(false)
+  const [layoutVersion, setLayoutVersion] = useState(0)
 
   // Anteprima scalata: misuro il contenitore e adatto l'iframe A4 (794px) con transform.
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -171,23 +163,60 @@ export default function MenuStampaPanel() {
     return () => ro.disconnect()
   }, [])
 
+  // Caricamento (una volta): prima la config salvata sul server, poi i settings
+  // del locale. I default dal locale si applicano SOLO se non c'è già una config
+  // salvata, per non sovrascrivere le scelte dell'utente. Sequenziale = niente race.
   useEffect(() => {
-    fetch('/api/settings', { credentials: 'include' }).then(r => r.json()).then(s => {
-      setSettings(s)
-      // I default dal locale si applicano SOLO se non ci sono già scelte salvate,
-      // per non sovrascrivere i colori/testo che l'utente ha impostato.
-      if (!cfg0) {
-        if (s.menuColoreP) { setAccent(s.menuColoreP); setColoreCategorie(s.menuColoreP) }
-        setHeader(prev => prev || s.nomeLocale || 'Menù del giorno')
-      }
-      if (!s.menuLogoUrl) setLogoPos('nessuno') // senza logo, posizione forzata a nessuno
-    }).catch(() => {})
-  }, [cfg0])
+    let cfgSalvata: SavedCfg | null = null
+    fetch('/api/menu/stampa-config', { credentials: 'include' })
+      .then(r => r.json())
+      .then((d: { dati?: string | null }) => {
+        const data: SavedData | null = d?.dati ? JSON.parse(d.dati) : null
+        if (data?.cfg) {
+          cfgSalvata = data.cfg
+          const c = data.cfg
+          if (c.tipo) setTipo(c.tipo)
+          if (c.header != null) setHeader(c.header)
+          if (c.footer != null) setFooter(c.footer)
+          if (c.accent) setAccent(c.accent)
+          if (c.coloreCategorie) setColoreCategorie(c.coloreCategorie)
+          if (c.coloreDettagli) setColoreDettagli(c.coloreDettagli)
+          if (c.textScale) setTextScale(c.textScale)
+          if (c.logoPos) setLogoPos(c.logoPos)
+          if (typeof c.mostraData === 'boolean') setMostraData(c.mostraData)
+        }
+        if (data?.layouts) layoutsRef.current = data.layouts
+      })
+      .catch(() => {})
+      .finally(() => {
+        fetch('/api/settings', { credentials: 'include' }).then(r => r.json()).then(s => {
+          setSettings(s)
+          if (!cfgSalvata) {
+            if (s.menuColoreP) { setAccent(s.menuColoreP); setColoreCategorie(s.menuColoreP) }
+            setHeader(prev => prev || s.nomeLocale || 'Menù del giorno')
+          }
+          if (!s.menuLogoUrl) setLogoPos('nessuno') // senza logo, posizione forzata a nessuno
+        }).catch(() => {}).finally(() => setCaricato(true))
+      })
+  }, [])
 
-  // Salva le scelte (config) ogni volta che cambiano.
+  // Salvataggio sul server (con debounce) di config + layout, quando qualcosa
+  // cambia. Non salva prima del caricamento iniziale (per non sovrascrivere).
   useEffect(() => {
-    saveCfg({ tipo, header, footer, accent, coloreCategorie, coloreDettagli, textScale, logoPos, mostraData })
-  }, [tipo, header, footer, accent, coloreCategorie, coloreDettagli, textScale, logoPos, mostraData])
+    if (!caricato) return
+    const t = setTimeout(() => {
+      const dati: SavedData = {
+        cfg: { tipo, header, footer, accent, coloreCategorie, coloreDettagli, textScale, logoPos, mostraData },
+        layouts: layoutsRef.current,
+      }
+      fetch('/api/menu/stampa-config', {
+        method: 'PUT', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dati: JSON.stringify(dati) }),
+      }).catch(() => {})
+    }, 700)
+    return () => clearTimeout(t)
+  }, [caricato, tipo, header, footer, accent, coloreCategorie, coloreDettagli, textScale, logoPos, mostraData, layoutVersion])
 
   useEffect(() => {
     if (catByTipo[tipo]) return
@@ -200,13 +229,15 @@ export default function MenuStampaPanel() {
   useEffect(() => {
     const cats = catByTipo[tipo]
     if (!cats) return
-    // Fonde i dati del server con le scelte salvate per questo menu.
-    setItems(reconcile(cats, loadLayout(tipo)))
-  }, [tipo, catByTipo])
+    // Fonde i dati del server con il layout salvato per questo menu.
+    setItems(reconcile(cats, layoutsRef.current[tipo] ?? null))
+  }, [tipo, catByTipo, caricato])
 
-  // Applica una modifica agli items e la salva subito (per-menu).
+  // Applica una modifica agli items, aggiorna il layout salvato e fa scattare il
+  // salvataggio sul server (tramite layoutVersion).
   function aggiornaItems(fn: (prev: PanelCat[]) => PanelCat[]) {
-    setItems(prev => { const next = fn(prev); saveLayout(tipo, next); return next })
+    setItems(prev => { const next = fn(prev); layoutsRef.current[tipo] = toLayout(next); return next })
+    setLayoutVersion(v => v + 1)
   }
   function togglePiatto(ci: number, pi: number) {
     aggiornaItems(prev => prev.map((c, i) => i !== ci ? c : { ...c, piatti: c.piatti.map((p, j) => j !== pi ? p : { ...p, on: !p.on }) }))

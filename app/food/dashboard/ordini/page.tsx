@@ -474,6 +474,9 @@ export default function OrdiniPage() {
     const righeVisibili = filtroReparto ? o.righe.filter(r => repartoDiRiga(r) === repartoAttivo) : o.righe
     // Nella vista reparto: il reparto è "pronto" quando tutte le sue voci visibili sono segnate pronte.
     const repartoPronto = filtroReparto && righeVisibili.length > 0 && righeVisibili.every(r => r.prontaAt != null)
+    // In vista reparto il totale mostrato è solo quello delle voci di quel reparto
+    // (es. al Bar solo le bevande di questo ordine), non il totale dell'intero ordine.
+    const totaleMostrato = filtroReparto ? righeVisibili.reduce((s, r) => s + r.prezzo * r.quantita, 0) : o.totale
 
     // Coursing: la vista a mandate si usa se ci sono più mandate OPPURE se l'unica mandata non è la 1ª
     // (così anche un singolo piatto messo in 2ª/3ª mostra la sua mandata).
@@ -508,7 +511,7 @@ export default function OrdiniPage() {
         <div className="px-3 py-2 border-b border-black/5 bg-white/50">
           <div className="flex items-center justify-between gap-2">
             {isTavolo
-              ? <span className="text-xs font-semibold text-ink-navy/50 truncate">{oraArrivo} · €{o.totale.toFixed(2)}</span>
+              ? <span className="text-xs font-semibold text-ink-navy/50 truncate">{oraArrivo} · €{totaleMostrato.toFixed(2)}</span>
               : <span className="text-sm font-bold text-ink-navy truncate">{nome}</span>}
             {/* Multi-mandata attivo: niente "Pronto" globale, comandano i tasti per mandata.
                 Concluso: AzioneOrdine mostra "Elimina". i tasti azione non contano come "notato" (stopPropagation). */}
@@ -533,7 +536,7 @@ export default function OrdiniPage() {
                 </p>
               )}
               {/* telefono e indirizzo NON qui: si vedono nella pagina Asporto/Delivery */}
-              <p className="text-xs text-ink-navy/45">€{o.totale.toFixed(2)}</p>
+              <p className="text-xs text-ink-navy/45">€{totaleMostrato.toFixed(2)}</p>
             </>
           )}
         </div>
