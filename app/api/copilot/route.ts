@@ -78,9 +78,10 @@ export async function POST(req: Request) {
         max_tokens: 1500,
         // La guida + gli strumenti (parte stabile e pesante) vanno in cache: il
         // breakpoint sull'ultimo blocco system copre anche i tools. Così, nei
-        // giri di tool-use e nei messaggi successivi (entro 5 min), quella parte
-        // si paga al ~10% invece che piena. Grosso risparmio sui costi.
-        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+        // giri di tool-use e nei messaggi successivi, quella parte si paga al
+        // ~10% invece che piena. TTL 1 ora (finestra scorrevole, si rinnova a
+        // ogni uso): adatta all'uso sporadico durante il servizio. Grosso risparmio.
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } }],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         tools: copilotTools as any,
         messages: convo,
