@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 
 // ── Menu da stampare (PDF) ────────────────────────────────────────────────────
@@ -97,20 +97,68 @@ const LOGO_POS: [LogoPos, string][] = [['nessuno', 'Nessuno'], ['sx', 'Alto sx']
 // Palette di colori per il menu (accenti + neutri scuri per i dettagli).
 const PALETTE = ['#dc2626', '#ea580c', '#d97706', '#ca8a04', '#16a34a', '#0d9488', '#0284c7', '#2563eb', '#4f46e5', '#7c3aed', '#db2777', '#111827', '#6b7280', '#000000']
 
+// ── Persistenza (per-dispositivo) delle scelte del menu stampabile ────────────
+// Tutto ciò che l'utente imposta (colori, opzioni, selezione e ordine dei piatti)
+// resta salvato, così uscendo e rientrando non si azzera.
+const CFG_KEY = 'food:menu-pdf-config'
+type SavedCfg = {
+  tipo?: 'locale' | 'asporto'; header?: string; footer?: string
+  accent?: string; coloreCategorie?: string; coloreDettagli?: string
+  textScale?: number; logoPos?: LogoPos; mostraData?: boolean
+}
+function loadCfg(): SavedCfg | null {
+  if (typeof window === 'undefined') return null
+  try { const r = localStorage.getItem(CFG_KEY); return r ? JSON.parse(r) : null } catch { return null }
+}
+function saveCfg(c: SavedCfg) { try { localStorage.setItem(CFG_KEY, JSON.stringify(c)) } catch {} }
+
+type SavedLayout = { cats: { id: string; piatti: { id: string; on: boolean }[] }[] }
+const layoutKey = (tipo: string) => `food:menu-pdf-layout:${tipo}`
+function loadLayout(tipo: string): SavedLayout | null {
+  if (typeof window === 'undefined') return null
+  try { const r = localStorage.getItem(layoutKey(tipo)); return r ? JSON.parse(r) : null } catch { return null }
+}
+function saveLayout(tipo: string, items: PanelCat[]) {
+  try {
+    localStorage.setItem(layoutKey(tipo), JSON.stringify({
+      cats: items.map(c => ({ id: c.id, piatti: c.piatti.map(p => ({ id: p.id, on: p.on })) })),
+    }))
+  } catch {}
+}
+// Fonde i dati del menu dal server con le scelte salvate: applica ordine e on/off
+// salvati, i piatti nuovi entrano attivi in fondo, quelli tolti dal menu spariscono.
+function reconcile(cats: FetchedCat[], saved: SavedLayout | null): PanelCat[] {
+  const catOrder = saved?.cats.map(c => c.id) ?? []
+  const savedById = new Map((saved?.cats ?? []).map(c => [c.id, c]))
+  const rank = (id: string, order: string[]) => { const i = order.indexOf(id); return i === -1 ? Number.MAX_SAFE_INTEGER : i }
+  return [...cats].sort((a, b) => rank(a.id, catOrder) - rank(b.id, catOrder)).map(c => {
+    const sc = savedById.get(c.id)
+    const pOrder = sc?.piatti.map(p => p.id) ?? []
+    const onMap = new Map((sc?.piatti ?? []).map(p => [p.id, p.on]))
+    const disp = c.piatti.filter(p => p.disponibile)
+    return {
+      id: c.id, nome: c.nome,
+      piatti: [...disp].sort((a, b) => rank(a.id, pOrder) - rank(b.id, pOrder))
+        .map(p => ({ id: p.id, nome: p.nome, descrizione: p.descrizione, prezzo: p.prezzo, on: onMap.has(p.id) ? onMap.get(p.id)! : true })),
+    }
+  })
+}
+
 export default function MenuStampaPanel() {
-  const [tipo, setTipo] = useState<'locale' | 'asporto'>('locale')
+  const cfg0 = useMemo(() => loadCfg(), []) // scelte salvate (una volta, al mount)
+  const [tipo, setTipo] = useState<'locale' | 'asporto'>(cfg0?.tipo ?? 'locale')
   const [settings, setSettings] = useState<{ nomeLocale?: string; menuLogoUrl?: string | null; menuColoreP?: string } | null>(null)
   const [catByTipo, setCatByTipo] = useState<Record<string, FetchedCat[]>>({})
   const [items, setItems] = useState<PanelCat[]>([])
-  const [header, setHeader] = useState('')
-  const [footer, setFooter] = useState('')
-  const [accent, setAccent] = useState('#dc2626')
-  const [coloreCategorie, setColoreCategorie] = useState('#dc2626')
-  const [coloreDettagli, setColoreDettagli] = useState('#111827')
-  const [logoPos, setLogoPos] = useState<LogoPos>('centro')
-  const [mostraData, setMostraData] = useState(true)
+  const [header, setHeader] = useState(cfg0?.header ?? '')
+  const [footer, setFooter] = useState(cfg0?.footer ?? '')
+  const [accent, setAccent] = useState(cfg0?.accent ?? '#dc2626')
+  const [coloreCategorie, setColoreCategorie] = useState(cfg0?.coloreCategorie ?? '#dc2626')
+  const [coloreDettagli, setColoreDettagli] = useState(cfg0?.coloreDettagli ?? '#111827')
+  const [logoPos, setLogoPos] = useState<LogoPos>(cfg0?.logoPos ?? 'centro')
+  const [mostraData, setMostraData] = useState(cfg0?.mostraData ?? true)
   const [dataScelta, setDataScelta] = useState<string>(() => new Date().toISOString().slice(0, 10)) // yyyy-mm-dd, default oggi
-  const [textScale, setTextScale] = useState(1)
+  const [textScale, setTextScale] = useState(cfg0?.textScale ?? 1)
 
   // Anteprima scalata: misuro il contenitore e adatto l'iframe A4 (794px) con transform.
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -126,11 +174,20 @@ export default function MenuStampaPanel() {
   useEffect(() => {
     fetch('/api/settings', { credentials: 'include' }).then(r => r.json()).then(s => {
       setSettings(s)
-      if (s.menuColoreP) { setAccent(s.menuColoreP); setColoreCategorie(s.menuColoreP) }
-      setHeader(prev => prev || s.nomeLocale || 'Menù del giorno')
-      if (!s.menuLogoUrl) setLogoPos('nessuno')
+      // I default dal locale si applicano SOLO se non ci sono già scelte salvate,
+      // per non sovrascrivere i colori/testo che l'utente ha impostato.
+      if (!cfg0) {
+        if (s.menuColoreP) { setAccent(s.menuColoreP); setColoreCategorie(s.menuColoreP) }
+        setHeader(prev => prev || s.nomeLocale || 'Menù del giorno')
+      }
+      if (!s.menuLogoUrl) setLogoPos('nessuno') // senza logo, posizione forzata a nessuno
     }).catch(() => {})
-  }, [])
+  }, [cfg0])
+
+  // Salva le scelte (config) ogni volta che cambiano.
+  useEffect(() => {
+    saveCfg({ tipo, header, footer, accent, coloreCategorie, coloreDettagli, textScale, logoPos, mostraData })
+  }, [tipo, header, footer, accent, coloreCategorie, coloreDettagli, textScale, logoPos, mostraData])
 
   useEffect(() => {
     if (catByTipo[tipo]) return
@@ -143,27 +200,29 @@ export default function MenuStampaPanel() {
   useEffect(() => {
     const cats = catByTipo[tipo]
     if (!cats) return
-    setItems(cats.map(c => ({
-      id: c.id, nome: c.nome,
-      piatti: c.piatti.filter(p => p.disponibile).map(p => ({ id: p.id, nome: p.nome, descrizione: p.descrizione, prezzo: p.prezzo, on: true })),
-    })))
+    // Fonde i dati del server con le scelte salvate per questo menu.
+    setItems(reconcile(cats, loadLayout(tipo)))
   }, [tipo, catByTipo])
 
+  // Applica una modifica agli items e la salva subito (per-menu).
+  function aggiornaItems(fn: (prev: PanelCat[]) => PanelCat[]) {
+    setItems(prev => { const next = fn(prev); saveLayout(tipo, next); return next })
+  }
   function togglePiatto(ci: number, pi: number) {
-    setItems(prev => prev.map((c, i) => i !== ci ? c : { ...c, piatti: c.piatti.map((p, j) => j !== pi ? p : { ...p, on: !p.on }) }))
+    aggiornaItems(prev => prev.map((c, i) => i !== ci ? c : { ...c, piatti: c.piatti.map((p, j) => j !== pi ? p : { ...p, on: !p.on }) }))
   }
   function toggleCat(ci: number, value: boolean) {
-    setItems(prev => prev.map((c, i) => i !== ci ? c : { ...c, piatti: c.piatti.map(p => ({ ...p, on: value })) }))
+    aggiornaItems(prev => prev.map((c, i) => i !== ci ? c : { ...c, piatti: c.piatti.map(p => ({ ...p, on: value })) }))
   }
   function setAll(value: boolean) {
-    setItems(prev => prev.map(c => ({ ...c, piatti: c.piatti.map(p => ({ ...p, on: value })) })))
+    aggiornaItems(prev => prev.map(c => ({ ...c, piatti: c.piatti.map(p => ({ ...p, on: value })) })))
   }
   function moveCat(ci: number, dir: -1 | 1) {
     const j = ci + dir
-    setItems(prev => { if (j < 0 || j >= prev.length) return prev; const n = [...prev];[n[ci], n[j]] = [n[j], n[ci]]; return n })
+    aggiornaItems(prev => { if (j < 0 || j >= prev.length) return prev; const n = [...prev];[n[ci], n[j]] = [n[j], n[ci]]; return n })
   }
   function movePiatto(ci: number, pi: number, dir: -1 | 1) {
-    setItems(prev => prev.map((c, i) => {
+    aggiornaItems(prev => prev.map((c, i) => {
       if (i !== ci) return c
       const j = pi + dir
       if (j < 0 || j >= c.piatti.length) return c
@@ -204,12 +263,20 @@ export default function MenuStampaPanel() {
     return (
       <div className="min-w-0">
         <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">{label}</label>
-        <div className="flex flex-wrap gap-1.5 mt-1.5">
+        <div className="flex flex-wrap gap-1.5 mt-1.5 items-center">
           {swatches.map(c => (
             <button key={c} type="button" onClick={() => onChange(c)} title={c} aria-label={`Colore ${c}`}
               style={{ backgroundColor: c }}
               className={`w-6 h-6 rounded-full transition-transform ${cur === c.toLowerCase() ? 'ring-2 ring-offset-1 ring-ink-navy/50 scale-110' : 'border border-black/10 hover:scale-110'}`} />
           ))}
+          {/* Colore preciso: apre il selettore colori del sistema. */}
+          <label title="Scegli un colore preciso"
+            className="w-6 h-6 rounded-full border border-dashed border-ink-navy/30 flex items-center justify-center text-ink-navy/40 text-xs leading-none cursor-pointer hover:scale-110 transition-transform relative bg-white">
+            +
+            <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'}
+              onChange={e => onChange(e.target.value)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" aria-label="Colore personalizzato" />
+          </label>
         </div>
       </div>
     )

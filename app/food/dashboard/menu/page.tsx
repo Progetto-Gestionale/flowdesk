@@ -42,6 +42,9 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   // Reparti / centri di produzione del locale (Cucina, Bar, Pizzeria…) e reparto scelto per la categoria.
   const [reparti, setReparti] = useState<string[]>(DEFAULT_REPARTI)
   const [repartoCat, setRepartoCat] = useState<string>('Cucina')
+  // Aggiunta nuovo reparto: campo interno al modale (niente popup nativo del browser).
+  const [nuovoRepartoOpen, setNuovoRepartoOpen] = useState(false)
+  const [nuovoRepartoNome, setNuovoRepartoNome] = useState('')
   const [modalPiatto, setModalPiatto] = useState<{ categoriaId: string } | null>(null)
   const [editPiatto, setEditPiatto] = useState<Piatto & { categoriaId: string } | null>(null)
   const [formPiatto, setFormPiatto] = useState<{ nome: string; descrizione: string; prezzo: string; immagineUrl: string; allergeni: string[] }>({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] })
@@ -104,6 +107,15 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reparti: JSON.stringify(nuovi) }),
     }).catch(() => {})
+  }
+
+  function confermaNuovoReparto() {
+    const nome = nuovoRepartoNome.trim()
+    if (!nome) return
+    if (!reparti.includes(nome)) salvaReparti([...reparti, nome])
+    setRepartoCat(nome)
+    setNuovoRepartoNome('')
+    setNuovoRepartoOpen(false)
   }
 
   async function salvaCategoria() {
@@ -378,15 +390,28 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                     {r}
                   </button>
                 ))}
-                <button type="button" onClick={() => {
-                  const nome = prompt('Nome del nuovo reparto (es. Pizzeria, Griglia)')?.trim()
-                  if (!nome) return
-                  if (!reparti.includes(nome)) salvaReparti([...reparti, nome])
-                  setRepartoCat(nome)
-                }} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-dashed border-electric-blue/40 text-electric-blue hover:bg-electric-blue/5">
-                  + Nuovo reparto
-                </button>
+                {!nuovoRepartoOpen && (
+                  <button type="button" onClick={() => setNuovoRepartoOpen(true)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-dashed border-electric-blue/40 text-electric-blue hover:bg-electric-blue/5">
+                    + Nuovo reparto
+                  </button>
+                )}
               </div>
+              {nuovoRepartoOpen && (
+                <div className="flex gap-1.5 mt-2">
+                  <input autoFocus value={nuovoRepartoNome} onChange={e => setNuovoRepartoNome(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); confermaNuovoReparto() }
+                      if (e.key === 'Escape') { setNuovoRepartoOpen(false); setNuovoRepartoNome('') }
+                    }}
+                    placeholder="Nome reparto (es. Pizzeria, Griglia)"
+                    className="flex-1 text-xs border border-ink-navy/15 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+                  <button type="button" onClick={confermaNuovoReparto} disabled={!nuovoRepartoNome.trim()}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue text-white hover:bg-electric-blue/90 disabled:opacity-40">Aggiungi</button>
+                  <button type="button" onClick={() => { setNuovoRepartoOpen(false); setNuovoRepartoNome('') }}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist">✕</button>
+                </div>
+              )}
               <p className="text-[11px] text-ink-navy/40 mt-1.5">Es. le bevande al Bar, i piatti in Cucina. Instrada gli ordini alla postazione giusta.</p>
             </div>
             <div className="flex gap-3">

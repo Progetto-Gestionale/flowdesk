@@ -566,7 +566,10 @@ export default function OrdiniPage() {
                     )}
                   </div>
                   <div className="divide-y divide-ink-navy/6">
-                    {righeM.map(r => <RigaVoce key={r.id} r={r} spenta={prontaM} />)}
+                    {/* Ogni voce si barra in base alla SUA prontaAt: così una voce già
+                        segnata pronta in un reparto (es. Bar) risulta pronta anche qui
+                        in "Tutti", anche se il resto della mandata non lo è ancora. */}
+                    {righeM.map(r => <RigaVoce key={r.id} r={r} spenta={r.prontaAt != null} />)}
                   </div>
                 </div>
               )
