@@ -150,7 +150,8 @@ model Ordine {
   createdAt   DateTime      @default(now())
   prontoAt    DateTime?     // quando l'ordine è marcato "pronto" in cucina (per tempo medio consegna)
   closedAt    DateTime?
-  notatoNuovo  Boolean      @default(false) // la board Ordini (cucina) ha notato l'arrivo: spegne il pulse rosso su TUTTI i dispositivi
+  notatoNuovo  Boolean      @default(false) // deprecato: sostituito da notatoReparti (acknowledgment per reparto). Tenuto per compatibilità.
+  notatoReparti String?     // JSON dei reparti (Cucina/Bar/…) che hanno notato l'arrivo: il pulse rosso si spegne solo nel reparto che clicca, non negli altri
   notatoPronto Boolean      @default(false) // la mappa Tavoli ha notato l'ordine pronto (conto aperto): spegne il badge "!" su tutti i dispositivi
   user        User          @relation(fields: [userId], references: [id])
   tavoloRel   Tavolo?       @relation(fields: [tavoloId], references: [id])

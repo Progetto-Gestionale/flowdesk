@@ -10,7 +10,17 @@ import { Skeleton } from '@/app/components/Skeleton'
 interface Tavolo { id: string; numero: number; etichetta: string | null; posti: number; note: string | null; gruppoId: string | null; salaId: string | null }
 interface Sala { id: string; nome: string; ordine: number; mapElementi?: string | null; _count?: { tavoli: number } }
 interface Gruppo { id: string; label: string; tavoli: { id: string; numero: number; etichetta: string | null }[] }
-interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null }
+interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; reparto?: string | null; prontaAt?: string | null }
+
+// Raggruppa le voci dentro un ordine: prima per reparto (bibite del Bar vicine, piatti della
+// Cucina vicini), poi per nome. Ordina solo l'elenco interno; i sottoconti restano separati.
+function ordinaRighe<T extends { reparto?: string | null; nome: string }>(righe: T[]): T[] {
+  return [...righe].sort((a, b) => {
+    const ra = a.reparto || '￿', rb = b.reparto || '￿'
+    if (ra !== rb) return ra.localeCompare(rb, 'it')
+    return a.nome.localeCompare(b.nome, 'it')
+  })
+}
 interface Ordine { id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null; totale: number; note: string | null; status: string; createdAt: string; notatoPronto: boolean; righe: RigaOrdine[] }
 interface MapData { forma: 'quadrato' | 'cerchio'; colore: string; w: number; h: number; x: number; y: number }
 interface Elemento { id: string; tipo: string; label: string; x: number; y: number; w: number; h: number; colore: string }
@@ -1146,30 +1156,43 @@ export function TavoliApp({ mode }: { mode: 'live' | 'gestione' }) {
                   <div className="overflow-y-auto flex-1 divide-y divide-ink-navy/8">
                     {ordiniConto.map((o, i) => {
                       const nuovo = ordiniNuoviConto.has(o.id) // ordine appena segnato pronto dalla cucina
-                      // In preparazione = la cucina non l'ha ancora segnato pronto (né consegnato/chiuso).
-                      const inPreparazione = o.status === 'nuovo' || o.status === 'aperto'
+                      // Stato PER RIGA: una voce è pronta se ha la sua prontaAt (segnata dal suo reparto)
+                      // oppure se l'intero ordine è già concluso. Così le bibite già pronte risultano
+                      // pronte anche se i piatti sono ancora in preparazione (l'ordine non è tutto pronto).
+                      const ordinePronto = ['consegnato', 'pronto', 'chiuso', 'pagato'].includes(o.status)
+                      const nTot = o.righe.length
+                      const nPronte = ordinePronto ? nTot : o.righe.filter(r => r.prontaAt != null).length
+                      const tuttePronte = nTot > 0 && nPronte === nTot
+                      const righeOrd = ordinaRighe(o.righe)
                       return (
                       <div key={o.id} className={`px-5 py-3 ${nuovo ? 'bg-green-50' : ''}`}>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0 flex-wrap">
                             {ordiniConto.length > 1 && <span className="text-[11px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-full shrink-0">Sottogruppo {i + 1}</span>}
-                            {nuovo && <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">● Appena pronto</span>}
-                            {!nuovo && inPreparazione && <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">◷ In preparazione</span>}
+                            {nuovo
+                              ? <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">● Appena pronto</span>
+                              : tuttePronte
+                                ? <span className="text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full shrink-0">● Pronto</span>
+                                : <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">◷ In preparazione{nPronte > 0 ? ` · ${nPronte}/${nTot} pronte` : ''}</span>}
                           </div>
                           <button onClick={() => setContoModificaOrdine(o)}
                             className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:bg-mist transition-colors shrink-0">Modifica</button>
                         </div>
                         <div className="divide-y divide-ink-navy/6">
-                          {o.righe.map(r => (
+                          {righeOrd.map(r => {
+                            const pronta = ordinePronto || r.prontaAt != null
+                            return (
                             <div key={r.id} className="flex items-center justify-between py-1.5 gap-3">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className={`text-xs font-bold w-5 shrink-0 text-center ${nuovo ? 'text-green-600' : 'text-ink-navy/40'}`}>{r.quantita}×</span>
+                                <span className={`text-xs font-bold w-5 shrink-0 text-center ${pronta ? 'text-green-600' : 'text-ink-navy/40'}`}>{r.quantita}×</span>
                                 <span className={`text-sm truncate ${nuovo ? 'text-ink-navy font-semibold' : 'text-ink-navy'}`}>{r.nome}</span>
                                 {r.note && <span className="text-xs text-ink-navy/35 truncate">({r.note})</span>}
+                                {pronta && !nuovo && <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">pronto</span>}
                               </div>
                               <span className="text-sm text-ink-navy/60 shrink-0">{fmt(r.prezzo * r.quantita)}</span>
                             </div>
-                          ))}
+                            )
+                          })}
                           {o.righe.length === 0 && <p className="py-1.5 text-sm text-ink-navy/30">Nessuna voce</p>}
                         </div>
                       </div>

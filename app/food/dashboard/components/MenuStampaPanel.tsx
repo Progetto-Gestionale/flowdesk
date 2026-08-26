@@ -97,6 +97,143 @@ const LOGO_POS: [LogoPos, string][] = [['nessuno', 'Nessuno'], ['sx', 'Alto sx']
 // Palette di colori per il menu (accenti + neutri scuri per i dettagli).
 const PALETTE = ['#dc2626', '#ea580c', '#d97706', '#ca8a04', '#16a34a', '#0d9488', '#0284c7', '#2563eb', '#4f46e5', '#7c3aed', '#db2777', '#111827', '#6b7280', '#000000']
 
+// ── Conversioni colore (per il picker HSV custom) ─────────────────────────────
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
+function hexToRgb(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return [0, 0, 0]
+  const int = parseInt(m[1], 16)
+  return [(int >> 16) & 255, (int >> 8) & 255, int & 255]
+}
+const rgbToHex = (r: number, g: number, b: number) => {
+  const h = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0')
+  return `#${h(r)}${h(g)}${h(b)}`
+}
+function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+  r /= 255; g /= 255; b /= 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min
+  let h = 0
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6
+    else if (max === g) h = (b - r) / d + 2
+    else h = (r - g) / d + 4
+    h *= 60; if (h < 0) h += 360
+  }
+  return { h, s: max === 0 ? 0 : d / max, v: max }
+}
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c
+  let r = 0, g = 0, b = 0
+  if (h < 60) { r = c; g = x } else if (h < 120) { r = x; g = c } else if (h < 180) { g = c; b = x }
+  else if (h < 240) { g = x; b = c } else if (h < 300) { r = x; b = c } else { r = c; b = x }
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255]
+}
+const hexToHsv = (hex: string) => { const [r, g, b] = hexToRgb(hex); return rgbToHsv(r, g, b) }
+const hsvToHex = (h: number, s: number, v: number) => { const [r, g, b] = hsvToRgb(h, s, v); return rgbToHex(r, g, b) }
+
+// Picker HSV custom (quadrato saturazione/luminosità + barra tonalità + hex), ottimizzato per
+// mouse e touch: usa i Pointer Events con pointer capture, così il trascinamento continua anche
+// fuori dai riquadri (valori sempre clampati) e non fa scrollare la pagina su tablet.
+function CustomColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  // HSV tenuto in stato locale: muovere S/V a v=0 o s=0 non perde la tonalità scelta.
+  const [hsv, setHsv] = useState(() => hexToHsv(/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'))
+  const [hex, setHex] = useState(value)
+  const svRef = useRef<HTMLDivElement>(null)
+  const hueRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<'sv' | 'hue' | null>(null)
+
+  const emit = (h: number, s: number, v: number) => { const x = hsvToHex(h, s, v); setHex(x); onChange(x) }
+
+  const applySV = (e: { clientX: number; clientY: number }) => {
+    const r = svRef.current?.getBoundingClientRect(); if (!r) return
+    const s = clamp01((e.clientX - r.left) / r.width)
+    const v = 1 - clamp01((e.clientY - r.top) / r.height)
+    setHsv(prev => { emit(prev.h, s, v); return { ...prev, s, v } })
+  }
+  const applyHue = (e: { clientX: number }) => {
+    const r = hueRef.current?.getBoundingClientRect(); if (!r) return
+    const h = clamp01((e.clientX - r.left) / r.width) * 360
+    setHsv(prev => { emit(h, prev.s, prev.v); return { ...prev, h } })
+  }
+
+  const svBg = `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hsvToHex(hsv.h, 1, 1)})`
+
+  return (
+    <div className="w-56 select-none" onClick={e => e.stopPropagation()}>
+      {/* Quadrato saturazione (x) / luminosità (y) */}
+      <div ref={svRef} className="relative w-full h-36 rounded-lg overflow-hidden cursor-crosshair"
+        style={{ background: svBg, touchAction: 'none' }}
+        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); dragRef.current = 'sv'; applySV(e) }}
+        onPointerMove={e => { if (dragRef.current === 'sv') applySV(e) }}
+        onPointerUp={e => { dragRef.current = null; e.currentTarget.releasePointerCapture(e.pointerId) }}>
+        <span className="absolute w-3.5 h-3.5 rounded-full border-2 border-white shadow -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, backgroundColor: hex }} />
+      </div>
+      {/* Barra tonalità */}
+      <div ref={hueRef} className="relative w-full h-4 rounded-full mt-3 cursor-pointer"
+        style={{ background: 'linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)', touchAction: 'none' }}
+        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); dragRef.current = 'hue'; applyHue(e) }}
+        onPointerMove={e => { if (dragRef.current === 'hue') applyHue(e) }}
+        onPointerUp={e => { dragRef.current = null; e.currentTarget.releasePointerCapture(e.pointerId) }}>
+        <span className="absolute top-1/2 w-5 h-5 rounded-full border-2 border-white shadow -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ left: `${(hsv.h / 360) * 100}%`, backgroundColor: hsvToHex(hsv.h, 1, 1) }} />
+      </div>
+      {/* Hex preciso */}
+      <div className="flex items-center gap-2 mt-3">
+        <span className="w-7 h-7 rounded-lg border border-black/10 shrink-0" style={{ backgroundColor: hex }} />
+        <input value={hex} onChange={e => {
+          const v = e.target.value.startsWith('#') ? e.target.value : '#' + e.target.value
+          setHex(v)
+          if (/^#[0-9a-fA-F]{6}$/.test(v)) { setHsv(hexToHsv(v)); onChange(v) }
+        }} spellCheck={false} maxLength={7}
+          className="w-full border border-ink-navy/15 rounded-lg px-2.5 py-1.5 text-sm text-ink-navy font-mono lowercase focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+      </div>
+    </div>
+  )
+}
+
+// Campo colore: palette di pastiglie + picker custom in un popover. Componente a livello di
+// modulo (identità stabile) così il popover non si richiude a ogni re-render del pannello.
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const cur = (value || '').toLowerCase()
+  // Se il colore corrente non è nella palette, lo mostro come prima pastiglia.
+  const swatches = PALETTE.some(c => c.toLowerCase() === cur) ? PALETTE : [value, ...PALETTE]
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+  return (
+    <div className="min-w-0" ref={wrapRef}>
+      <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">{label}</label>
+      <div className="flex flex-wrap gap-1.5 mt-1.5 items-center">
+        {swatches.map(c => (
+          <button key={c} type="button" onClick={() => onChange(c)} title={c} aria-label={`Colore ${c}`}
+            style={{ backgroundColor: c }}
+            className={`w-6 h-6 rounded-full transition-transform ${cur === c.toLowerCase() ? 'ring-2 ring-offset-1 ring-ink-navy/50 scale-110' : 'border border-black/10 hover:scale-110'}`} />
+        ))}
+        {/* Colore preciso: apre il picker HSV custom (mouse + touch). */}
+        <div className="relative">
+          <button type="button" onClick={() => setOpen(o => !o)} title="Scegli un colore preciso" aria-label="Colore personalizzato"
+            className={`w-6 h-6 rounded-full border border-dashed flex items-center justify-center text-xs leading-none transition-transform hover:scale-110 ${open ? 'border-electric-blue text-electric-blue bg-electric-blue/5' : 'border-ink-navy/30 text-ink-navy/40 bg-white'}`}>
+            +
+          </button>
+          {open && (
+            <div className="absolute z-50 top-full mt-2 left-0 bg-white rounded-2xl border border-ink-navy/10 shadow-xl p-3">
+              <CustomColorPicker value={value} onChange={onChange} />
+              <button type="button" onClick={() => setOpen(false)}
+                className="mt-3 w-full py-1.5 rounded-lg bg-ink-navy text-white text-xs font-semibold hover:bg-ink-navy/80 transition-colors">Fatto</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Persistenza (sul server, condivisa tra tutti i dispositivi del locale) ─────
 // Tutto ciò che l'utente imposta (colori, opzioni, selezione e ordine dei piatti)
 // viene salvato lato server, così è uguale su ogni dispositivo dell'account.
@@ -287,31 +424,6 @@ export default function MenuStampaPanel() {
   }
 
   const inputCls = 'w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30'
-  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => {
-    const cur = (value || '').toLowerCase()
-    // Se il colore corrente (es. quello salvato del locale) non è nella palette, lo mostro come prima pastiglia.
-    const swatches = PALETTE.some(c => c.toLowerCase() === cur) ? PALETTE : [value, ...PALETTE]
-    return (
-      <div className="min-w-0">
-        <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">{label}</label>
-        <div className="flex flex-wrap gap-1.5 mt-1.5 items-center">
-          {swatches.map(c => (
-            <button key={c} type="button" onClick={() => onChange(c)} title={c} aria-label={`Colore ${c}`}
-              style={{ backgroundColor: c }}
-              className={`w-6 h-6 rounded-full transition-transform ${cur === c.toLowerCase() ? 'ring-2 ring-offset-1 ring-ink-navy/50 scale-110' : 'border border-black/10 hover:scale-110'}`} />
-          ))}
-          {/* Colore preciso: apre il selettore colori del sistema. */}
-          <label title="Scegli un colore preciso"
-            className="w-6 h-6 rounded-full border border-dashed border-ink-navy/30 flex items-center justify-center text-ink-navy/40 text-xs leading-none cursor-pointer hover:scale-110 transition-transform relative bg-white">
-            +
-            <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'}
-              onChange={e => onChange(e.target.value)}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" aria-label="Colore personalizzato" />
-          </label>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 mb-4">
@@ -348,9 +460,9 @@ export default function MenuStampaPanel() {
 
           {/* Colori separati */}
           <div className="flex flex-wrap gap-4">
-            <ColorPicker label="Colore generale" value={accent} onChange={setAccent} />
-            <ColorPicker label="Colore categorie" value={coloreCategorie} onChange={setColoreCategorie} />
-            <ColorPicker label="Colore dettagli" value={coloreDettagli} onChange={setColoreDettagli} />
+            <ColorField label="Colore generale" value={accent} onChange={setAccent} />
+            <ColorField label="Colore categorie" value={coloreCategorie} onChange={setColoreCategorie} />
+            <ColorField label="Colore dettagli" value={coloreDettagli} onChange={setColoreDettagli} />
           </div>
 
           <div className="flex flex-wrap gap-4">

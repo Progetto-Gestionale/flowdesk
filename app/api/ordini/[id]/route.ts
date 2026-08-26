@@ -65,6 +65,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ordine })
   }
 
+  // Acknowledgment per reparto del pulse "nuovo ordine": { notaReparti: string[] } aggiunge quei
+  // reparti all'insieme di chi ha già notato l'ordine (merge additivo, non sovrascrive: così se la
+  // cucina nota, il pulse resta acceso sul bar finché non lo nota anche lui). Cross-dispositivo.
+  if ('notaReparti' in body) {
+    const nuovi: string[] = (Array.isArray(body.notaReparti) ? body.notaReparti : []).map((x: unknown) => String(x)).filter(Boolean)
+    const ord = await prisma.ordine.findUnique({ where: { id }, select: { notatoReparti: true } })
+    let attuali: string[] = []
+    try { const a = JSON.parse(ord?.notatoReparti ?? '[]'); if (Array.isArray(a)) attuali = a.map(String) } catch {}
+    const merged = [...new Set([...attuali, ...nuovi])]
+    const ordine = await prisma.ordine.update({ where: { id }, data: { notatoReparti: JSON.stringify(merged), notatoNuovo: true } })
+    return NextResponse.json({ ordine })
+  }
+
   const data: Record<string, unknown> = {}
   if ('status' in body) {
     data.status = body.status

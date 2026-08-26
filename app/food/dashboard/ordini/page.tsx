@@ -46,6 +46,7 @@ interface Ordine {
   createdAt: string
   closedAt: string | null
   notatoNuovo: boolean
+  notatoReparti: string | null // JSON dei reparti che hanno notato l'ordine (pulse rosso per-reparto)
   righe: RigaOrdine[]
 }
 
@@ -115,21 +116,9 @@ export default function OrdiniPage() {
   const [blockAsporto, setBlockAsporto] = useState(false)
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [savingBlocco, setSavingBlocco] = useState(false)
-  // Ordini "nuovi" già notati dalla cucina: mostrano il bannerino rosso pulsante finché non ci si clicca.
-  // L'acknowledgment è ora SUL SERVER (campo notatoNuovo): così se un dispositivo lo nota, il pulse
-  // si spegne anche sugli altri al prossimo polling (prima era in localStorage → solo su quel device).
-  function segnaVisto(id: string) {
-    setOrdini(prev => prev.map(o => o.id === id && !o.notatoNuovo ? { ...o, notatoNuovo: true } : o)) // ottimistico
-    fetch(`/api/ordini/${id}`, {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notatoNuovo: true }),
-    })
-  }
-  // Un ordine è "nuovo da notare" finché è appena arrivato e non è ancora stato notato.
-  // Gli ordini nascono 'nuovo' (cliente da QR / inserimento manuale) oppure 'aperto' (presi dal
-  // cameriere, tipico dei tavoli): entrambi sono "nuovi in cucina" finché non li si segna pronti.
-  const isNuovoDaNotare = (o: Ordine) => (o.status === 'nuovo' || o.status === 'aperto') && !o.notatoNuovo
+  // Acknowledgment del pulse "nuovo ordine" PER REPARTO (segnaVisto / nuovoDaNotare): definiti più
+  // sotto, dove sono noti i reparti (repartoDiRiga, repartoAttivo). Se la cucina nota l'ordine, il
+  // pulse resta acceso sulla parte del bar finché non lo nota anche lui.
 
   async function fetchOrdini() {
     const res = await fetch('/api/ordini?oggi=1&futuri=1', { credentials: 'include' })
@@ -316,6 +305,47 @@ export default function OrdiniPage() {
   const repartoDiRiga = (r: RigaOrdine) => r.reparto || repartoPrincipale
   const filtroReparto = repartoAttivo !== 'tutti'
   const ordineNelReparto = (o: Ordine) => !filtroReparto || o.righe.some(r => repartoDiRiga(r) === repartoAttivo)
+  // Totale mostrato secondo la vista: in "Tutti" è il totale dell'ordine; in vista reparto è solo
+  // la somma delle voci di quel reparto (es. al Bar solo le bevande di quell'ordine). Usato sia dalle
+  // celle dei singoli ordini sia dai totali di intestazione delle righe (tavolo/asporto/delivery).
+  const totaleVista = (o: Ordine): number => filtroReparto
+    ? o.righe.filter(r => repartoDiRiga(r) === repartoAttivo).reduce((s, r) => s + r.prezzo * r.quantita, 0)
+    : o.totale
+
+  // ── Pulse "nuovo ordine" per reparto ────────────────────────────────────────
+  // Un ordine appena arrivato (status 'nuovo' o 'aperto') pulsa in rosso finché non lo si nota.
+  // L'acknowledgment è PER REPARTO e sul server (campo notatoReparti, JSON): se la cucina nota
+  // l'ordine, il pulse si spegne solo per la cucina; la parte del bar continua a pulsare finché
+  // non lo nota anche il bar. In vista "Tutti" il pulse resta finché TUTTI i reparti coinvolti
+  // hanno notato; cliccando in "Tutti" si notano tutti insieme.
+  const isNuovoStatus = (o: Ordine) => o.status === 'nuovo' || o.status === 'aperto'
+  const repartiNotati = (o: Ordine): Set<string> => {
+    try { const a = JSON.parse(o.notatoReparti ?? '[]'); return new Set(Array.isArray(a) ? a.map(String) : []) } catch { return new Set() }
+  }
+  const repartiCoinvolti = (o: Ordine): string[] => [...new Set(o.righe.map(repartoDiRiga))]
+  // Reparti che, nella vista corrente, devono ancora notare l'ordine (in vista reparto: solo quello attivo).
+  const repartiDaNotare = (o: Ordine): string[] => {
+    if (!isNuovoStatus(o)) return []
+    const notati = repartiNotati(o)
+    // Retrocompatibilità: ordini già notati con il vecchio booleano (notatoReparti ancora vuoto)
+    // valgono come notati da tutti → non ripulsano dopo il deploy.
+    if (notati.size === 0 && o.notatoNuovo) return []
+    const rilevanti = filtroReparto ? [repartoAttivo] : repartiCoinvolti(o)
+    return rilevanti.filter(r => !notati.has(r))
+  }
+  const isNuovoDaNotare = (o: Ordine) => repartiDaNotare(o).length > 0
+  // Nota l'ordine per i reparti rilevanti nella vista corrente (merge additivo lato server).
+  function segnaVisto(o: Ordine) {
+    const reparti = repartiDaNotare(o)
+    if (reparti.length === 0) return
+    const merged = [...new Set([...repartiNotati(o), ...reparti])]
+    setOrdini(prev => prev.map(x => x.id === o.id ? { ...x, notatoReparti: JSON.stringify(merged), notatoNuovo: true } : x)) // ottimistico
+    fetch(`/api/ordini/${o.id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notaReparti: reparti }),
+    })
+  }
 
   const ordiniAttivi = ordiniBoard.filter(o => !isDoneOrdine(o) && ordineNelReparto(o))
   const ordiniStorico = ordiniBoard.filter(o => isDoneOrdine(o) && ordineNelReparto(o))
@@ -432,8 +462,8 @@ export default function OrdiniPage() {
   )
   const nAsportoAttivi = asportoAttivi.length
   const nDeliveryAttivi = deliveryAttivi.length
-  const totAsportoAttivi = asportoAttivi.reduce((s, i) => s + (i.ord?.totale ?? 0), 0)
-  const totDeliveryAttivi = deliveryAttivi.reduce((s, i) => s + (i.ord?.totale ?? 0), 0)
+  const totAsportoAttivi = asportoAttivi.reduce((s, i) => s + (i.ord ? totaleVista(i.ord) : 0), 0)
+  const totDeliveryAttivi = deliveryAttivi.reduce((s, i) => s + (i.ord ? totaleVista(i.ord) : 0), 0)
 
   // Bottoni azione condivisi dalle celle degli ordini (Pronto / Elimina con conferma).
   function AzioneOrdine({ o }: { o: Ordine }) {
@@ -476,7 +506,7 @@ export default function OrdiniPage() {
     const repartoPronto = filtroReparto && righeVisibili.length > 0 && righeVisibili.every(r => r.prontaAt != null)
     // In vista reparto il totale mostrato è solo quello delle voci di quel reparto
     // (es. al Bar solo le bevande di questo ordine), non il totale dell'intero ordine.
-    const totaleMostrato = filtroReparto ? righeVisibili.reduce((s, r) => s + r.prezzo * r.quantita, 0) : o.totale
+    const totaleMostrato = totaleVista(o)
 
     // Coursing: la vista a mandate si usa se ci sono più mandate OPPURE se l'unica mandata non è la 1ª
     // (così anche un singolo piatto messo in 2ª/3ª mostra la sua mandata).
@@ -496,7 +526,7 @@ export default function OrdiniPage() {
 
     return (
       <div
-        onClick={nuovo ? () => segnaVisto(o.id) : undefined}
+        onClick={nuovo ? () => segnaVisto(o) : undefined}
         className={`shrink-0 w-56 rounded-lg border flex flex-col overflow-hidden ${nuovo ? 'ring-2 ring-red-400 cursor-pointer' : ''} ${nonConsegnato ? 'border-red-300 bg-red-50/40' : `${cell.border} ${cell.bg}`} ${isDone ? 'opacity-60' : ''}`}>
         {nuovo && (
           <p className="px-3 py-1 bg-red-500 text-white text-[10px] font-bold uppercase tracking-wide text-center animate-pulse">
@@ -750,7 +780,7 @@ export default function OrdiniPage() {
             {/* Tavoli: una riga orizzontale per tavolo (o gruppo di tavoli uniti) */}
             {gruppiTavoloAttivi.map(g => (
               <OrdiniRow key={g.key} label={g.label} tipoKey="tavolo" count={g.ordini.length}
-                totale={g.ordini.reduce((s, o) => s + o.totale, 0)}>
+                totale={g.ordini.reduce((s, o) => s + totaleVista(o), 0)}>
                 {g.ordini.map(o => <OrderCell key={o.id} o={o} />)}
               </OrdiniRow>
             ))}
@@ -789,7 +819,7 @@ export default function OrdiniPage() {
               <div className="space-y-3">
                 {gruppiTavoloStorico.map(g => (
                   <OrdiniRow key={g.key} label={g.label} tipoKey="tavolo" count={g.ordini.length}
-                    totale={g.ordini.reduce((s, o) => s + o.totale, 0)}>
+                    totale={g.ordini.reduce((s, o) => s + totaleVista(o), 0)}>
                     {g.ordini.map(o => <OrderCell key={o.id} o={o} />)}
                   </OrdiniRow>
                 ))}
@@ -797,7 +827,7 @@ export default function OrdiniPage() {
             ) : (
               <OrdiniRow label={filtroStorico === 'delivery' ? 'Delivery' : 'Asporto'} tipoKey={filtroStorico}
                 count={ordiniStoricoFiltrati.length + appStoricoFiltrati.length}
-                totale={ordiniStoricoFiltrati.reduce((s, o) => s + o.totale, 0)}>
+                totale={ordiniStoricoFiltrati.reduce((s, o) => s + totaleVista(o), 0)}>
                 {ordiniStoricoFiltratiSorted.map(o => <OrderCell key={o.id} o={o} />)}
                 {appStoricoFiltratiSorted.map(a => <AppCell key={a.id} a={a} />)}
               </OrdiniRow>

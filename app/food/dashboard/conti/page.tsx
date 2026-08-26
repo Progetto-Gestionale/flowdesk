@@ -7,7 +7,7 @@ import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
 // Cache navigazione (solo vista "oggi", il caso caldo): al ritorno mostra subito l'ultimo dato noto.
 const CONTI_CACHE_KEY = 'food:conti:oggi'
 
-interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; quantitaPagata?: number }
+interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; quantitaPagata?: number; reparto?: string | null }
 interface Ordine {
   id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null
   totale: number; note: string | null; status: string; createdAt: string; closedAt?: string | null
@@ -17,6 +17,17 @@ interface Piatto { id: string; nome: string; prezzo: number; descrizione?: strin
 interface Categoria { id: string; nome: string; piatti: Piatto[] }
 
 const fmt = (n: number) => `€${n.toFixed(2)}`
+
+// Raggruppa le voci DENTRO un singolo sottoconto: prima per reparto (bibite del Bar vicine,
+// piatti della Cucina vicini), poi per nome (così "Pizza …" e voci uguali finiscono adiacenti).
+// I sottoconti restano separati: si ordina solo l'elenco interno di ogni ordine.
+function ordinaRighe<T extends { reparto?: string | null; nome: string }>(righe: T[]): T[] {
+  return [...righe].sort((a, b) => {
+    const ra = a.reparto || '￿', rb = b.reparto || '￿' // senza reparto → in fondo
+    if (ra !== rb) return ra.localeCompare(rb, 'it')
+    return a.nome.localeCompare(b.nome, 'it')
+  })
+}
 
 // Un "conto" = tutti gli Ordini aperti dello stesso tavolo o gruppo di tavoli.
 // Ogni Ordine è un "sottogruppo" (un invio del cliente) pagabile singolarmente.
@@ -191,7 +202,7 @@ function ModificaModal({ ordine, onClose, onOrdineUpdated }: {
           {/* Righe attuali */}
           <div className="divide-y divide-ink-navy/6">
             {righe.length === 0 && <p className="px-5 py-4 text-sm text-ink-navy/30 text-center">Ordine vuoto</p>}
-            {righe.map(r => (
+            {ordinaRighe(righe).map(r => (
               <div key={r.id} className="flex items-center gap-2 px-5 py-3">
                 <span className="flex-1 text-sm text-ink-navy truncate">{r.nome}</span>
                 {r.note && <span className="text-xs text-ink-navy/35 shrink-0">({r.note})</span>}
@@ -656,7 +667,7 @@ export default function ContiPage() {
           </div>
         </div>
         <div className={`divide-y divide-ink-navy/6 ${!aperto ? 'opacity-60' : ''}`}>
-          {o.righe.map(r => (
+          {ordinaRighe(o.righe).map(r => (
             <div key={r.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-xs font-bold text-ink-navy w-5 shrink-0 text-center">{r.quantita}×</span>
@@ -723,7 +734,7 @@ export default function ContiPage() {
           </div>
         </div>
         <div className="divide-y divide-ink-navy/6 pl-6">
-          {o.righe.map(r => {
+          {ordinaRighe(o.righe).map(r => {
             const pagate = unitaPagate(o, r)
             const tutta = rigaTuttaPagata(o, r)
             // Controllo per riga solo su un sottogruppo aperto e non già interamente pagato.
