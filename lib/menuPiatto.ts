@@ -38,6 +38,15 @@ export function normSoglia(v: unknown): number | null {
   return n < 0 ? 0 : n
 }
 
+// Food cost (costo di produzione della porzione, €).
+// null / '' / undefined → null (non impostato). Numero → float >= 0.
+export function normFoodCost(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v)
+  if (!Number.isFinite(n)) return null
+  return n < 0 ? 0 : n
+}
+
 // Testo dell'etichetta (es. "Best seller"). Trim, vuoto → null, max 40 caratteri.
 export function normEtichetta(v: unknown): string | null {
   if (typeof v !== 'string') return null

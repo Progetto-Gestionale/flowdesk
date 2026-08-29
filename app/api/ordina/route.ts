@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { repartoPerPiatti } from '@/lib/reparti'
+import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
 import { decrementaStock, StockError } from '@/lib/stock'
 
 // GET — menu
@@ -104,6 +104,7 @@ export async function POST(req: Request) {
   // tavolo/gruppo; ciascun Ordine (ogni invio, es. da telefoni diversi) è un sottogruppo
   // pagabile singolarmente. Niente più fusione delle righe in un unico Ordine.
   const repMap = await repartoPerPiatti(righe.map((r: any) => r.piattoId))
+  const fcMap = await foodCostPerPiatti(righe.map((r: any) => r.piattoId))
   try {
     // Decremento del counter e creazione ordine nella stessa transazione: se un piatto
     // gestito è esaurito, l'intero ordine viene annullato (nessun decremento parziale).
@@ -121,6 +122,7 @@ export async function POST(req: Request) {
           righe: {
             create: righe.map((r: any) => ({
               piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
+              foodCost: r.piattoId ? (fcMap[r.piattoId] ?? null) : null,
               quantita: r.quantita, note: r.note ?? '',
               mandata: Number.isFinite(r.mandata) && r.mandata >= 1 ? Math.floor(r.mandata) : 1,
               reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,

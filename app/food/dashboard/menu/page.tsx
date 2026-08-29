@@ -12,6 +12,7 @@ interface Piatto {
   nome: string
   descrizione: string | null
   prezzo: number
+  foodCost: number | null
   immagineUrl: string | null
   allergeni: string[]
   disponibile: boolean
@@ -27,12 +28,12 @@ const ETICHETTA_COLORI = ['#e11d48', '#f59e0b', '#16a34a', '#2563eb', '#7c3aed',
 const ETICHETTA_COLORE_DEFAULT = '#2563eb'
 
 interface FormPiatto {
-  nome: string; descrizione: string; prezzo: string; immagineUrl: string; allergeni: string[]
+  nome: string; descrizione: string; prezzo: string; foodCost: string; immagineUrl: string; allergeni: string[]
   gestisciQuantita: boolean; quantita: string; mostraSempre: boolean; quantitaSoglia: string
   etichetta: string; etichettaColore: string
 }
 const EMPTY_FORM: FormPiatto = {
-  nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [],
+  nome: '', descrizione: '', prezzo: '', foodCost: '', immagineUrl: '', allergeni: [],
   gestisciQuantita: false, quantita: '', mostraSempre: true, quantitaSoglia: '',
   etichetta: '', etichettaColore: '',
 }
@@ -209,6 +210,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   function payloadPiatto() {
     return {
       nome: formPiatto.nome, descrizione: formPiatto.descrizione, prezzo: formPiatto.prezzo,
+      foodCost: formPiatto.foodCost === '' ? null : formPiatto.foodCost,
       immagineUrl: formPiatto.immagineUrl, allergeni: formPiatto.allergeni,
       quantita: formPiatto.gestisciQuantita ? (formPiatto.quantita === '' ? 0 : formPiatto.quantita) : null,
       quantitaSoglia: formPiatto.gestisciQuantita && !formPiatto.mostraSempre && formPiatto.quantitaSoglia !== '' ? formPiatto.quantitaSoglia : null,
@@ -272,6 +274,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
     setEditPiatto({ ...piatto, categoriaId })
     setFormPiatto({
       nome: piatto.nome, descrizione: piatto.descrizione ?? '', prezzo: piatto.prezzo.toString(),
+      foodCost: piatto.foodCost != null ? piatto.foodCost.toString() : '',
       immagineUrl: piatto.immagineUrl ?? '', allergeni: piatto.allergeni ?? [],
       gestisciQuantita: piatto.quantita !== null,
       quantita: piatto.quantita !== null ? piatto.quantita.toString() : '',
@@ -405,6 +408,11 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                       {p.descrizione && <p className="text-sm text-ink-navy/50 truncate">{p.descrizione}</p>}
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         <p className="text-electric-blue font-bold text-sm">€{p.prezzo.toFixed(2)}</p>
+                        {p.foodCost != null && p.prezzo > 0 && (
+                          <span className={`text-[11px] font-medium ${p.prezzo - p.foodCost < 0 ? 'text-red-500' : 'text-ink-navy/40'}`}>
+                            margine €{(p.prezzo - p.foodCost).toFixed(2)} · {Math.round(((p.prezzo - p.foodCost) / p.prezzo) * 100)}%
+                          </span>
+                        )}
                         {p.quantita !== null && (
                           <div className="flex items-center gap-1">
                             <span className="text-[11px] font-semibold text-ink-navy/40 uppercase tracking-wide">Rimasti</span>
@@ -520,13 +528,34 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                   placeholder="Ingredienti, allergeni, varianti..."
                   rows={2} className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue resize-none" />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Prezzo (€) *</label>
-                <input type="number" step="0.50" min="0" value={formPiatto.prezzo}
-                  onChange={e => setFormPiatto(f => ({ ...f, prezzo: e.target.value }))}
-                  placeholder="0.00"
-                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Prezzo (€) *</label>
+                  <input type="number" step="0.50" min="0" value={formPiatto.prezzo}
+                    onChange={e => setFormPiatto(f => ({ ...f, prezzo: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Food cost (€)</label>
+                  <input type="number" step="0.10" min="0" value={formPiatto.foodCost}
+                    onChange={e => setFormPiatto(f => ({ ...f, foodCost: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                </div>
               </div>
+              {(() => {
+                const p = parseFloat(formPiatto.prezzo), c = parseFloat(formPiatto.foodCost)
+                if (!Number.isFinite(p) || !Number.isFinite(c) || p <= 0) return null
+                const margine = p - c
+                const perc = Math.round((margine / p) * 100)
+                return (
+                  <div className={`flex items-center justify-between text-xs rounded-lg px-3 py-2 ${margine < 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+                    <span className="font-medium">Margine per porzione</span>
+                    <span className="font-bold">€{margine.toFixed(2)} · {perc}%</span>
+                  </div>
+                )
+              })()}
 
               {/* Quantità / counter live */}
               <div>

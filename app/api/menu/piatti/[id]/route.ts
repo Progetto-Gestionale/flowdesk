@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
-import { normQuantita, normSoglia, normEtichetta, normColore } from '@/lib/menuPiatto'
+import { normQuantita, normSoglia, normEtichetta, normColore, normFoodCost } from '@/lib/menuPiatto'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -10,6 +10,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data = await req.json()
   if (data.prezzo) data.prezzo = parseFloat(data.prezzo)
   // Sanitizza i nuovi campi solo se presenti (il quick-edit inline invia es. solo { quantita }).
+  if ('foodCost' in data) data.foodCost = normFoodCost(data.foodCost)
   if ('quantita' in data) data.quantita = normQuantita(data.quantita)
   if ('quantitaSoglia' in data) data.quantitaSoglia = normSoglia(data.quantitaSoglia)
   if ('etichetta' in data) data.etichetta = normEtichetta(data.etichetta)

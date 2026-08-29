@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { getCache, setCache } from '@/lib/pageCache'
 import { Skeleton } from '@/app/components/Skeleton'
 
@@ -425,13 +426,14 @@ export default function AnalyticsPage() {
   const [kpiEspanse, setKpiEspanse] = useState(false) // dettaglio giornaliero: cliccando una tile si espandono tutte
 
   interface BucketAdv { data: string; incasso: number; ordini: number; coperti: number; asporto: number; delivery: number; incassoAsporto?: number; incassoDelivery?: number }
-  interface DatiTavoliAdv {
+  interface RedditivitaAdv { totaleCosto: number; totaleNetto: number; marginePerc: number | null; foodCostPerc: number | null; coperturaCosto: number }
+  interface DatiTavoliAdv extends RedditivitaAdv {
     totaleIncasso: number; totaleOrdini: number; copertiConfermati: number
     copertiPrenotazione: number; copertiWalkIn: number
     spesaMediaPersona: number; noShow: number; durataMediaMinuti: number
     andamento: BucketAdv[]
   }
-  interface DatiOrdiniAdv {
+  interface DatiOrdiniAdv extends RedditivitaAdv {
     totaleIncasso: number; totaleOrdini: number; asportoCount: number; deliveryCount: number
     spesaMedia: number; tassoNonConsegnati: number
     tempoMedioConsegnaMin: number; consegneMisurate: number
@@ -439,9 +441,10 @@ export default function AnalyticsPage() {
     fasceAsporto: { ora: string; count: number }[]
     fasceDelivery: { ora: string; count: number }[]
   }
-  interface PiattoAdv { id: string; nome: string; quantita: number; incasso: number; categoria: string }
+  interface PiattoAdv { id: string; nome: string; quantita: number; incasso: number; categoria: string; costo: number; netto: number; margine: number | null; coperturaCosto: number }
   interface CategoriaAdv { nome: string; ordine: number; piatti: PiattoAdv[] }
-  interface DatiMenuAdv { top5: PiattoAdv[]; bottom5: PiattoAdv[]; categorie: CategoriaAdv[]; totale: number }
+  interface RiepilogoMenuAdv { incasso: number; costo: number; netto: number; foodCostPerc: number | null; coperturaCosto: number }
+  interface DatiMenuAdv { top5: PiattoAdv[]; bottom5: PiattoAdv[]; categorie: CategoriaAdv[]; totale: number; riepilogo?: RiepilogoMenuAdv }
 
   const [datiTavoliAdv, setDatiTavoliAdv] = useState<DatiTavoliAdv | null>(null)
   const [loadingTavoliAdv, setLoadingTavoliAdv] = useState(false)
@@ -449,6 +452,54 @@ export default function AnalyticsPage() {
   const [loadingOrdiniAdv, setLoadingOrdiniAdv] = useState(false)
   const [datiMenuAdv, setDatiMenuAdv] = useState<DatiMenuAdv | null>(null)
   const [loadingMenuAdv, setLoadingMenuAdv] = useState(false)
+
+  // Card riepilogo redditività (guadagno netto/margine): condivisa da tab Tavoli e Asporto/Delivery.
+  function CardRedditivita({ incasso, r }: { incasso: number; r: RedditivitaAdv }) {
+    if (incasso <= 0) return null
+    // Nessun food cost impostato sui piatti venduti: niente numeri fuorvianti, solo un invito ad attivarlo.
+    if (r.coperturaCosto === 0) {
+      return (
+        <div className="bg-white rounded-2xl border border-ink-navy/10 p-4 shadow-sm flex items-start gap-3">
+          <span className="text-lg leading-none mt-0.5">💡</span>
+          <p className="text-sm text-ink-navy/60">
+            Imposta il <strong>food cost</strong> dei piatti (nel <Link href="/food/dashboard/menu" className="text-electric-blue underline">Menu</Link>) per vedere qui <strong>guadagno netto</strong> e <strong>margine</strong>.
+          </p>
+        </div>
+      )
+    }
+    return (
+      <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-ink-navy">Redditività del periodo</h2>
+          {r.coperturaCosto < 0.999 && (
+            <span className="text-[11px] text-amber-600 bg-amber-50 rounded-full px-2.5 py-1">
+              Stima: food cost su {Math.round(r.coperturaCosto * 100)}% delle vendite
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs text-ink-navy/45 mb-1">Incasso lordo</p>
+            <p className="text-xl font-bold text-ink-navy">{fmtEur(incasso)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-ink-navy/45 mb-1">Food cost</p>
+            <p className="text-xl font-bold text-ink-navy/70">{fmtEur(r.totaleCosto)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-ink-navy/45 mb-1">Guadagno netto</p>
+            <p className={`text-xl font-bold ${r.totaleNetto < 0 ? 'text-red-500' : 'text-emerald-600'}`}>{fmtEur(r.totaleNetto)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-ink-navy/45 mb-1">Margine</p>
+            <p className={`text-xl font-bold ${r.marginePerc == null ? 'text-ink-navy/30' : r.marginePerc < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+              {r.marginePerc == null ? '—' : `${Math.round(r.marginePerc)}%`}
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Cache: evita refetch se periodo+riferimento non cambiano
   const cacheAdv = useRef<{
@@ -1112,6 +1163,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
             const maxCop = Math.max(...gb.map(b => b.coperti), 1)
             return (
               <>
+                <CardRedditivita incasso={d.totaleIncasso} r={d} />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
                     { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600', daily: dettaglioGiornaliero(d.andamento, b => fmtEur(b.incasso)) },
@@ -1234,6 +1286,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
             const maxIncTipo = Math.max(...gb.map(b => Math.max(b.incassoAsporto, b.incassoDelivery)), 1)
             return (
               <>
+                <CardRedditivita incasso={d.totaleIncasso} r={d} />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
                     { label: 'Incasso totale', val: fmtEur(d.totaleIncasso), sub: periodoAdvLabel, color: 'text-emerald-600', daily: dettaglioGiornaliero(d.andamento, b => fmtEur(b.incasso)) },
@@ -1395,8 +1448,49 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
             const d = datiMenuAdv
             const maxTop = Math.max(...d.top5.map(p => p.quantita), 1)
             const maxBot = Math.max(...d.bottom5.map(p => p.quantita), 1)
+            const rp = d.riepilogo
             return (
               <>
+                {rp && rp.incasso > 0 && rp.coperturaCosto === 0 && (
+                  <div className="bg-white rounded-2xl border border-ink-navy/10 p-4 shadow-sm flex items-start gap-3">
+                    <span className="text-lg leading-none mt-0.5">💡</span>
+                    <p className="text-sm text-ink-navy/60">
+                      Imposta il <strong>food cost</strong> dei piatti (col pulsante di modifica qui nel <Link href="/food/dashboard/menu" className="text-electric-blue underline">Menu</Link>) per vedere qui <strong>guadagno netto</strong> e <strong>margini</strong>.
+                    </p>
+                  </div>
+                )}
+                {rp && rp.incasso > 0 && rp.coperturaCosto > 0 && (
+                  <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-base font-semibold text-ink-navy">Redditività del periodo</h2>
+                      {rp.coperturaCosto < 0.999 && (
+                        <span className="text-[11px] text-amber-600 bg-amber-50 rounded-full px-2.5 py-1">
+                          Stima: food cost su {Math.round(rp.coperturaCosto * 100)}% delle vendite
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-xs text-ink-navy/45 mb-1">Incasso lordo</p>
+                        <p className="text-xl font-bold text-ink-navy">{fmtEur(rp.incasso)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-ink-navy/45 mb-1">Food cost</p>
+                        <p className="text-xl font-bold text-ink-navy/70">{fmtEur(rp.costo)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-ink-navy/45 mb-1">Guadagno netto</p>
+                        <p className={`text-xl font-bold ${rp.netto < 0 ? 'text-red-500' : 'text-emerald-600'}`}>{fmtEur(rp.netto)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-ink-navy/45 mb-1">Food cost %</p>
+                        <p className={`text-xl font-bold ${rp.foodCostPerc == null ? 'text-ink-navy/30' : rp.foodCostPerc > 35 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {rp.foodCostPerc == null ? '—' : `${Math.round(rp.foodCostPerc)}%`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
                     <h2 className="text-base font-semibold text-ink-navy mb-5">Top 5 più richiesti</h2>
@@ -1441,31 +1535,47 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                 </div>
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm overflow-hidden">
                   <div className="px-6 py-4 border-b border-ink-navy/8"><h2 className="text-base font-semibold text-ink-navy">Classifica per categoria</h2></div>
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
                     <thead className="bg-mist text-ink-navy/50 text-xs uppercase tracking-wide">
                       <tr>
                         <th className="text-left px-6 py-3">Piatto</th>
-                        <th className="text-right px-6 py-3">Pz venduti</th>
+                        <th className="text-right px-4 py-3">Pz</th>
+                        <th className="text-right px-4 py-3">Incasso</th>
+                        <th className="text-right px-4 py-3">Netto</th>
+                        <th className="text-right px-6 py-3">Margine</th>
                       </tr>
                     </thead>
                     <tbody>
                       {d.categorie.map(cat => (
                         <>
                           <tr key={cat.nome} className="bg-mist/60 border-t border-ink-navy/10">
-                            <td className="px-6 py-2 font-semibold text-ink-navy/70 text-xs uppercase tracking-wide" colSpan={2}>{cat.nome}</td>
+                            <td className="px-6 py-2 font-semibold text-ink-navy/70 text-xs uppercase tracking-wide" colSpan={5}>{cat.nome}</td>
                           </tr>
-                          {cat.piatti.map((p, i) => (
-                            <tr key={p.id} className="hover:bg-mist border-t border-gray-100">
-                              <td className="px-6 py-2.5 text-ink-navy pl-8">
-                                <span className="text-ink-navy/30 font-bold mr-2">{i + 1}</span>{p.nome}
-                              </td>
-                              <td className="text-right px-6 py-2.5 text-ink-navy/70">{p.quantita}</td>
-                            </tr>
-                          ))}
+                          {cat.piatti.map((p, i) => {
+                            const noCost = p.coperturaCosto === 0
+                            return (
+                              <tr key={p.id} className="hover:bg-mist border-t border-gray-100">
+                                <td className="px-6 py-2.5 text-ink-navy pl-8">
+                                  <span className="text-ink-navy/30 font-bold mr-2">{i + 1}</span>{p.nome}
+                                </td>
+                                <td className="text-right px-4 py-2.5 text-ink-navy/70">{p.quantita}</td>
+                                <td className="text-right px-4 py-2.5 text-ink-navy/70">{fmtEur(p.incasso)}</td>
+                                <td className={`text-right px-4 py-2.5 ${noCost ? 'text-ink-navy/25' : p.netto < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                  {noCost ? '—' : fmtEur(p.netto)}
+                                </td>
+                                <td className={`text-right px-6 py-2.5 ${noCost || p.margine == null ? 'text-ink-navy/25' : p.margine < 0 ? 'text-red-500' : 'text-ink-navy/70'}`}
+                                  title={!noCost && p.coperturaCosto < 0.999 ? `Food cost noto sul ${Math.round(p.coperturaCosto * 100)}% dei pezzi` : undefined}>
+                                  {noCost || p.margine == null ? '—' : `${Math.round(p.margine)}%${p.coperturaCosto < 0.999 ? '*' : ''}`}
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </>
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </>
             )

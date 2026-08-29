@@ -50,6 +50,7 @@ export async function GET(req: Request) {
       nome: true,
       quantita: true,
       prezzo: true,
+      foodCost: true, // snapshot del costo al momento dell'ordine → guadagno netto/margine
       piattoId: true,
       reparto: true, // snapshot al momento dell'ordine: robusto anche per piatti poi eliminati
       piatto: {
@@ -64,8 +65,9 @@ export async function GET(req: Request) {
   // piatti preparati in cucina). Restano invece nella classifica per categoria.
   const REPARTI_BEVANDE = ['Bar']
 
-  // Aggrega per piatto
-  const piattoMap: Record<string, { nome: string; quantita: number; incasso: number; categoria: string; categoriaOrdine: number; bevanda: boolean }> = {}
+  // Aggrega per piatto. incasso = lordo (prezzo×q). costo = food cost totale dallo snapshot
+  // riga (solo dove presente). quantitaConCosto = pezzi con costo noto (per la copertura dati).
+  const piattoMap: Record<string, { nome: string; quantita: number; incasso: number; costo: number; quantitaConCosto: number; categoria: string; categoriaOrdine: number; bevanda: boolean }> = {}
   for (const r of righe) {
     // Piatti eliminati hanno piattoId null: raggruppa per nome così le vendite
     // storiche restano distinte e non finiscono tutte in un'unica riga.
@@ -79,6 +81,8 @@ export async function GET(req: Request) {
         nome: r.nome,
         quantita: 0,
         incasso: 0,
+        costo: 0,
+        quantitaConCosto: 0,
         categoria: r.piatto?.categoria?.nome ?? 'Altro',
         categoriaOrdine: r.piatto?.categoria?.ordine ?? 999,
         bevanda: false,
@@ -86,11 +90,26 @@ export async function GET(req: Request) {
     }
     piattoMap[key].quantita += r.quantita
     piattoMap[key].incasso += r.prezzo * r.quantita
+    if (r.foodCost != null) {
+      piattoMap[key].costo += r.foodCost * r.quantita
+      piattoMap[key].quantitaConCosto += r.quantita
+    }
     if (bev) piattoMap[key].bevanda = true
   }
 
+  // Arricchisce ogni piatto con netto, margine % e copertura del food cost.
   const piatti = Object.entries(piattoMap)
-    .map(([id, v]) => ({ id, ...v }))
+    .map(([id, v]) => {
+      const netto = v.incasso - v.costo
+      return {
+        id,
+        ...v,
+        netto,
+        margine: v.incasso > 0 ? (netto / v.incasso) * 100 : null,
+        // copertura: quota di pezzi con food cost noto (1 = tutti). Se < 1 il netto è una stima.
+        coperturaCosto: v.quantita > 0 ? v.quantitaConCosto / v.quantita : 0,
+      }
+    })
     .sort((a, b) => b.quantita - a.quantita)
 
   // Classifica migliori/peggiori: solo piatti, niente bevande (reparto Bar).
@@ -107,5 +126,18 @@ export async function GET(req: Request) {
   const top5 = piattiClassifica.slice(0, 5)
   const bottom5 = piattiClassifica.length > 5 ? piattiClassifica.slice(-5).reverse() : []
 
-  return NextResponse.json({ top5, bottom5, categorie, totale: piatti.length })
+  // Riepilogo redditività del periodo (tutti i piatti, bevande incluse).
+  const incassoTot = piatti.reduce((s, p) => s + p.incasso, 0)
+  const costoTot = piatti.reduce((s, p) => s + p.costo, 0)
+  const incassoConCosto = piatti.reduce((s, p) => s + (p.quantita > 0 ? p.incasso * (p.quantitaConCosto / p.quantita) : 0), 0)
+  const riepilogo = {
+    incasso: incassoTot,
+    costo: costoTot,
+    netto: incassoTot - costoTot,
+    // Food cost % calcolato solo sulla quota di incasso con costo noto (evita di diluire con le vendite senza costo).
+    foodCostPerc: incassoConCosto > 0 ? (costoTot / incassoConCosto) * 100 : null,
+    coperturaCosto: incassoTot > 0 ? incassoConCosto / incassoTot : 0,
+  }
+
+  return NextResponse.json({ top5, bottom5, categorie, totale: piatti.length, riepilogo })
 }

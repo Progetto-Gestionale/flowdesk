@@ -34,3 +34,17 @@ export async function repartoPerPiatti(piattoIds: (string | null | undefined)[])
   for (const p of piatti) if (p.categoria?.reparto) map[p.id] = p.categoria.reparto
   return map
 }
+
+// Mappa piattoId → foodCost attuale. Usata alla creazione dell'ordine per fare lo SNAPSHOT del
+// costo sulla riga: il guadagno netto storico resta coerente anche se poi cambi il food cost del piatto.
+export async function foodCostPerPiatti(piattoIds: (string | null | undefined)[]): Promise<Record<string, number>> {
+  const ids = [...new Set(piattoIds.filter((x): x is string => !!x))]
+  if (ids.length === 0) return {}
+  const piatti = await prisma.menuPiatto.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, foodCost: true },
+  })
+  const map: Record<string, number> = {}
+  for (const p of piatti) if (p.foodCost != null) map[p.id] = p.foodCost
+  return map
+}

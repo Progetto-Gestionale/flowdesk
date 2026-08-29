@@ -40,6 +40,8 @@ export async function POST(req: Request) {
         data: { userId: user.id, nome: cat.nome, ordine: cat.ordine, tipo: a },
       })
       for (const piatto of cat.piatti) {
+        // Copia TUTTE le info salvate del piatto (food cost, etichetta, counter, ecc.),
+        // non solo i campi base: importando da un menù si ottiene una copia identica.
         await prisma.menuPiatto.create({
           data: {
             userId: user.id,
@@ -47,9 +49,14 @@ export async function POST(req: Request) {
             nome: piatto.nome,
             descrizione: piatto.descrizione,
             prezzo: piatto.prezzo,
+            foodCost: piatto.foodCost,
             immagineUrl: piatto.immagineUrl,
             allergeni: piatto.allergeni,
             disponibile: piatto.disponibile,
+            quantita: piatto.quantita,
+            quantitaSoglia: piatto.quantitaSoglia,
+            etichetta: piatto.etichetta,
+            etichettaColore: piatto.etichettaColore,
             ordine: piatto.ordine,
           },
         })

@@ -122,6 +122,7 @@ model MenuPiatto {
   nome        String
   descrizione String?
   prezzo      Float
+  foodCost    Float?        // costo di produzione della porzione (€). null = non impostato. Con prezzo → margine e guadagno netto in analytics. Separato per menu tavoli/asporto (righe distinte).
   immagineUrl String?
   allergeni   String[]      @default([]) // 14 allergeni UE (Reg. 1169/2011), es. ["glutine","latte"]
   disponibile Boolean       @default(true)
@@ -173,6 +174,7 @@ model RigaOrdine {
   piattoId String?
   nome     String
   prezzo   Float
+  foodCost Float?                       // snapshot del food cost del piatto al momento dell'ordine (€/porzione). null = non impostato allora. Usato per guadagno netto/margine in analytics.
   quantita Int
   note     String?
   mandata  Int       @default(1)       // portata/coursing: 1=antipasti-primi, 2=secondi, 3=dolce. Default 1 = tutto insieme.

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { repartoPerPiatti } from '@/lib/reparti'
+import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
 import { parseInfoOrdine, type RigaPreventivo } from '@/lib/ordineInfo'
 
 // Un preventivo asporto/delivery accettato diventa un Ordine vero (che entra in cucina e nella
@@ -40,6 +40,7 @@ export async function creaOrdineDaPreventivo(preventivo: PreventivoLike, userId:
   })
 
   const repMap = await repartoPerPiatti(righe.map(r => r.piattoId))
+  const fcMap = await foodCostPerPiatti(righe.map(r => r.piattoId))
   const ordine = await prisma.ordine.create({
     data: {
       userId,
@@ -54,6 +55,7 @@ export async function creaOrdineDaPreventivo(preventivo: PreventivoLike, userId:
           piattoId: r.piattoId ?? null,
           nome: r.nome,
           prezzo: r.prezzo,
+          foodCost: r.piattoId ? (fcMap[r.piattoId] ?? null) : null,
           quantita: r.quantita,
           note: r.note ?? null,
           reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,

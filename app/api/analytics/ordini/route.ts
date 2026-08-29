@@ -78,7 +78,8 @@ export async function GET(req: Request) {
       tipo: { in: ['asporto', 'delivery'] },
       createdAt: { gte: from, lt: toEffettivo },
     },
-    select: { id: true, tipo: true, totale: true, status: true, createdAt: true, clienteInfo: true, prontoAt: true, closedAt: true },
+    select: { id: true, tipo: true, totale: true, status: true, createdAt: true, clienteInfo: true, prontoAt: true, closedAt: true,
+      righe: { select: { foodCost: true, prezzo: true, quantita: true } } },
   })
 
   // Un ordine non consegnato/non ritirato (o annullato) non genera incasso, ma resta nel volume.
@@ -151,8 +152,25 @@ export async function GET(req: Request) {
   const spesaMedia = ordiniConsegnati.length > 0 ? totaleIncasso / ordiniConsegnati.length : 0
   const tassoNonConsegnati = ordini.length > 0 ? (nonConsegnati / ordini.length) * 100 : 0
 
+  // Guadagno netto = incasso − food cost (snapshot riga), calcolato sugli ordini consegnati (stessa base dell'incasso).
+  let costoTot = 0, incassoRigheTot = 0, incassoRigheConCosto = 0
+  for (const o of ordiniConsegnati) for (const r of o.righe) {
+    const rev = r.prezzo * r.quantita
+    incassoRigheTot += rev
+    if (r.foodCost != null) { costoTot += r.foodCost * r.quantita; incassoRigheConCosto += rev }
+  }
+  const totaleNetto = totaleIncasso - costoTot
+  const marginePerc = totaleIncasso > 0 ? (totaleNetto / totaleIncasso) * 100 : null
+  const foodCostPerc = incassoRigheConCosto > 0 ? (costoTot / incassoRigheConCosto) * 100 : null
+  const coperturaCosto = incassoRigheTot > 0 ? incassoRigheConCosto / incassoRigheTot : 0
+
   return NextResponse.json({
     totaleIncasso,
+    totaleCosto: costoTot,
+    totaleNetto,
+    marginePerc,
+    foodCostPerc,
+    coperturaCosto,
     totaleOrdini: ordini.length,
     asportoCount,
     deliveryCount,

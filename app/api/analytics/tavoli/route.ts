@@ -91,7 +91,8 @@ export async function GET(req: Request) {
         status: 'chiuso',
         createdAt: { gte: from, lt: toEffettivo },
       },
-      select: { id: true, totale: true, coperti: true, gruppoId: true, tavoloId: true, tavolo: true, createdAt: true, closedAt: true },
+      select: { id: true, totale: true, coperti: true, gruppoId: true, tavoloId: true, tavolo: true, createdAt: true, closedAt: true,
+        righe: { select: { foodCost: true, prezzo: true, quantita: true } } },
     }),
     prisma.appuntamento.findMany({
       where: {
@@ -141,6 +142,18 @@ export async function GET(req: Request) {
     .map(([data, v]) => ({ data, ...v }))
 
   const totaleIncasso = ordini.reduce((s, o) => s + o.totale, 0)
+
+  // Guadagno netto = incasso − food cost (dallo snapshot riga). Copertura = quota di incasso-righe con costo noto.
+  let costoTot = 0, incassoRigheTot = 0, incassoRigheConCosto = 0
+  for (const o of ordini) for (const r of o.righe) {
+    const rev = r.prezzo * r.quantita
+    incassoRigheTot += rev
+    if (r.foodCost != null) { costoTot += r.foodCost * r.quantita; incassoRigheConCosto += rev }
+  }
+  const totaleNetto = totaleIncasso - costoTot
+  const marginePerc = totaleIncasso > 0 ? (totaleNetto / totaleIncasso) * 100 : null
+  const foodCostPerc = incassoRigheConCosto > 0 ? (costoTot / incassoRigheConCosto) * 100 : null
+  const coperturaCosto = incassoRigheTot > 0 ? incassoRigheConCosto / incassoRigheTot : 0
 
   // Coperti totali = somma dei coperti per conto (inseriti dal cameriere alla chiusura).
   let copertiConfermati = 0
@@ -195,6 +208,11 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     totaleIncasso,
+    totaleCosto: costoTot,
+    totaleNetto,
+    marginePerc,
+    foodCostPerc,
+    coperturaCosto,
     totaleOrdini: totaleTavoli,
     copertiConfermati,
     copertiPrenotazione,

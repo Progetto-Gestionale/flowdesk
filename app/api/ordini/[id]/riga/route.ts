@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
-import { repartoPerPiatti } from '@/lib/reparti'
+import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
 
 async function ricalcolaTotale(id: string) {
   const righe = await prisma.rigaOrdine.findMany({ where: { ordineId: id } })
@@ -25,8 +25,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await prisma.rigaOrdine.update({ where: { id: esistente.id }, data: { quantita: esistente.quantita + quantita } })
   } else {
     const repMap = await repartoPerPiatti([piattoId])
+    const fcMap = await foodCostPerPiatti([piattoId])
     await prisma.rigaOrdine.create({
-      data: { ordineId: id, piattoId, nome, prezzo: parseFloat(prezzo), quantita, note: note ?? '', reparto: repMap[piattoId] ?? null },
+      data: { ordineId: id, piattoId, nome, prezzo: parseFloat(prezzo), foodCost: fcMap[piattoId] ?? null, quantita, note: note ?? '', reparto: repMap[piattoId] ?? null },
     })
   }
 
