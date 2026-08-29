@@ -2,7 +2,17 @@ import { getAuthUser, getAuthUserId } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendEmailConferma, sendEmailRifiuto } from '@/lib/email'
+import { creaOrdineDaPreventivo, parseInfoOrdine } from '@/lib/ordineDaPreventivo'
 import { randomBytes } from 'crypto'
+
+// Riepilogo per le email di un ordine asporto/delivery: piatti dal carrello + indirizzo + totale.
+function datiEmailOrdine(preventivo: { items: string; totale: number; note?: string | null; tipo: string }) {
+  let items: { nome: string; quantita: number; prezzo: number }[] = []
+  try { const a = JSON.parse(preventivo.items ?? '[]'); if (Array.isArray(a)) items = a } catch {}
+  const info = parseInfoOrdine(preventivo.note)
+  return { items, totale: preventivo.totale, indirizzo: info.indirizzo ?? null, data: info.data, ora: info.ora }
+}
+const isOrdine = (tipo: string) => tipo === 'asporto' || tipo === 'delivery'
 
 const LEAD_STATUS_MAP: Record<string, string> = {
   inviato: 'proposta',
@@ -44,7 +54,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (data._azione === 'proposta') {
     const token = randomBytes(24).toString('hex')
     const { sendEmailProposta } = await import('@/lib/email')
-    const dati = extractDatiEmail({ ...preventivo, ...data })
+    const preventivoAgg = { ...preventivo, ...data }
+    const dati = isOrdine(preventivo.tipo) ? datiEmailOrdine(preventivoAgg) : extractDatiEmail(preventivoAgg)
     await prisma.preventivo.update({
       where: { id },
       data: {
@@ -95,9 +106,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   }
 
-  // Email accettato
+  // Asporto/Delivery accettato → crea l'Ordine vero (entra in cucina + pagina Asporto & Delivery).
+  if (data.status === 'accettato' && isOrdine(preventivo.tipo)) {
+    await creaOrdineDaPreventivo(preventivo, user.id)
+  }
+
+  // Email accettato (con riepilogo piatti per asporto/delivery, dati prenotazione per il tavolo).
   if (data.status === 'accettato' && preventivo.clienteEmail) {
-    const dati = extractDatiEmail(preventivo)
+    const dati = isOrdine(preventivo.tipo) ? datiEmailOrdine(preventivo) : extractDatiEmail(preventivo)
     await sendEmailConferma({
       clienteEmail: preventivo.clienteEmail,
       clienteNome: preventivo.clienteName,

@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 export async function GET(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ daVerificare: 0 })
-  const count = await prisma.preventivo.count({ where: { userId: user.id, status: 'da_verificare' } })
+  // Le richieste asporto/delivery hanno una loro sezione (tab "Richieste in entrata" in Asporto &
+  // Delivery) → escluse dal badge "Prenotazioni tavoli".
+  const count = await prisma.preventivo.count({ where: { userId: user.id, status: 'da_verificare', tipo: { notIn: ['asporto', 'delivery'] } } })
   return NextResponse.json({ daVerificare: count })
 }

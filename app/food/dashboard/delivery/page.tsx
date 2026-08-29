@@ -4,6 +4,7 @@ import { serataOggi, serataOrdine, serataKey } from '@/lib/serata'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { getCache, setCache } from '@/lib/pageCache'
 import { Skeleton, SkeletonCards } from '@/app/components/Skeleton'
+import RichiesteInEntrata, { type Richiesta } from './RichiesteInEntrata'
 
 const DELIVERY_CACHE_KEY = 'food:delivery' // cache navigazione (stale-while-revalidate)
 
@@ -61,6 +62,19 @@ export default function AsportoDeliveryPage() {
   const [loading, setLoading] = useState(true)
   const [confermaElimina, setConfermaElimina] = useState<string | null>(null)
   const [showNuovo, setShowNuovo] = useState(false)
+  // Vista: board ordini vs "Richieste in entrata" (ordini asporto/delivery online in attesa di conferma).
+  const [vista, setVista] = useState<'ordini' | 'richieste'>('ordini')
+  const [richieste, setRichieste] = useState<Richiesta[]>([])
+
+  const fetchRichieste = useCallback(async () => {
+    const res = await fetch('/api/preventivi', { credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+    const list: Richiesta[] = (data.preventivi ?? []).filter((p: Richiesta) =>
+      (p.tipo === 'asporto' || p.tipo === 'delivery') && (p.status === 'da_verificare' || p.status === 'inviato'))
+    setRichieste(list)
+  }, [])
+  // Pallino rosso = richieste nuove da verificare (non ancora gestite).
+  const nRichiesteNuove = richieste.filter(r => r.status === 'da_verificare').length
 
   const fetchOrdini = useCallback(async () => {
     // futuri=1 → include anche gli ordini prenotati per giorni successivi
@@ -74,9 +88,10 @@ export default function AsportoDeliveryPage() {
     const cached = getCache<Ordine[]>(DELIVERY_CACHE_KEY)
     if (cached) { setOrdini(cached); setLoading(false) }
     fetchOrdini().finally(() => setLoading(false)) // revalidate in background
-    const iv = setInterval(fetchOrdini, 15000)
+    fetchRichieste()
+    const iv = setInterval(() => { fetchOrdini(); fetchRichieste() }, 15000)
     return () => clearInterval(iv)
-  }, [fetchOrdini])
+  }, [fetchOrdini, fetchRichieste])
 
   // Write-through: mantiene la cache allineata all'ultimo stato mostrato.
   useEffect(() => {
@@ -257,38 +272,64 @@ export default function AsportoDeliveryPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <h1 className="text-2xl font-bold text-ink-navy">Asporto &amp; Delivery</h1>
+          {/* Switch vista: board Ordini · Richieste in entrata (con pallino rosso se ci sono nuove richieste) */}
           <div className="flex gap-1 bg-mist rounded-xl p-1">
-            {([
-              { key: 'delivery' as Tipo, label: 'Delivery' },
-              { key: 'asporto' as Tipo, label: 'Asporto' },
-            ]).map(({ key, label }) => {
-              const n = attivi(key)
-              return (
-                <button key={key} onClick={() => setTipoSel(key)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${tipoSel === key ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
-                  {label}
-                  {n > 0 && (
-                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${tipoSel === key ? 'bg-electric-blue text-white' : 'bg-ink-navy/10 text-ink-navy/50'}`}>{n}</span>
-                  )}
-                </button>
-              )
-            })}
+            <button onClick={() => setVista('ordini')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${vista === 'ordini' ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+              Ordini
+            </button>
+            <button onClick={() => setVista('richieste')}
+              className={`relative px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${vista === 'richieste' ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+              Richieste in entrata
+              {richieste.length > 0 && (
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${vista === 'richieste' ? 'bg-electric-blue text-white' : 'bg-ink-navy/10 text-ink-navy/50'}`}>{richieste.length}</span>
+              )}
+              {nRichiesteNuove > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-mist animate-pulse" title={`${nRichiesteNuove} nuove richieste`} />
+              )}
+            </button>
           </div>
+          {vista === 'ordini' && (
+            <div className="flex gap-1 bg-mist rounded-xl p-1">
+              {([
+                { key: 'delivery' as Tipo, label: 'Delivery' },
+                { key: 'asporto' as Tipo, label: 'Asporto' },
+              ]).map(({ key, label }) => {
+                const n = attivi(key)
+                return (
+                  <button key={key} onClick={() => setTipoSel(key)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${tipoSel === key ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy/70'}`}>
+                    {label}
+                    {n > 0 && (
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${tipoSel === key ? 'bg-electric-blue text-white' : 'bg-ink-navy/10 text-ink-navy/50'}`}>{n}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowNuovo(true)}
-            className="text-sm text-white font-semibold bg-electric-blue px-4 py-1.5 rounded-lg hover:bg-electric-blue/90 transition-colors">
-            + Nuovo ordine
-          </button>
-          <button onClick={fetchOrdini}
+          {vista === 'ordini' && (
+            <button onClick={() => setShowNuovo(true)}
+              className="text-sm text-white font-semibold bg-electric-blue px-4 py-1.5 rounded-lg hover:bg-electric-blue/90 transition-colors">
+              + Nuovo ordine
+            </button>
+          )}
+          <button onClick={() => { fetchOrdini(); fetchRichieste() }}
             className="text-sm text-electric-blue hover:text-ink-navy font-medium border border-electric-blue/25 px-3 py-1.5 rounded-lg hover:bg-electric-blue/10 transition-colors">
             ↻ Aggiorna
           </button>
         </div>
       </div>
 
+      {vista === 'richieste' && (
+        <RichiesteInEntrata richieste={richieste} onRefetch={() => { fetchRichieste(); fetchOrdini() }} />
+      )}
+
+      {vista === 'ordini' && (<>
       {/* Tre colonne sempre visibili: preparazione · pronti · conclusi (restano per tutta la giornata) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
         {t.sezioni.map(sez => {
@@ -324,6 +365,7 @@ export default function AsportoDeliveryPage() {
           </div>
         </div>
       )}
+      </>)}
 
       {showNuovo && (
         <NuovoOrdineModal

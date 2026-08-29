@@ -18,15 +18,21 @@ interface Categoria { id: string; nome: string; piatti: Piatto[] }
 
 const fmt = (n: number) => `€${n.toFixed(2)}`
 
-// Raggruppa le voci DENTRO un singolo sottoconto: prima per reparto (bibite del Bar vicine,
-// piatti della Cucina vicini), poi per nome (così "Pizza …" e voci uguali finiscono adiacenti).
+// Raggruppa le voci DENTRO un singolo sottoconto per REPARTO (bibite del Bar vicine, piatti della
+// Cucina vicini), mantenendo però l'ordine di inserimento ENTRO ogni reparto: così le portate
+// restano nell'ordine in cui il cameriere le ha aggiunte (prima i primi, poi i secondi) e non si
+// mischiano. L'ordine dei reparti segue la prima comparsa (di solito prima i piatti, poi le bevande).
 // I sottoconti restano separati: si ordina solo l'elenco interno di ogni ordine.
-function ordinaRighe<T extends { reparto?: string | null; nome: string }>(righe: T[]): T[] {
-  return [...righe].sort((a, b) => {
-    const ra = a.reparto || '￿', rb = b.reparto || '￿' // senza reparto → in fondo
-    if (ra !== rb) return ra.localeCompare(rb, 'it')
-    return a.nome.localeCompare(b.nome, 'it')
-  })
+function ordinaRighe<T extends { reparto?: string | null }>(righe: T[]): T[] {
+  const repOrder = new Map<string, number>()
+  righe.forEach(r => { const k = r.reparto || '￿'; if (!repOrder.has(k)) repOrder.set(k, repOrder.size) })
+  return righe
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => {
+      const ra = repOrder.get(a.r.reparto || '￿')!, rb = repOrder.get(b.r.reparto || '￿')!
+      return ra !== rb ? ra - rb : a.i - b.i // entro il reparto: ordine originale (mandata asc, id asc)
+    })
+    .map(x => x.r)
 }
 
 // Un "conto" = tutti gli Ordini aperti dello stesso tavolo o gruppo di tavoli.

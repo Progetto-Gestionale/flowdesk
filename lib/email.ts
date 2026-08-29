@@ -56,6 +56,10 @@ interface EmailConfermaParams {
   occasione?: string
   servizio?: string
   messaggioProposta?: string // messaggio dell'host incluso nella proposta accettata
+  // Asporto/Delivery: riepilogo del carrello e dati consegna
+  items?: { nome: string; quantita: number; prezzo: number }[]
+  indirizzo?: string | null
+  totale?: number
 }
 
 interface EmailPropostaParams extends EmailConfermaParams {
@@ -71,20 +75,41 @@ interface EmailRifiutoParams {
 }
 
 function buildDettagliRighe(p: Partial<EmailConfermaParams>) {
-  const { tipo, data, ora, coperti, allergie, occasione, servizio } = p
+  const { tipo, data, ora, coperti, allergie, occasione, servizio, indirizzo } = p
   const isTavolo = tipo === 'tavolo'
+  const isDelivery = tipo === 'delivery'
   const dataFormattata = data
     ? new Date(data).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : null
+  const quandoLabel = isTavolo ? 'Orario' : isDelivery ? 'Consegna' : 'Ritiro'
 
   return [
+    !isTavolo && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;width:120px;">Tipo</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${isDelivery ? 'Delivery' : 'Asporto'}</td></tr>`,
     dataFormattata && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;width:120px;">Data</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${dataFormattata}</td></tr>`,
-    ora && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Orario</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${ora}</td></tr>`,
+    ora && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">${quandoLabel}</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${ora}</td></tr>`,
     isTavolo && coperti && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Coperti</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${coperti} ${coperti === 1 ? 'persona' : 'persone'}</td></tr>`,
-    !isTavolo && servizio && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Servizio</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${servizio}</td></tr>`,
+    isTavolo && servizio && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Servizio</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${servizio}</td></tr>`,
+    isDelivery && indirizzo && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Indirizzo</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${indirizzo}</td></tr>`,
     allergie && allergie.toLowerCase() !== 'nessuna' && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Allergie</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${allergie}</td></tr>`,
     occasione && `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Occasione</td><td style="padding:6px 0;font-size:14px;font-weight:600;color:#0B1533;">${occasione}</td></tr>`,
   ].filter(Boolean).join('\n')
+}
+
+// Riepilogo dei piatti dell'ordine (asporto/delivery) + totale, come blocco HTML per le email.
+function buildRiepilogoOrdine(p: Partial<EmailConfermaParams>) {
+  const items = p.items ?? []
+  if (items.length === 0) return ''
+  const righe = items.map(i => `<tr>
+    <td style="padding:5px 0;color:#0B1533;font-size:14px;">${i.quantita}× ${i.nome}</td>
+    <td style="padding:5px 0;color:#0B1533;font-size:14px;font-weight:600;text-align:right;">€${(i.prezzo * i.quantita).toFixed(2)}</td>
+  </tr>`).join('')
+  const totale = p.totale ?? items.reduce((s, i) => s + i.prezzo * i.quantita, 0)
+  return `<p style="margin:8px 0 6px;color:#374151;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Il tuo ordine</p>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #E6E8F2;margin-bottom:20px;">
+    ${righe}
+    <tr><td style="padding:10px 0 0;border-top:1px solid #E6E8F2;color:#0B1533;font-size:15px;font-weight:800;">Totale</td>
+    <td style="padding:10px 0 0;border-top:1px solid #E6E8F2;color:#0B1533;font-size:15px;font-weight:800;text-align:right;">€${totale.toFixed(2)}</td></tr>
+  </table>`
 }
 
 function wrapEmail(nomeLocale: string, headerColor: string, headerEmoji: string, titolo: string, body: string) {
@@ -128,6 +153,7 @@ export async function sendEmailConferma(params: EmailConfermaParams) {
       <p style="margin:0;color:#0B1533;font-size:14px;">${params.messaggioProposta}</p>
     </div>` : ''}
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;margin-bottom:24px;">${dettagli}</table>
+    ${buildRiepilogoOrdine(params)}
     <p style="margin:0;color:#6b7280;font-size:13px;">Per qualsiasi informazione o modifica, contattaci direttamente.<br>A presto!</p>`
   )
 
@@ -160,6 +186,7 @@ export async function sendEmailProposta(params: EmailPropostaParams) {
     </div>` : ''}
     <p style="margin:0 0 8px;color:#374151;font-size:14px;font-weight:600;">Dettagli proposti:</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #E6E8F2;margin-bottom:24px;">${dettagli}</table>
+    ${buildRiepilogoOrdine(params)}
     <p style="margin:0 0 16px;color:#374151;font-size:14px;">Cosa vuoi fare?</p>
     <table cellpadding="0" cellspacing="0">
       <tr>
@@ -202,6 +229,40 @@ export async function sendEmailRifiuto(params: EmailRifiutoParams) {
     from: `${params.nomeLocale} <info@flowest.it>`,
     to: params.clienteEmail,
     subject: `${params.nomeLocale} — risposta alla tua richiesta`,
+    html,
+  })
+}
+
+// Al cliente subito dopo l'invio di un ordine asporto/delivery: richiesta ricevuta, NON ancora
+// confermata. Riceverà una seconda email quando il locale accetta (o propone modifiche).
+export async function sendEmailRichiestaRicevuta(params: EmailConfermaParams) {
+  if (EMAIL_DISABLED || !process.env.RESEND_API_KEY || !params.clienteEmail) return
+  const isDelivery = params.tipo === 'delivery'
+  const dettagli = buildDettagliRighe(params)
+
+  const html = wrapEmail(
+    params.nomeLocale,
+    '#0B1533',
+    '',
+    'Richiesta ricevuta',
+    `<p style="margin:0 0 20px;color:#374151;font-size:15px;">
+      Ciao <strong>${params.clienteNome}</strong>,<br>
+      abbiamo ricevuto la tua richiesta di ordine ${isDelivery ? 'in consegna' : "d'asporto"}. Ecco il riepilogo:
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;margin-bottom:20px;">${dettagli}</table>
+    ${buildRiepilogoOrdine(params)}
+    <div style="background:#F5F6FB;border:1px solid #E6E8F2;border-left:3px solid #1F52FF;border-radius:8px;padding:14px 18px;">
+      <p style="margin:0;color:#0B1533;font-size:14px;line-height:1.5;">
+        <strong>L'ordine non è ancora confermato.</strong><br>
+        Riceverai una seconda email non appena il locale avrà verificato la disponibilità.
+      </p>
+    </div>`
+  )
+
+  await resend.emails.send({
+    from: `${params.nomeLocale} <info@flowest.it>`,
+    to: params.clienteEmail,
+    subject: `Richiesta ricevuta — ${params.nomeLocale}`,
     html,
   })
 }

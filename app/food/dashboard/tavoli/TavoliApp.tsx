@@ -12,14 +12,20 @@ interface Sala { id: string; nome: string; ordine: number; mapElementi?: string 
 interface Gruppo { id: string; label: string; tavoli: { id: string; numero: number; etichetta: string | null }[] }
 interface RigaOrdine { id: string; nome: string; quantita: number; prezzo: number; note?: string | null; reparto?: string | null; prontaAt?: string | null }
 
-// Raggruppa le voci dentro un ordine: prima per reparto (bibite del Bar vicine, piatti della
-// Cucina vicini), poi per nome. Ordina solo l'elenco interno; i sottoconti restano separati.
-function ordinaRighe<T extends { reparto?: string | null; nome: string }>(righe: T[]): T[] {
-  return [...righe].sort((a, b) => {
-    const ra = a.reparto || '￿', rb = b.reparto || '￿'
-    if (ra !== rb) return ra.localeCompare(rb, 'it')
-    return a.nome.localeCompare(b.nome, 'it')
-  })
+// Raggruppa le voci dentro un ordine per REPARTO (bibite del Bar vicine, piatti della Cucina
+// vicini), mantenendo l'ordine di inserimento ENTRO ogni reparto: le portate restano nell'ordine
+// in cui il cameriere le ha aggiunte (prima i primi, poi i secondi) e non si mischiano. L'ordine
+// dei reparti segue la prima comparsa. Ordina solo l'elenco interno; i sottoconti restano separati.
+function ordinaRighe<T extends { reparto?: string | null }>(righe: T[]): T[] {
+  const repOrder = new Map<string, number>()
+  righe.forEach(r => { const k = r.reparto || '￿'; if (!repOrder.has(k)) repOrder.set(k, repOrder.size) })
+  return righe
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => {
+      const ra = repOrder.get(a.r.reparto || '￿')!, rb = repOrder.get(b.r.reparto || '￿')!
+      return ra !== rb ? ra - rb : a.i - b.i // entro il reparto: ordine originale (mandata asc, id asc)
+    })
+    .map(x => x.r)
 }
 interface Ordine { id: string; tavolo: string; tavoloId: string | null; gruppoId: string | null; totale: number; note: string | null; status: string; createdAt: string; notatoPronto: boolean; righe: RigaOrdine[] }
 interface MapData { forma: 'quadrato' | 'cerchio'; colore: string; w: number; h: number; x: number; y: number }

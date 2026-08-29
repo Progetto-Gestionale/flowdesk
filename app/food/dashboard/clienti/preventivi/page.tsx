@@ -579,7 +579,9 @@ function Richieste() {
   async function fetchRichieste() {
     const res = await fetch('/api/preventivi', { credentials: 'include', cache: 'no-store' })
     const data = await res.json()
-    const lista: Richiesta[] = data.preventivi ?? []
+    // Le richieste asporto/delivery hanno la loro sezione (tab "Richieste in entrata" in Asporto &
+    // Delivery): qui in "Prenotazioni tavoli" si mostrano solo prenotazioni tavolo e preventivi.
+    const lista: Richiesta[] = (data.preventivi ?? []).filter((p: Richiesta) => p.tipo !== 'asporto' && p.tipo !== 'delivery')
     setRichieste(lista)
     setCache('food:preventivi', lista)
     setLoading(false)

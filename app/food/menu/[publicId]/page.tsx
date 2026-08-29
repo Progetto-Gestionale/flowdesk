@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import { distanzaKm, cercaIndirizzi, type Suggerimento } from '@/lib/geocode'
+import { parseFasce, fasciaPerDistanza, labelPreavviso, type FasciaConsegna } from '@/lib/fasceConsegna'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { ALLERGENE_LABEL } from '@/lib/allergeni'
 
@@ -55,7 +56,7 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
   const [blockDelivery, setBlockDelivery] = useState(false)
   const [orariApertura, setOrariApertura] = useState<Record<string, string>>({})
   const [turniServizio, setTurniServizio] = useState<{ id: string; nome: string; oraInizio: string; oraFine: string }[]>([])
-  const [regole, setRegole] = useState<{ preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; fasceOrdini?: string; capConsegna?: string; raggioConsegnaKm?: number; latLocale?: number; lonLocale?: number }>({})
+  const [regole, setRegole] = useState<{ preavvisoOrdiniMinMinuti?: number; anticipoMaxGiorni?: number; fasceOrdini?: string; capConsegna?: string; raggioConsegnaKm?: number; latLocale?: number; lonLocale?: number; fasceConsegna?: FasciaConsegna[] }>({})
 
   const [carrello, setCarrello] = useState<RigaCarrello[]>([])
   const [step, setStep] = useState<'menu' | 'checkout' | 'inviato'>('menu')
@@ -121,6 +122,7 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             raggioConsegnaKm: r.raggioConsegnaKm ? Number(r.raggioConsegnaKm) : undefined,
             latLocale: typeof r.latLocale === 'number' ? r.latLocale : undefined,
             lonLocale: typeof r.lonLocale === 'number' ? r.lonLocale : undefined,
+            fasceConsegna: parseFasce(r), // fasce delivery (con fallback dai valori legacy)
           })
         } catch {}
       }).catch(() => {})
@@ -222,7 +224,9 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
     setErrIndirizzo('')
     // Blocca date/orari passati e fuori preavviso
     if (dati.data < oggi) { setErrIndirizzo('La data selezionata è già passata.'); return }
-    const errDataOra = validaDataOra(dati.data, dati.ora, regole.preavvisoOrdiniMinMinuti, regole.anticipoMaxGiorni)
+    // Preavviso: per il delivery lo applica la fascia di distanza (sotto); per l'asporto vale quello base.
+    const preavvisoBase = dati.tipo === 'delivery' ? undefined : regole.preavvisoOrdiniMinMinuti
+    const errDataOra = validaDataOra(dati.data, dati.ora, preavvisoBase, regole.anticipoMaxGiorni)
     if (errDataOra) { setErrIndirizzo(errDataOra); return }
     // Blocca orari fuori fasce ordini (o apertura come fallback)
     const fasceOrdine = fascePerOrdini()
@@ -231,6 +235,7 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
       return
     }
     setInviando(true)
+    let coordsInvio: { lat: number; lon: number } | null = null
     try {
       if (dati.tipo === 'delivery') {
         // ── Zona di consegna ──
@@ -253,20 +258,32 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
           setInviando(false)
           return
         }
-        // 3) Raggio (se configurato): usa le coordinate dell'indirizzo per il controllo zona.
-        if (regole.raggioConsegnaKm && regole.latLocale != null && regole.lonLocale != null) {
+        coordsInvio = coords
+        // 3) Fasce di consegna (se configurate): distanza → fascia → ordine minimo + preavviso.
+        const fasce = regole.fasceConsegna ?? []
+        if (fasce.length > 0 && regole.latLocale != null && regole.lonLocale != null) {
           const dist = distanzaKm(regole.latLocale, regole.lonLocale, coords.lat, coords.lon)
-          if (dist > regole.raggioConsegnaKm) {
-            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km, max ${regole.raggioConsegnaKm} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+          const fascia = fasciaPerDistanza(fasce, dist)
+          if (!fascia) {
+            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
             setInviando(false)
             return
+          }
+          if (fascia.ordineMinimo > 0 && totale < fascia.ordineMinimo) {
+            setErrIndirizzo(`Ordine minimo per la tua zona (${dist.toFixed(1)} km dal locale): €${fascia.ordineMinimo.toFixed(2)}. Il tuo ordine è di €${totale.toFixed(2)}.`)
+            setInviando(false)
+            return
+          }
+          if (fascia.preavvisoMinuti > 0) {
+            const errPre = validaDataOra(dati.data, dati.ora, fascia.preavvisoMinuti, undefined)
+            if (errPre) { setErrIndirizzo(errPre); setInviando(false); return }
           }
         }
       }
       const res = await fetch('/api/public/ordina', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicId, ...dati, indirizzo: dati.via ? `${dati.via}, ${dati.cap} ${dati.citta}`.trim() : '', righe: carrello }),
+        body: JSON.stringify({ publicId, ...dati, indirizzo: dati.via ? `${dati.via}, ${dati.cap} ${dati.citta}`.trim() : '', lat: coordsInvio?.lat, lon: coordsInvio?.lon, righe: carrello }),
       })
       const json = await res.json().catch(() => ({}))
       if (res.ok) {
@@ -305,8 +322,8 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-gray-900">Ordine ricevuto</h2>
-        <p className="text-gray-500 text-sm mt-3">Il tuo ordine è stato registrato. Lo troverai pronto all'orario indicato.</p>
+        <h2 className="text-xl font-bold text-gray-900">Richiesta inviata</h2>
+        <p className="text-gray-500 text-sm mt-3">Abbiamo ricevuto la tua richiesta{numeroOrdine ? ` (#${numeroOrdine})` : ''}. <strong>Non è ancora confermata</strong>: riceverai una email di conferma non appena il locale la accetta. Controlla anche lo spam.</p>
         <button onClick={() => { setStep('menu'); setDati(d => ({ ...d, nome: '', cognome: '', email: '', telefono: '', noteCliente: '' })) }}
           className="mt-6 w-full py-2.5 rounded-xl text-white font-semibold text-sm"
           style={{ backgroundColor: coloreP }}>
@@ -563,11 +580,17 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
         {dati.tipo === 'delivery' && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
             <p className="text-sm font-semibold text-gray-700">Indirizzo di consegna</p>
-            {(regole.capConsegna || regole.raggioConsegnaKm) && (
-              <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                📍 Consegniamo{regole.capConsegna ? ` nei CAP: ${regole.capConsegna}` : ''}{regole.capConsegna && regole.raggioConsegnaKm ? ', ' : ''}{regole.raggioConsegnaKm ? ` entro ${regole.raggioConsegnaKm} km dal locale` : ''}.
-              </p>
-            )}
+            {(() => {
+              const fasce = regole.fasceConsegna ?? []
+              const maxKm = fasce.length ? fasce[fasce.length - 1].kmMax : null
+              if (!regole.capConsegna && !maxKm) return null
+              return (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                  📍 Consegniamo{regole.capConsegna ? ` nei CAP: ${regole.capConsegna}` : ''}{regole.capConsegna && maxKm ? ', ' : ''}{maxKm ? ` entro ${maxKm} km dal locale` : ''}.
+                  {fasce.some(f => f.ordineMinimo > 0) && <span className="block mt-1">L&apos;ordine minimo dipende dalla distanza: te lo indichiamo dopo aver inserito l&apos;indirizzo.</span>}
+                </p>
+              )
+            })()}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Città *</label>
               <input value={dati.citta} onChange={e => { setDati(d => ({ ...d, citta: e.target.value })); setErrIndirizzo('') }}

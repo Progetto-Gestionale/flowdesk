@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { repartoPerPiatti } from '@/lib/reparti'
+import { buildNoteOrdine } from '@/lib/ordineDaPreventivo'
+import { sendEmailRichiestaRicevuta } from '@/lib/email'
+import { parseFasce, fasciaPerDistanza } from '@/lib/fasceConsegna'
+import { distanzaKm } from '@/lib/geocode'
 
+// Un ordine asporto/delivery dal menu pubblico NON entra più subito in cucina: diventa una RICHIESTA
+// (Preventivo, come le prenotazioni tavolo) che il locale accetta/rifiuta/propone-modifiche. Solo
+// all'accettazione viene creato l'Ordine vero. Al cliente parte la mail "richiesta ricevuta".
 export async function POST(req: Request) {
  try {
-  const { publicId, tipo, nome, cognome, email, telefono, data, ora, indirizzo, cap, righe, noteCliente } = await req.json()
+  const { publicId, tipo, nome, cognome, email, telefono, data, ora, indirizzo, cap, lat, lon, righe, noteCliente } = await req.json()
 
   if (!publicId || !email || !nome || !data || !ora || !righe?.length) {
     return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 })
@@ -18,61 +24,92 @@ export async function POST(req: Request) {
   if (isDelivery && user.blockDelivery) {
     return NextResponse.json({ error: 'Il servizio delivery non è al momento disponibile.' }, { status: 503 })
   }
-  // Rete di sicurezza zona di consegna: CAP servito (il raggio è validato lato client col geocoding).
-  if (isDelivery) {
-    const regole = (() => { try { return JSON.parse(user.regolePrenotazione ?? '{}') } catch { return {} } })()
-    const capServiti = String(regole.capConsegna ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
-    if (capServiti.length > 0 && (!cap || !capServiti.includes(String(cap).trim()))) {
-      return NextResponse.json({ error: 'Non consegniamo in questa zona (CAP non servito).' }, { status: 422 })
-    }
-  }
   if (!isDelivery && user.blockAsporto) {
     return NextResponse.json({ error: 'Il servizio asporto non è al momento disponibile.' }, { status: 503 })
   }
 
-  const nomeCompleto = [nome, cognome].filter(Boolean).join(' ')
   const totale = righe.reduce((s: number, r: { prezzo: number; quantita: number }) => s + r.prezzo * r.quantita, 0)
+  const regole = (() => { try { return JSON.parse(user.regolePrenotazione ?? '{}') } catch { return {} } })()
 
-  const clienteInfo = JSON.stringify({
-    nome: nomeCompleto,
-    email,
-    telefono: telefono || null,
-    indirizzo: isDelivery ? (indirizzo || null) : null,
-    data,
-    ora,
-  })
+  // Rete di sicurezza zona di consegna (il grosso è validato lato client col geocoding):
+  if (isDelivery) {
+    // 1) CAP servito
+    const capServiti = String(regole.capConsegna ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)
+    if (capServiti.length > 0 && (!cap || !capServiti.includes(String(cap).trim()))) {
+      return NextResponse.json({ error: 'Non consegniamo in questa zona (CAP non servito).' }, { status: 422 })
+    }
+    // 2) Fasce di consegna: distanza → fascia → ordine minimo (out-of-zone se oltre l'ultima fascia).
+    const fasce = parseFasce(regole)
+    if (fasce.length > 0 && typeof lat === 'number' && typeof lon === 'number' && regole.latLocale != null && regole.lonLocale != null) {
+      const dist = distanzaKm(regole.latLocale, regole.lonLocale, lat, lon)
+      const fascia = fasciaPerDistanza(fasce, dist)
+      if (!fascia) {
+        return NextResponse.json({ error: `Indirizzo fuori dalla zona di consegna (a circa ${dist.toFixed(1)} km).` }, { status: 422 })
+      }
+      if (fascia.ordineMinimo > 0 && totale < fascia.ordineMinimo) {
+        return NextResponse.json({ error: `Ordine minimo per la tua zona: €${fascia.ordineMinimo.toFixed(2)}.` }, { status: 422 })
+      }
+    }
+  }
 
-  // Trova o crea i piatti — le righe dal menu pubblico hanno già piattoId
-  const repMap = await repartoPerPiatti(righe.map((r: { piattoId: string }) => r.piattoId))
-  const ordine = await prisma.ordine.create({
+  const nomeCompleto = [nome, cognome].filter(Boolean).join(' ')
+
+  // Lead: trova per email o crea (come per le prenotazioni tavolo)
+  const leadEsistente = email
+    ? await prisma.lead.findFirst({ where: { userId: user.id, email }, orderBy: { createdAt: 'desc' } })
+    : null
+  const lead = leadEsistente ?? await prisma.lead.create({
     data: {
       userId: user.id,
-      tavolo: isDelivery ? 'Delivery' : 'Asporto',
-      tipo: isDelivery ? 'delivery' : 'asporto',
-      clienteInfo,
-      totale,
-      note: noteCliente || null,
+      name: nomeCompleto,
+      email: email || `form-${Date.now()}@noemail.local`,
+      phone: telefono || null,
+      notes: `Ordine ${isDelivery ? 'delivery' : 'asporto'} via menu pubblico.`,
       status: 'nuovo',
-      righe: {
-        create: righe.map((r: { piattoId: string; nome: string; prezzo: number; quantita: number }) => ({
-          piattoId: r.piattoId,
-          nome: r.nome,
-          prezzo: r.prezzo,
-          quantita: r.quantita,
-          reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
-        })),
-      },
     },
   })
 
-  return NextResponse.json({ ok: true, ordineId: ordine.id })
+  // Voci del carrello salvate negli items del preventivo; dati consegna nella nota (marker INFO).
+  const items = righe.map((r: { piattoId?: string | null; nome: string; prezzo: number; quantita: number; note?: string | null }) => ({
+    piattoId: r.piattoId ?? null, nome: r.nome, prezzo: r.prezzo, quantita: r.quantita, note: r.note ?? null,
+  }))
+  const note = buildNoteOrdine(
+    { tipo: isDelivery ? 'delivery' : 'asporto', indirizzo: isDelivery ? (indirizzo || null) : null, cap: cap || null, telefono: telefono || null, lat: lat ?? null, lon: lon ?? null, noteCliente: noteCliente || null, email },
+    data, ora,
+  )
+
+  const count = await prisma.preventivo.count({ where: { userId: user.id } })
+  const preventivo = await prisma.preventivo.create({
+    data: {
+      userId: user.id,
+      leadId: lead.id,
+      numero: count + 1,
+      tipo: isDelivery ? 'delivery' : 'asporto',
+      clienteName: nomeCompleto,
+      clienteEmail: email || null,
+      items: JSON.stringify(items),
+      totale,
+      status: 'da_verificare',
+      note,
+    },
+  })
+
+  // Conferma di RICEZIONE al cliente (non è ancora accettato).
+  if (email) {
+    await sendEmailRichiestaRicevuta({
+      clienteEmail: email,
+      clienteNome: nomeCompleto,
+      nomeLocale: user.nomeLocale ?? 'Il locale',
+      tipo: isDelivery ? 'delivery' : 'asporto',
+      data, ora,
+      indirizzo: isDelivery ? (indirizzo || null) : null,
+      items, totale,
+    }).catch(() => {})
+  }
+
+  return NextResponse.json({ ok: true, numero: preventivo.numero })
  } catch (e) {
   console.error('[PUBLIC/ORDINA] errore:', e)
-  const code = (e as { code?: string })?.code
-  // P2003 = FK violata / P2025 = record non trovato → piatto eliminato dopo il caricamento del menu
-  if (code === 'P2003' || code === 'P2025') {
-    return NextResponse.json({ error: 'Uno o più piatti non sono più disponibili: aggiorna la pagina del menu e riprova.' }, { status: 409 })
-  }
-  return NextResponse.json({ error: "Non è stato possibile inviare l'ordine. Riprova tra poco; se persiste contatta il locale." }, { status: 500 })
+  return NextResponse.json({ error: "Non è stato possibile inviare la richiesta. Riprova tra poco; se persiste contatta il locale." }, { status: 500 })
  }
 }

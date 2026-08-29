@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendEmailConferma, sendEmailRifiuto } from '@/lib/email'
 import { romeWallTimeToDate } from '@/lib/romeTime'
+import { creaOrdineDaPreventivo, parseInfoOrdine } from '@/lib/ordineDaPreventivo'
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -37,9 +38,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     const allergieNote = note.match(/Allergie:\s*([^.]+)/)
     const occasioneNote = note.match(/Occasione:\s*([^.]+)/)
 
-    // Inserisci la prenotazione in calendario, come quando il titolare accetta dal gestionale.
+    // Asporto/Delivery: la proposta accettata diventa un Ordine vero (non un appuntamento tavolo).
+    const isOrdine = preventivo.tipo === 'asporto' || preventivo.tipo === 'delivery'
+    if (isOrdine) {
+      await creaOrdineDaPreventivo(preventivo, user.id)
+    }
+
+    // Prenotazione tavolo: inserisci in calendario, come quando il titolare accetta dal gestionale.
     // Solo se ha una data e se non c'è già un appuntamento per questa richiesta (evita duplicati).
-    if (dataMatch?.[1]) {
+    if (!isOrdine && dataMatch?.[1]) {
       const numStr = `#${String(preventivo.numero).padStart(3, '0')}`
       const giaInCalendario = await prisma.appuntamento.findFirst({
         where: { userId: user.id, note: { contains: `Da richiesta ${numStr}` } },
@@ -68,19 +75,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
 
     // Email di conferma con i dati aggiornati dalla proposta
     if (preventivo.clienteEmail) {
+      const info = isOrdine ? parseInfoOrdine(preventivo.note) : null
+      const cartItems = isOrdine ? (items as unknown as { nome: string; quantita: number; prezzo: number }[]) : undefined
       await sendEmailConferma({
         clienteEmail: preventivo.clienteEmail,
         clienteNome: preventivo.clienteName,
         nomeLocale: user.nomeLocale ?? 'Il locale',
         tipo: preventivo.tipo,
         // Questi dati riflettono le modifiche salvate nella proposta
-        data: dataMatch?.[1],
-        ora: oraMatch?.[1],
+        data: isOrdine ? info?.data : dataMatch?.[1],
+        ora: isOrdine ? info?.ora : oraMatch?.[1],
         coperti: items[0]?.coperti ?? (copertiNote ? parseInt(copertiNote[1]) : undefined),
         allergie: items[0]?.allergie ?? allergieNote?.[1]?.trim(),
         occasione: items[0]?.occasione ?? occasioneNote?.[1]?.trim(),
         servizio: items[0]?.descrizione,
         messaggioProposta: preventivo.messaggioProposta ?? undefined,
+        ...(isOrdine ? { items: cartItems, indirizzo: info?.indirizzo ?? null, totale: preventivo.totale } : {}),
       })
     }
     return NextResponse.json({ ok: true, azione: 'accettato' })
