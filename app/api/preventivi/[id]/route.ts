@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendEmailConferma, sendEmailRifiuto } from '@/lib/email'
 import { creaOrdineDaPreventivo, parseInfoOrdine } from '@/lib/ordineDaPreventivo'
+import { ripristinaStockPreventivo } from '@/lib/stock'
 import { randomBytes } from 'crypto'
 
 // Riepilogo per le email di un ordine asporto/delivery: piatti dal carrello + indirizzo + totale.
@@ -123,6 +124,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   }
 
+  // Rifiuto: riaccredita le porzioni prenotate dalla richiesta asporto/delivery (una sola volta).
+  if (data.status === 'rifiutato') {
+    await ripristinaStockPreventivo(preventivo)
+  }
+
   // Email rifiutato
   if (data.status === 'rifiutato' && preventivo.clienteEmail) {
     await sendEmailRifiuto({
@@ -143,6 +149,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
   const user = await prisma.user.findUnique({ where: { clerkId: userId } })
   if (!user) return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
+
+  // Se la richiesta aveva prenotato delle porzioni, riaccreditale prima di eliminarla.
+  const preventivo = await prisma.preventivo.findFirst({ where: { id, userId: user.id }, select: { id: true, items: true, stockScalato: true } })
+  if (preventivo) await ripristinaStockPreventivo(preventivo)
 
   await prisma.preventivo.deleteMany({ where: { id, userId: user.id } })
   return NextResponse.json({ ok: true })

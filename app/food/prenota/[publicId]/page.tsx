@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { distanzaKm, cercaIndirizzi, type Suggerimento } from '@/lib/geocode'
-import { parseFasce, fasciaPerDistanza, type FasciaConsegna } from '@/lib/fasceConsegna'
+import { parseFasce, fasciaPerIndirizzo, type FasciaConsegna } from '@/lib/fasceConsegna'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { ALLERGENE_LABEL } from '@/lib/allergeni'
 
@@ -407,18 +407,24 @@ export default function PrenotaPage() {
           return
         }
         coordsInvio = coords
-        // 3) Fasce di consegna (se configurate): distanza → fascia → ordine minimo + preavviso.
+        // 3) Fasce di consegna (se configurate): la fascia si sceglie per km (linea d'aria) e/o CAP → ordine minimo + preavviso.
         const fasce = regole.fasceConsegna ?? []
-        if (fasce.length > 0 && regole.latLocale != null && regole.lonLocale != null) {
-          const dist = distanzaKm(regole.latLocale, regole.lonLocale, coords.lat, coords.lon)
-          const fascia = fasciaPerDistanza(fasce, dist)
+        if (fasce.length > 0) {
+          const hasCoords = regole.latLocale != null && regole.lonLocale != null
+          const dist = hasCoords ? distanzaKm(regole.latLocale as number, regole.lonLocale as number, coords.lat, coords.lon) : null
+          const fascia = fasciaPerIndirizzo(fasce, dist, dati.cap)
           if (!fascia) {
-            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            if (hasCoords) {
+              setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${(dist as number).toFixed(1)} km in linea d'aria). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            } else {
+              setErrIndirizzo('Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (CAP non coperto). Puoi comunque scegliere il ritiro in negozio (asporto).')
+            }
             setInviando(false)
             return
           }
           if (fascia.ordineMinimo > 0 && totale < fascia.ordineMinimo) {
-            setErrIndirizzo(`Ordine minimo per la tua zona (${dist.toFixed(1)} km dal locale): €${fascia.ordineMinimo.toFixed(2)}. Il tuo ordine è di €${totale.toFixed(2)}.`)
+            const dove = dist != null ? `(${dist.toFixed(1)} km in linea d'aria dal locale)` : '(per la tua zona)'
+            setErrIndirizzo(`Ordine minimo ${dove}: €${fascia.ordineMinimo.toFixed(2)}. Il tuo ordine è di €${totale.toFixed(2)}.`)
             setInviando(false)
             return
           }
@@ -944,12 +950,17 @@ export default function PrenotaPage() {
                 <p className="text-sm font-semibold text-gray-700">Indirizzo di consegna</p>
                 {(() => {
                   const fasce = regole.fasceConsegna ?? []
-                  const maxKm = fasce.length ? fasce[fasce.length - 1].kmMax : null
-                  if (!regole.capConsegna && !maxKm) return null
+                  const kmFasce = fasce.map(f => f.kmMax).filter(k => k > 0)
+                  const maxKm = kmFasce.length ? Math.max(...kmFasce) : null
+                  const capSet = new Set<string>()
+                  ;(regole.capConsegna ?? '').split(',').map(s => s.trim()).filter(Boolean).forEach(c => capSet.add(c))
+                  fasce.forEach(f => (f.cap ?? []).forEach(c => capSet.add(c)))
+                  const capList = [...capSet]
+                  if (!capList.length && !maxKm) return null
                   return (
                     <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                      📍 Consegniamo{regole.capConsegna ? ` nei CAP: ${regole.capConsegna}` : ''}{regole.capConsegna && maxKm ? ', ' : ''}{maxKm ? ` entro ${maxKm} km dal locale` : ''}.
-                      {fasce.some(f => f.ordineMinimo > 0) && <span className="block mt-1">L&apos;ordine minimo dipende dalla distanza: te lo indichiamo dopo l&apos;indirizzo.</span>}
+                      📍 Consegniamo{capList.length ? ` nei CAP: ${capList.join(', ')}` : ''}{capList.length && maxKm ? ', ' : ''}{maxKm ? ` entro ${maxKm} km dal locale (in linea d'aria)` : ''}.
+                      {fasce.some(f => f.ordineMinimo > 0) && <span className="block mt-1">L&apos;ordine minimo dipende dalla zona: te lo indichiamo dopo l&apos;indirizzo.</span>}
                     </p>
                   )
                 })()}

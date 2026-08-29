@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { use } from 'react'
 import { distanzaKm, cercaIndirizzi, type Suggerimento } from '@/lib/geocode'
-import { parseFasce, fasciaPerDistanza, labelPreavviso, type FasciaConsegna } from '@/lib/fasceConsegna'
+import { parseFasce, fasciaPerIndirizzo, labelPreavviso, type FasciaConsegna } from '@/lib/fasceConsegna'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import { ALLERGENE_LABEL } from '@/lib/allergeni'
+import { mostraRimanenza, quantitaGestita, ETICHETTA_COLORE_DEFAULT } from '@/lib/menuPiatto'
 
 interface Piatto {
   id: string
@@ -13,6 +14,10 @@ interface Piatto {
   prezzo: number
   immagineUrl: string | null
   allergeni?: string[]
+  quantita?: number | null
+  quantitaSoglia?: number | null
+  etichetta?: string | null
+  etichettaColore?: string | null
 }
 
 interface Categoria {
@@ -126,6 +131,26 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
           })
         } catch {}
       }).catch(() => {})
+  }, [publicId])
+
+  // Aggiornamento "live" delle rimanenze: ogni 15s rilegge le quantità e le fonde
+  // nel menu già caricato (senza toccare il carrello né lo scroll).
+  useEffect(() => {
+    const iv = setInterval(() => {
+      fetch(`/api/public/menu?publicId=${publicId}&tipo=asporto`)
+        .then(r => r.json())
+        .then(d => {
+          if (!Array.isArray(d.categorie)) return
+          const q = new Map<string, number | null>()
+          for (const c of d.categorie) for (const p of c.piatti) q.set(p.id, p.quantita ?? null)
+          setCategorie(prev => prev.map(c => ({
+            ...c,
+            piatti: c.piatti.map(p => q.has(p.id) ? { ...p, quantita: q.get(p.id) ?? null } : p),
+          })))
+        })
+        .catch(() => {})
+    }, 15000)
+    return () => clearInterval(iv)
   }, [publicId])
 
   function aggiungi(piatto: Piatto) {
@@ -259,18 +284,24 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
           return
         }
         coordsInvio = coords
-        // 3) Fasce di consegna (se configurate): distanza → fascia → ordine minimo + preavviso.
+        // 3) Fasce di consegna (se configurate): la fascia si sceglie per km (linea d'aria) e/o CAP → ordine minimo + preavviso.
         const fasce = regole.fasceConsegna ?? []
-        if (fasce.length > 0 && regole.latLocale != null && regole.lonLocale != null) {
-          const dist = distanzaKm(regole.latLocale, regole.lonLocale, coords.lat, coords.lon)
-          const fascia = fasciaPerDistanza(fasce, dist)
+        if (fasce.length > 0) {
+          const hasCoords = regole.latLocale != null && regole.lonLocale != null
+          const dist = hasCoords ? distanzaKm(regole.latLocale as number, regole.lonLocale as number, coords.lat, coords.lon) : null
+          const fascia = fasciaPerIndirizzo(fasce, dist, dati.cap)
           if (!fascia) {
-            setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${dist.toFixed(1)} km). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            if (hasCoords) {
+              setErrIndirizzo(`Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (a circa ${(dist as number).toFixed(1)} km in linea d'aria). Puoi comunque scegliere il ritiro in negozio (asporto).`)
+            } else {
+              setErrIndirizzo('Spiacenti, il tuo indirizzo è fuori dalla zona che serviamo (CAP non coperto). Puoi comunque scegliere il ritiro in negozio (asporto).')
+            }
             setInviando(false)
             return
           }
           if (fascia.ordineMinimo > 0 && totale < fascia.ordineMinimo) {
-            setErrIndirizzo(`Ordine minimo per la tua zona (${dist.toFixed(1)} km dal locale): €${fascia.ordineMinimo.toFixed(2)}. Il tuo ordine è di €${totale.toFixed(2)}.`)
+            const dove = dist != null ? `(${dist.toFixed(1)} km in linea d'aria dal locale)` : '(per la tua zona)'
+            setErrIndirizzo(`Ordine minimo ${dove}: €${fascia.ordineMinimo.toFixed(2)}. Il tuo ordine è di €${totale.toFixed(2)}.`)
             setInviando(false)
             return
           }
@@ -406,15 +437,30 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             <div className="space-y-3">
               {cat.piatti.map(p => {
                 const q = qty(p.id)
+                const gestita = quantitaGestita(p.quantita)
+                const rimaste = gestita ? Math.max(0, p.quantita as number) : Infinity
+                const esaurito = gestita && rimaste <= 0
+                const raggiuntoMax = gestita && q >= rimaste
                 return (
-                  <div key={p.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div key={p.id} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden ${esaurito ? 'opacity-60' : ''}`}>
                     <div className="flex gap-3 p-3">
                       {p.immagineUrl && (
                         <img src={p.immagineUrl} alt={p.nome} className="w-20 h-20 rounded-xl object-cover shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900">{p.nome}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-gray-900">{p.nome}</p>
+                          {p.etichetta && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white shrink-0"
+                              style={{ backgroundColor: p.etichettaColore || ETICHETTA_COLORE_DEFAULT }}>{p.etichetta}</span>
+                          )}
+                        </div>
                         {p.descrizione && <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{p.descrizione}</p>}
+                        {mostraRimanenza(p.quantita, p.quantitaSoglia) && (
+                          <p className={`text-xs font-semibold mt-1 ${esaurito ? 'text-red-500' : 'text-amber-600'}`}>
+                            {esaurito ? 'Esaurito' : `Ne restano ${rimaste}`}
+                          </p>
+                        )}
                         {p.allergeni && p.allergeni.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {p.allergeni.map(k => ALLERGENE_LABEL[k] && (
@@ -426,7 +472,9 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
                         )}
                         <div className="flex items-center justify-between mt-2">
                           <p className="font-bold text-base" style={{ color: coloreP }}>€{p.prezzo.toFixed(2)}</p>
-                          {q === 0 ? (
+                          {esaurito ? (
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-gray-100 text-gray-400">Esaurito</span>
+                          ) : q === 0 ? (
                             <button onClick={() => aggiungi(p)}
                               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-sm"
                               style={{ backgroundColor: coloreP }}>+</button>
@@ -436,8 +484,8 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
                                 className="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-lg"
                                 style={{ borderColor: coloreP, color: coloreP }}>−</button>
                               <span className="font-bold text-gray-900 w-4 text-center">{q}</span>
-                              <button onClick={() => aggiungi(p)}
-                                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                              <button onClick={() => aggiungi(p)} disabled={raggiuntoMax}
+                                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg disabled:opacity-30"
                                 style={{ backgroundColor: coloreP }}>+</button>
                             </div>
                           )}
@@ -582,12 +630,17 @@ export default function MenuAsportoPage({ params }: { params: Promise<{ publicId
             <p className="text-sm font-semibold text-gray-700">Indirizzo di consegna</p>
             {(() => {
               const fasce = regole.fasceConsegna ?? []
-              const maxKm = fasce.length ? fasce[fasce.length - 1].kmMax : null
-              if (!regole.capConsegna && !maxKm) return null
+              const kmFasce = fasce.map(f => f.kmMax).filter(k => k > 0)
+              const maxKm = kmFasce.length ? Math.max(...kmFasce) : null
+              const capSet = new Set<string>()
+              ;(regole.capConsegna ?? '').split(',').map(s => s.trim()).filter(Boolean).forEach(c => capSet.add(c))
+              fasce.forEach(f => (f.cap ?? []).forEach(c => capSet.add(c)))
+              const capList = [...capSet]
+              if (!capList.length && !maxKm) return null
               return (
                 <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                  📍 Consegniamo{regole.capConsegna ? ` nei CAP: ${regole.capConsegna}` : ''}{regole.capConsegna && maxKm ? ', ' : ''}{maxKm ? ` entro ${maxKm} km dal locale` : ''}.
-                  {fasce.some(f => f.ordineMinimo > 0) && <span className="block mt-1">L&apos;ordine minimo dipende dalla distanza: te lo indichiamo dopo aver inserito l&apos;indirizzo.</span>}
+                  📍 Consegniamo{capList.length ? ` nei CAP: ${capList.join(', ')}` : ''}{capList.length && maxKm ? ', ' : ''}{maxKm ? ` entro ${maxKm} km dal locale (in linea d'aria)` : ''}.
+                  {fasce.some(f => f.ordineMinimo > 0) && <span className="block mt-1">L&apos;ordine minimo dipende dalla zona: te lo indichiamo dopo aver inserito l&apos;indirizzo.</span>}
                 </p>
               )
             })()}

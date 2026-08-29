@@ -15,7 +15,26 @@ interface Piatto {
   immagineUrl: string | null
   allergeni: string[]
   disponibile: boolean
+  quantita: number | null
+  quantitaSoglia: number | null
+  etichetta: string | null
+  etichettaColore: string | null
   ordine: number
+}
+
+// Etichetta piatto (es. "Best seller"): piccola palette per personalizzare il colore.
+const ETICHETTA_COLORI = ['#e11d48', '#f59e0b', '#16a34a', '#2563eb', '#7c3aed', '#0891b2', '#db2777', '#334155']
+const ETICHETTA_COLORE_DEFAULT = '#2563eb'
+
+interface FormPiatto {
+  nome: string; descrizione: string; prezzo: string; immagineUrl: string; allergeni: string[]
+  gestisciQuantita: boolean; quantita: string; mostraSempre: boolean; quantitaSoglia: string
+  etichetta: string; etichettaColore: string
+}
+const EMPTY_FORM: FormPiatto = {
+  nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [],
+  gestisciQuantita: false, quantita: '', mostraSempre: true, quantitaSoglia: '',
+  etichetta: '', etichettaColore: '',
 }
 
 interface Categoria {
@@ -47,7 +66,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
   const [nuovoRepartoNome, setNuovoRepartoNome] = useState('')
   const [modalPiatto, setModalPiatto] = useState<{ categoriaId: string } | null>(null)
   const [editPiatto, setEditPiatto] = useState<Piatto & { categoriaId: string } | null>(null)
-  const [formPiatto, setFormPiatto] = useState<{ nome: string; descrizione: string; prezzo: string; immagineUrl: string; allergeni: string[] }>({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] })
+  const [formPiatto, setFormPiatto] = useState<FormPiatto>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [caricandoFoto, setCaricandoFoto] = useState(false)
 
@@ -186,23 +205,50 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
     }})
   }
 
+  // Costruisce il payload dal form: traduce i toggle in valori DB (null = non gestito / mostra sempre).
+  function payloadPiatto() {
+    return {
+      nome: formPiatto.nome, descrizione: formPiatto.descrizione, prezzo: formPiatto.prezzo,
+      immagineUrl: formPiatto.immagineUrl, allergeni: formPiatto.allergeni,
+      quantita: formPiatto.gestisciQuantita ? (formPiatto.quantita === '' ? 0 : formPiatto.quantita) : null,
+      quantitaSoglia: formPiatto.gestisciQuantita && !formPiatto.mostraSempre && formPiatto.quantitaSoglia !== '' ? formPiatto.quantitaSoglia : null,
+      etichetta: formPiatto.etichetta.trim() || null,
+      etichettaColore: formPiatto.etichetta.trim() ? (formPiatto.etichettaColore || null) : null,
+    }
+  }
+
   async function salvaPiatto() {
     setSaving(true)
     if (editPiatto) {
       await fetch(`/api/menu/piatti/${editPiatto.id}`, {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formPiatto),
+        body: JSON.stringify(payloadPiatto()),
       })
     } else if (modalPiatto) {
       await fetch('/api/menu/piatti', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formPiatto, categoriaId: modalPiatto.categoriaId }),
+        body: JSON.stringify({ ...payloadPiatto(), categoriaId: modalPiatto.categoriaId }),
       })
     }
     setSaving(false); setModalPiatto(null); setEditPiatto(null)
-    setFormPiatto({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] }); fetchMenu()
+    setFormPiatto(EMPTY_FORM); fetchMenu()
+  }
+
+  // Aggiorna al volo la quantità rimanente dalla lista (senza aprire il modale). Update ottimistico.
+  async function setQuantitaPiatto(catId: string, piattoId: string, nuova: number) {
+    const val = nuova < 0 ? 0 : Math.floor(nuova)
+    const next = categorie.map(c => c.id === catId
+      ? { ...c, piatti: c.piatti.map(p => p.id === piattoId ? { ...p, quantita: val } : p) }
+      : c)
+    setCategorie(next)
+    setCache<Categoria[]>(cacheKey, next)
+    await fetch(`/api/menu/piatti/${piattoId}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantita: val }),
+    }).catch(() => {})
   }
 
   async function toggleDisponibile(piatto: Piatto) {
@@ -224,7 +270,16 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
 
   function apriModificaPiatto(piatto: Piatto, categoriaId: string) {
     setEditPiatto({ ...piatto, categoriaId })
-    setFormPiatto({ nome: piatto.nome, descrizione: piatto.descrizione ?? '', prezzo: piatto.prezzo.toString(), immagineUrl: piatto.immagineUrl ?? '', allergeni: piatto.allergeni ?? [] })
+    setFormPiatto({
+      nome: piatto.nome, descrizione: piatto.descrizione ?? '', prezzo: piatto.prezzo.toString(),
+      immagineUrl: piatto.immagineUrl ?? '', allergeni: piatto.allergeni ?? [],
+      gestisciQuantita: piatto.quantita !== null,
+      quantita: piatto.quantita !== null ? piatto.quantita.toString() : '',
+      mostraSempre: piatto.quantitaSoglia === null,
+      quantitaSoglia: piatto.quantitaSoglia !== null ? piatto.quantitaSoglia.toString() : '',
+      etichetta: piatto.etichetta ?? '',
+      etichettaColore: piatto.etichettaColore ?? '',
+    })
   }
 
   async function copiaDaAltroTipo() {
@@ -340,9 +395,30 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                       <div className="w-14 h-14 rounded-xl bg-mist flex items-center justify-center p-3.5 text-ink-navy/25 shrink-0"><IconFork /></div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-ink-navy truncate">{p.nome}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="font-semibold text-ink-navy truncate">{p.nome}</p>
+                        {p.etichetta && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white shrink-0"
+                            style={{ backgroundColor: p.etichettaColore || ETICHETTA_COLORE_DEFAULT }}>{p.etichetta}</span>
+                        )}
+                      </div>
                       {p.descrizione && <p className="text-sm text-ink-navy/50 truncate">{p.descrizione}</p>}
-                      <p className="text-electric-blue font-bold text-sm mt-0.5">€{p.prezzo.toFixed(2)}</p>
+                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                        <p className="text-electric-blue font-bold text-sm">€{p.prezzo.toFixed(2)}</p>
+                        {p.quantita !== null && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] font-semibold text-ink-navy/40 uppercase tracking-wide">Rimasti</span>
+                            <button onClick={() => setQuantitaPiatto(cat.id, p.id, (p.quantita ?? 0) - 1)} disabled={(p.quantita ?? 0) <= 0}
+                              aria-label="Diminuisci quantità"
+                              className="w-6 h-6 rounded-md border border-ink-navy/15 text-ink-navy/60 hover:bg-mist disabled:opacity-30 leading-none text-sm font-bold">−</button>
+                            <span className={`min-w-[1.5rem] text-center text-sm font-bold tabular-nums ${p.quantita === 0 ? 'text-red-500' : 'text-ink-navy'}`}>{p.quantita}</span>
+                            <button onClick={() => setQuantitaPiatto(cat.id, p.id, (p.quantita ?? 0) + 1)}
+                              aria-label="Aumenta quantità"
+                              className="w-6 h-6 rounded-md border border-ink-navy/15 text-ink-navy/60 hover:bg-mist leading-none text-sm font-bold">+</button>
+                            {p.quantita === 0 && <span className="text-[11px] font-semibold text-red-500">Esaurito</span>}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="flex rounded-lg border border-ink-navy/10 overflow-hidden text-xs font-medium">
@@ -451,6 +527,77 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                   placeholder="0.00"
                   className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
               </div>
+
+              {/* Quantità / counter live */}
+              <div>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-sm font-medium text-ink-navy/70">Gestisci quantità (counter)</span>
+                  <input type="checkbox" checked={formPiatto.gestisciQuantita}
+                    onChange={e => setFormPiatto(f => ({ ...f, gestisciQuantita: e.target.checked }))}
+                    className="w-4 h-4 rounded accent-electric-blue" />
+                </label>
+                <p className="text-xs text-ink-navy/40 mt-1">Attiva per limitare le porzioni: il counter scala man mano che i clienti ordinano. Spento = quantità illimitata.</p>
+                {formPiatto.gestisciQuantita && (
+                  <div className="mt-3 space-y-3 bg-mist rounded-xl p-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-navy/50 mb-1 uppercase tracking-wide">Porzioni disponibili</label>
+                      <input type="number" min="0" step="1" inputMode="numeric" value={formPiatto.quantita}
+                        onChange={e => setFormPiatto(f => ({ ...f, quantita: e.target.value.replace(/\D/g, '') }))}
+                        placeholder="es. 10"
+                        className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Quando mostrare il numero al cliente</label>
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={() => setFormPiatto(f => ({ ...f, mostraSempre: true }))}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${formPiatto.mostraSempre ? 'bg-electric-blue text-white border-electric-blue' : 'border-ink-navy/15 text-ink-navy/60 hover:bg-white'}`}>Sempre</button>
+                        <button type="button" onClick={() => setFormPiatto(f => ({ ...f, mostraSempre: false }))}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${!formPiatto.mostraSempre ? 'bg-electric-blue text-white border-electric-blue' : 'border-ink-navy/15 text-ink-navy/60 hover:bg-white'}`}>Solo quando scarseggia</button>
+                      </div>
+                      {!formPiatto.mostraSempre && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-xs text-ink-navy/60">Mostra “Ne restano X” quando ne restano ≤</span>
+                          <input type="number" min="0" step="1" inputMode="numeric" value={formPiatto.quantitaSoglia}
+                            onChange={e => setFormPiatto(f => ({ ...f, quantitaSoglia: e.target.value.replace(/\D/g, '') }))}
+                            placeholder="5"
+                            className="w-16 border border-ink-navy/15 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Etichetta personalizzata */}
+              <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">Etichetta (facoltativa)</label>
+                <p className="text-xs text-ink-navy/40 mb-2">Piccola scritta mostrata al cliente sul menu, es. “Best seller”, “Il nostro classico”.</p>
+                <input value={formPiatto.etichetta}
+                  onChange={e => setFormPiatto(f => ({ ...f, etichetta: e.target.value.slice(0, 40) }))}
+                  placeholder="es. Best seller"
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                {formPiatto.etichetta.trim() && (
+                  <div className="mt-2.5">
+                    <span className="block text-xs font-semibold text-ink-navy/50 mb-1.5 uppercase tracking-wide">Colore etichetta</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {ETICHETTA_COLORI.map(c => {
+                        const attivo = (formPiatto.etichettaColore || ETICHETTA_COLORE_DEFAULT) === c
+                        return (
+                          <button key={c} type="button" onClick={() => setFormPiatto(f => ({ ...f, etichettaColore: c }))}
+                            aria-label={`Colore ${c}`}
+                            className={`w-7 h-7 rounded-full border-2 transition-transform ${attivo ? 'border-ink-navy/50 scale-110' : 'border-transparent hover:scale-105'}`}
+                            style={{ backgroundColor: c }} />
+                        )
+                      })}
+                    </div>
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <span className="text-xs text-ink-navy/40">Anteprima:</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+                        style={{ backgroundColor: formPiatto.etichettaColore || ETICHETTA_COLORE_DEFAULT }}>{formPiatto.etichetta.trim()}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-ink-navy/70 mb-1">Foto del piatto</label>
                 {formPiatto.immagineUrl ? (
@@ -494,7 +641,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
               </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => { setModalPiatto(null); setEditPiatto(null); setFormPiatto({ nome: '', descrizione: '', prezzo: '', immagineUrl: '', allergeni: [] }) }}
+              <button onClick={() => { setModalPiatto(null); setEditPiatto(null); setFormPiatto(EMPTY_FORM) }}
                 className="flex-1 border border-ink-navy/15 text-ink-navy/70 font-semibold py-2.5 rounded-xl hover:bg-mist text-sm">Annulla</button>
               <button onClick={salvaPiatto} disabled={saving || !formPiatto.nome || !formPiatto.prezzo}
                 className="flex-1 bg-electric-blue text-white font-semibold py-2.5 rounded-xl hover:bg-electric-blue/90 text-sm disabled:opacity-50">

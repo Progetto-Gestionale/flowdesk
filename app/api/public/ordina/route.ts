@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { buildNoteOrdine } from '@/lib/ordineDaPreventivo'
 import { sendEmailRichiestaRicevuta } from '@/lib/email'
-import { parseFasce, fasciaPerDistanza } from '@/lib/fasceConsegna'
+import { parseFasce, fasciaPerIndirizzo } from '@/lib/fasceConsegna'
 import { distanzaKm } from '@/lib/geocode'
+import { decrementaStock, StockError } from '@/lib/stock'
 
 // Un ordine asporto/delivery dal menu pubblico NON entra più subito in cucina: diventa una RICHIESTA
 // (Preventivo, come le prenotazioni tavolo) che il locale accetta/rifiuta/propone-modifiche. Solo
@@ -38,17 +39,24 @@ export async function POST(req: Request) {
     if (capServiti.length > 0 && (!cap || !capServiti.includes(String(cap).trim()))) {
       return NextResponse.json({ error: 'Non consegniamo in questa zona (CAP non servito).' }, { status: 422 })
     }
-    // 2) Fasce di consegna: distanza → fascia → ordine minimo (out-of-zone se oltre l'ultima fascia).
+    // 2) Fasce di consegna: la fascia si sceglie per km (linea d'aria) e/o CAP → ordine minimo.
     const fasce = parseFasce(regole)
-    if (fasce.length > 0 && typeof lat === 'number' && typeof lon === 'number' && regole.latLocale != null && regole.lonLocale != null) {
-      const dist = distanzaKm(regole.latLocale, regole.lonLocale, lat, lon)
-      const fascia = fasciaPerDistanza(fasce, dist)
-      if (!fascia) {
-        return NextResponse.json({ error: `Indirizzo fuori dalla zona di consegna (a circa ${dist.toFixed(1)} km).` }, { status: 422 })
+    if (fasce.length > 0) {
+      const hasCoords = typeof lat === 'number' && typeof lon === 'number' && regole.latLocale != null && regole.lonLocale != null
+      const dist = hasCoords ? distanzaKm(regole.latLocale as number, regole.lonLocale as number, lat, lon) : null
+      const fascia = fasciaPerIndirizzo(fasce, dist, cap)
+      if (fascia) {
+        if (fascia.ordineMinimo > 0 && totale < fascia.ordineMinimo) {
+          return NextResponse.json({ error: `Ordine minimo per la tua zona: €${fascia.ordineMinimo.toFixed(2)}.` }, { status: 422 })
+        }
+      } else if (hasCoords) {
+        // Distanza nota e nessuna fascia (km o CAP) copre → fuori zona con certezza.
+        return NextResponse.json({ error: `Indirizzo fuori dalla zona di consegna (a circa ${(dist as number).toFixed(1)} km in linea d'aria).` }, { status: 422 })
+      } else if (fasce.some(f => f.cap.length > 0)) {
+        // Senza coordinate possiamo escludere solo tramite CAP: se ci sono fasce a CAP e nessuna copre → fuori zona.
+        return NextResponse.json({ error: 'Non consegniamo in questa zona (CAP non coperto).' }, { status: 422 })
       }
-      if (fascia.ordineMinimo > 0 && totale < fascia.ordineMinimo) {
-        return NextResponse.json({ error: `Ordine minimo per la tua zona: €${fascia.ordineMinimo.toFixed(2)}.` }, { status: 422 })
-      }
+      // Senza coordinate e con sole fasce a km: rete di sicurezza indulgente (il client ha già validato).
     }
   }
 
@@ -79,20 +87,34 @@ export async function POST(req: Request) {
   )
 
   const count = await prisma.preventivo.count({ where: { userId: user.id } })
-  const preventivo = await prisma.preventivo.create({
-    data: {
-      userId: user.id,
-      leadId: lead.id,
-      numero: count + 1,
-      tipo: isDelivery ? 'delivery' : 'asporto',
-      clienteName: nomeCompleto,
-      clienteEmail: email || null,
-      items: JSON.stringify(items),
-      totale,
-      status: 'da_verificare',
-      note,
-    },
-  })
+  // Il counter dei piatti gestiti scala SUBITO (richiesta = prenotazione della porzione).
+  // Se poi la richiesta viene rifiutata, le porzioni vengono riaccreditate (stockScalato).
+  let preventivo
+  try {
+    preventivo = await prisma.$transaction(async (tx) => {
+      await decrementaStock(tx, righe)
+      return tx.preventivo.create({
+        data: {
+          userId: user.id,
+          leadId: lead.id,
+          numero: count + 1,
+          tipo: isDelivery ? 'delivery' : 'asporto',
+          clienteName: nomeCompleto,
+          clienteEmail: email || null,
+          items: JSON.stringify(items),
+          totale,
+          status: 'da_verificare',
+          note,
+          stockScalato: true,
+        },
+      })
+    })
+  } catch (e) {
+    if (e instanceof StockError) {
+      return NextResponse.json({ error: `Purtroppo è appena andato esaurito: ${e.esauriti.join(', ')}. Aggiorna il carrello e riprova.`, esauriti: e.esauriti }, { status: 409 })
+    }
+    throw e
+  }
 
   // Conferma di RICEZIONE al cliente (non è ancora accettato).
   if (email) {

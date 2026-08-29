@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { repartoPerPiatti } from '@/lib/reparti'
+import { decrementaStock, StockError } from '@/lib/stock'
 
 // POST pubblico — il cameriere invia un ordine per uno o più tavoli.
 // body: { publicId, tavoli: number[], righe, note }
@@ -81,30 +82,36 @@ export async function POST(req: Request) {
     const tavoloId = tavoliRecord[0].id
     const repMap = await repartoPerPiatti(righe.map((r: any) => r.piattoId))
 
-    const ordine = await prisma.ordine.create({
-      data: {
-        userId: user.id,
-        tavolo: tavoloLabel,
-        tavoloId,
-        gruppoId,
-        status: 'aperto',
-        totale,
-        coperti: Number.isFinite(coperti) && coperti > 0 ? Math.floor(coperti) : null,
-        note: note || null,
-        righe: {
-          create: righe.map((r: any) => ({
-            piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
-            quantita: r.quantita, note: r.note ?? '',
-            mandata: Number.isFinite(r.mandata) && r.mandata >= 1 ? Math.floor(r.mandata) : 1,
-            reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
-          })),
+    const ordine = await prisma.$transaction(async (tx) => {
+      await decrementaStock(tx, righe)
+      return tx.ordine.create({
+        data: {
+          userId: user.id,
+          tavolo: tavoloLabel,
+          tavoloId,
+          gruppoId,
+          status: 'aperto',
+          totale,
+          coperti: Number.isFinite(coperti) && coperti > 0 ? Math.floor(coperti) : null,
+          note: note || null,
+          righe: {
+            create: righe.map((r: any) => ({
+              piattoId: r.piattoId, nome: r.nome, prezzo: r.prezzo,
+              quantita: r.quantita, note: r.note ?? '',
+              mandata: Number.isFinite(r.mandata) && r.mandata >= 1 ? Math.floor(r.mandata) : 1,
+              reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
+            })),
+          },
         },
-      },
-      include: { righe: true },
+        include: { righe: true },
+      })
     })
 
     return NextResponse.json({ ok: true, ordine })
   } catch (e) {
+    if (e instanceof StockError) {
+      return NextResponse.json({ error: `Esaurito: ${e.esauriti.join(', ')}. Aggiorna la quantità dal menu o rimuovilo dall'ordine.`, esauriti: e.esauriti }, { status: 409 })
+    }
     console.error('[CAMERIERE/ORDINA] errore:', e)
     return NextResponse.json({ error: "Impossibile inviare l'ordine. Riprova." }, { status: 500 })
   }

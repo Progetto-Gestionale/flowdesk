@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { sendEmailConferma, sendEmailRifiuto } from '@/lib/email'
 import { romeWallTimeToDate } from '@/lib/romeTime'
 import { creaOrdineDaPreventivo, parseInfoOrdine } from '@/lib/ordineDaPreventivo'
+import { ripristinaStockPreventivo } from '@/lib/stock'
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -101,6 +102,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       where: { id: preventivo.id },
       data: { status: 'rifiutato', tokenRisposta: null },
     })
+    // Riaccredita le porzioni prenotate dalla richiesta asporto/delivery (una sola volta).
+    await ripristinaStockPreventivo(preventivo)
     if (preventivo.leadId) {
       await prisma.lead.updateMany({
         where: { id: preventivo.leadId, userId: user.id },

@@ -90,8 +90,9 @@ interface Regole {
   lonLocale?: number
   fasceConsegna?: FasciaConsegna[] // fasce di distanza delivery: ognuna con ordine minimo e preavviso propri
 }
-// Fascia di consegna: fino a kmMax dal locale valgono questo ordine minimo (€) e preavviso (min).
-interface FasciaConsegna { kmMax: number; ordineMinimo: number; preavvisoMinuti: number }
+// Fascia di consegna: criterio di zona (km in linea d'aria dal locale e/o CAP inclusi) con ordine minimo (€) e preavviso (min).
+// In editing i CAP sono una stringa "62032, 62100" (comoda da digitare); parseFasce la normalizza a lista.
+interface FasciaConsegna { kmMax: number; cap?: string; ordineMinimo: number; preavvisoMinuti: number }
 interface Menu { tipoCucina: string; specialita: string; nonDisponibile: string; allergeniGestiti: string }
 interface InfoPratiche { parcheggio: string; accessibile: boolean; animali: boolean; dresscode: string; altro: string }
 interface Faq { domanda: string; risposta: string }
@@ -439,10 +440,13 @@ export default function Impostazioni() {
   function addFascia() {
     const cur = regole.fasceConsegna ?? []
     const ultimoKm = cur.length ? cur[cur.length - 1].kmMax : 0
-    setRegole(r => ({ ...r, fasceConsegna: [...cur, { kmMax: ultimoKm + 5, ordineMinimo: 0, preavvisoMinuti: 0 }] })); dirty('prenotazioni')
+    setRegole(r => ({ ...r, fasceConsegna: [...cur, { kmMax: ultimoKm + 5, cap: '', ordineMinimo: 0, preavvisoMinuti: 0 }] })); dirty('prenotazioni')
   }
   function updFascia(i: number, campo: keyof FasciaConsegna, val: number) {
     setRegole(r => { const f = [...(r.fasceConsegna ?? [])]; f[i] = { ...f[i], [campo]: val }; return { ...r, fasceConsegna: f } }); dirty('prenotazioni')
+  }
+  function updFasciaCap(i: number, val: string) {
+    setRegole(r => { const f = [...(r.fasceConsegna ?? [])]; f[i] = { ...f[i], cap: val }; return { ...r, fasceConsegna: f } }); dirty('prenotazioni')
   }
   function delFascia(i: number) {
     setRegole(r => ({ ...r, fasceConsegna: (r.fasceConsegna ?? []).filter((_, j) => j !== i) })); dirty('prenotazioni')
@@ -813,7 +817,7 @@ export default function Impostazioni() {
               <div className="pt-2 mt-2 border-t border-ink-navy/8 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-ink-navy">Zona di consegna</p>
-                  <p className="text-xs text-ink-navy/40 mt-0.5">Il delivery viene accettato solo se l'indirizzo del cliente rispetta i criteri impostati: CAP servito <strong>e</strong> distanza dentro una delle fasce. In base alla fascia si applicano ordine minimo e preavviso. Lascia vuoto un criterio per non usarlo.</p>
+                  <p className="text-xs text-ink-navy/40 mt-0.5">Il delivery viene accettato solo se l'indirizzo del cliente rientra in una delle fasce. Ogni fascia può usare la <strong>distanza in km</strong> (in linea d'aria dal locale), l'elenco di <strong>CAP</strong>, o entrambi — e definisce ordine minimo e preavviso propri. Lascia vuoto un criterio per non usarlo.</p>
                 </div>
                 <Field label="CAP serviti" hint="Elenco dei CAP in cui consegni, separati da virgola. Vuoto = nessun filtro sul CAP.">
                   <input type="text" value={regole.capConsegna} onChange={e => { setRegole(r => ({ ...r, capConsegna: e.target.value })); dirty('prenotazioni') }}
@@ -825,26 +829,37 @@ export default function Impostazioni() {
                     <p className="text-sm font-medium text-ink-navy/70">Fasce di consegna</p>
                     <button type="button" onClick={addFascia} className="text-xs font-semibold text-electric-blue hover:underline">+ Aggiungi fascia</button>
                   </div>
-                  <p className="text-xs text-ink-navy/40">Per ogni fascia di distanza dal locale imposti ordine minimo e preavviso. Es: entro 5 km → min €15 e 30 min; entro 10 km → min €25 e 45 min. Un indirizzo oltre l&apos;ultima fascia è fuori zona. Richiede la posizione del locale qui sotto.</p>
+                  <p className="text-xs text-ink-navy/40">Per ogni fascia scegli il criterio di zona — <strong>km</strong> (in linea d&apos;aria dal locale), <strong>CAP</strong>, o entrambi — e imposti ordine minimo e preavviso. Es: entro 5 km → min €15 e 30 min; CAP 62100 → min €20. Un indirizzo fuori da tutte le fasce è fuori zona. Il criterio km richiede la posizione del locale qui sotto.</p>
                   {(regole.fasceConsegna ?? []).length === 0 ? (
-                    <p className="text-xs text-ink-navy/35 bg-mist rounded-lg px-3 py-2">Nessuna fascia impostata: nessun limite di distanza sul delivery (vale solo il filtro CAP).</p>
+                    <p className="text-xs text-ink-navy/35 bg-mist rounded-lg px-3 py-2">Nessuna fascia impostata: nessun limite sul delivery (l&apos;indirizzo viene accettato sempre).</p>
                   ) : (
                     <div className="space-y-2">
                       {(regole.fasceConsegna ?? []).map((f, i) => (
-                        <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end bg-mist rounded-xl p-2">
-                          <div>
-                            <label className="block text-[11px] text-ink-navy/50 mb-1">Entro (km)</label>
-                            <input type="number" min={0} step={0.5} value={f.kmMax || ''} onChange={e => updFascia(i, 'kmMax', Number(e.target.value))} placeholder="km" className={cls} />
+                        <div key={i} className="bg-mist rounded-xl p-2.5 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[11px] text-ink-navy/50 mb-1">Entro (km, linea d&apos;aria)</label>
+                              <input type="number" min={0} step={0.5} value={f.kmMax || ''} onChange={e => updFascia(i, 'kmMax', Number(e.target.value))} placeholder="km" className={cls} />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] text-ink-navy/50 mb-1">CAP inclusi</label>
+                              <input type="text" inputMode="numeric" value={f.cap ?? ''} onChange={e => updFasciaCap(i, e.target.value)} placeholder="es. 62100, 62032" className={cls} />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-[11px] text-ink-navy/50 mb-1">Ordine min (€)</label>
-                            <input type="number" min={0} step={1} value={f.ordineMinimo || ''} onChange={e => updFascia(i, 'ordineMinimo', Number(e.target.value))} placeholder="€" className={cls} />
+                          <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                            <div>
+                              <label className="block text-[11px] text-ink-navy/50 mb-1">Ordine min (€)</label>
+                              <input type="number" min={0} step={1} value={f.ordineMinimo || ''} onChange={e => updFascia(i, 'ordineMinimo', Number(e.target.value))} placeholder="€" className={cls} />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] text-ink-navy/50 mb-1">Preavviso (min)</label>
+                              <input type="number" min={0} step={5} value={f.preavvisoMinuti || ''} onChange={e => updFascia(i, 'preavvisoMinuti', Number(e.target.value))} placeholder="min" className={cls} />
+                            </div>
+                            <button type="button" onClick={() => delFascia(i)} aria-label="Elimina fascia" className="h-9 px-2 text-red-400 hover:text-red-600 text-lg leading-none">✕</button>
                           </div>
-                          <div>
-                            <label className="block text-[11px] text-ink-navy/50 mb-1">Preavviso (min)</label>
-                            <input type="number" min={0} step={5} value={f.preavvisoMinuti || ''} onChange={e => updFascia(i, 'preavvisoMinuti', Number(e.target.value))} placeholder="min" className={cls} />
-                          </div>
-                          <button type="button" onClick={() => delFascia(i)} aria-label="Elimina fascia" className="h-9 px-2 text-red-400 hover:text-red-600 text-lg leading-none">✕</button>
+                          {f.kmMax > 0 && (f.cap ?? '').trim() !== '' && (
+                            <p className="text-[11px] text-ink-navy/40">Con km e CAP insieme, valgono <strong>entrambi</strong>: l&apos;indirizzo deve essere entro i km <em>e</em> avere un CAP dell&apos;elenco.</p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -862,8 +877,8 @@ export default function Impostazioni() {
                     )}
                   </div>
                   {geoZona.msg && <p className={`text-xs ${geoZona.ok ? 'text-green-600' : 'text-amber-600'}`}>{geoZona.msg}</p>}
-                  {(regole.fasceConsegna ?? []).length > 0 && regole.latLocale == null && (
-                    <p className="text-xs text-amber-600">⚠️ Hai impostato delle fasce ma non la posizione del locale: i limiti di distanza non verranno applicati finché non calcoli la posizione.</p>
+                  {(regole.fasceConsegna ?? []).some(f => f.kmMax > 0) && regole.latLocale == null && (
+                    <p className="text-xs text-amber-600">⚠️ Alcune fasce usano i km ma non hai impostato la posizione del locale: i limiti di distanza non verranno applicati finché non calcoli la posizione. Le fasce basate sui CAP funzionano comunque.</p>
                   )}
                   <details className="pt-1">
                     <summary className="text-xs text-electric-blue cursor-pointer select-none">Non trova l&apos;indirizzo? Inserisci le coordinate manualmente</summary>

@@ -125,6 +125,10 @@ model MenuPiatto {
   immagineUrl String?
   allergeni   String[]      @default([]) // 14 allergeni UE (Reg. 1169/2011), es. ["glutine","latte"]
   disponibile Boolean       @default(true)
+  quantita        Int?      // counter live rimanente. null = non gestita (illimitato). Scala man mano che i clienti ordinano; a 0 il piatto è "Esaurito". Separato per menu tavoli/asporto perché sono righe distinte.
+  quantitaSoglia  Int?      // visibilità del counter al cliente: null = mostra sempre (quando gestita); N = mostra "Ne restano X" solo quando quantita <= N.
+  etichetta       String?   // piccola scritta mostrata al cliente (es. "Best seller", "Il nostro classico").
+  etichettaColore String?   // colore dell'etichetta (hex, es. "#e11d48"). null = colore di default.
   ordine      Int           @default(0)
   createdAt   DateTime      @default(now())
   user        User          @relation(fields: [userId], references: [id])
@@ -561,6 +565,7 @@ model Preventivo {
   tavoliIds         String?
   tokenRisposta     String?  @unique
   messaggioProposta String?
+  stockScalato      Boolean  @default(false) // true se la richiesta ha già decrementato il counter dei piatti (asporto/delivery). Serve a ripristinare le porzioni una volta sola in caso di rifiuto/eliminazione.
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id])

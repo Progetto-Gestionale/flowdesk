@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ALLERGENE_LABEL } from '@/lib/allergeni'
+import { mostraRimanenza, quantitaGestita, ETICHETTA_COLORE_DEFAULT } from '@/lib/menuPiatto'
 
 interface Piatto {
   id: string
@@ -10,6 +11,10 @@ interface Piatto {
   prezzo: number
   immagineUrl: string | null
   allergeni?: string[]
+  quantita?: number | null
+  quantitaSoglia?: number | null
+  etichetta?: string | null
+  etichettaColore?: string | null
 }
 
 interface Categoria {
@@ -64,6 +69,26 @@ export default function OrdinaPage() {
       })
       .catch(() => setErrore('Errore di connessione'))
       .finally(() => setLoading(false))
+  }, [publicId])
+
+  // Aggiornamento "live" delle rimanenze ogni 15s (fusione nel menu già caricato).
+  useEffect(() => {
+    const iv = setInterval(() => {
+      fetch(`/api/ordina?publicId=${publicId}`)
+        .then(r => r.json())
+        .then(d => {
+          const cats = d?.user?.menuCategorie
+          if (!Array.isArray(cats)) return
+          const q = new Map<string, number | null>()
+          for (const c of cats) for (const p of c.piatti) q.set(p.id, p.quantita ?? null)
+          setCategorie(prev => prev.map(c => ({
+            ...c,
+            piatti: c.piatti.map(p => q.has(p.id) ? { ...p, quantita: q.get(p.id) ?? null } : p),
+          })))
+        })
+        .catch(() => {})
+    }, 15000)
+    return () => clearInterval(iv)
   }, [publicId])
 
   function aggiungiAlCarrello(piatto: Piatto) {
@@ -195,14 +220,24 @@ export default function OrdinaPage() {
             <div className="space-y-3">
               {cat.piatti.map(p => {
                 const qty = quantitaInCarrello(p.id)
+                const gestita = quantitaGestita(p.quantita)
+                const rimaste = gestita ? Math.max(0, p.quantita as number) : Infinity
+                const esaurito = gestita && rimaste <= 0
+                const raggiuntoMax = gestita && qty >= rimaste
                 return (
-                  <div key={p.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div key={p.id} className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden ${esaurito ? 'opacity-60' : ''}`}>
                     <div className="flex gap-3 p-3">
                       {p.immagineUrl && (
                         <img src={p.immagineUrl} alt={p.nome} className="w-20 h-20 rounded-xl object-cover shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900">{p.nome}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-gray-900">{p.nome}</p>
+                          {p.etichetta && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white shrink-0"
+                              style={{ backgroundColor: p.etichettaColore || ETICHETTA_COLORE_DEFAULT }}>{p.etichetta}</span>
+                          )}
+                        </div>
                         {p.descrizione && <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{p.descrizione}</p>}
                         {p.allergeni && p.allergeni.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
@@ -213,9 +248,16 @@ export default function OrdinaPage() {
                             ))}
                           </div>
                         )}
+                        {mostraRimanenza(p.quantita, p.quantitaSoglia) && (
+                          <p className={`text-xs font-semibold mt-1 ${esaurito ? 'text-red-500' : 'text-amber-600'}`}>
+                            {esaurito ? 'Esaurito' : `Ne restano ${rimaste}`}
+                          </p>
+                        )}
                         <div className="flex items-center justify-between mt-2">
                           <p className="font-bold text-base" style={{ color: coloreP }}>€{p.prezzo.toFixed(2)}</p>
-                          {qty === 0 ? (
+                          {esaurito ? (
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-gray-100 text-gray-400">Esaurito</span>
+                          ) : qty === 0 ? (
                             <button onClick={() => aggiungiAlCarrello(p)}
                               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-sm"
                               style={{ backgroundColor: coloreP }}>+</button>
@@ -225,8 +267,8 @@ export default function OrdinaPage() {
                                 className="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-lg"
                                 style={{ borderColor: coloreP, color: coloreP }}>−</button>
                               <span className="font-bold text-gray-900 w-4 text-center">{qty}</span>
-                              <button onClick={() => aggiungiAlCarrello(p)}
-                                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                              <button onClick={() => aggiungiAlCarrello(p)} disabled={raggiuntoMax}
+                                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg disabled:opacity-30"
                                 style={{ backgroundColor: coloreP }}>+</button>
                             </div>
                           )}
