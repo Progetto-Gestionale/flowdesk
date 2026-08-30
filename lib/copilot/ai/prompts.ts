@@ -20,7 +20,7 @@ Rispondi SOLO con un oggetto JSON conforme allo schema:
 - status: semaforo generale ("green" tutto bene, "yellow" da tenere d'occhio, "red" problema).
 - headline: una riga che riassume lo stato.
 - why: fino a 2 insight, ognuno con title, detail (il perché) ed evidence (le chiavi delle metriche che lo sostengono).
-- actions: azioni da proporre, ognuna con id (dagli AZIONI CONSENTITE), label (il testo del pulsante) e urgency.`
+- actions: azioni da proporre, ognuna con id (dagli AZIONI CONSENTITE), label (il testo del pulsante) e urgency. Quando un'azione consentita è chiaramente utile per un insight (es. dare visibilità a un piatto che rende ma vende poco), proponila con una label breve e imperativa.`
 
 // Serializza il contesto in un payload JSON compatto e leggibile per il modello.
 export function buildUserPrompt(context: BriefContext): string {

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { IconBolt, IconArrowRight, IconRefresh } from '@/app/components/icons'
 // SOLO tipi: `import type` viene cancellato in compilazione → l'SDK AI NON entra
 // nel bundle client.
-import type { Brief, BriefContext, Metric, Timeframe } from '@/lib/copilot/ai'
+import type { Brief, BriefContext, Metric, ProposedAction, Timeframe } from '@/lib/copilot/ai'
 
 type Resp = { brief: Brief; context: BriefContext; spesaMese?: { costoEur: number } | null }
 
@@ -14,13 +14,6 @@ const TABS: { id: Timeframe; label: string }[] = [
   { id: 'weekly', label: 'Settimana' },
   { id: 'monthly', label: 'Mese' },
 ]
-
-// I pulsanti-azione (Fase A, sola lettura) sono deep-link a sezioni reali.
-const AZIONE_HREF: Record<string, string> = {
-  apri_menu: '/food/dashboard/menu',
-  apri_analytics: '/food/dashboard/analytics',
-  apri_prenotazioni: '/food/dashboard/clienti/preventivi',
-}
 
 const SEMAFORO: Record<string, { dot: string; testo: string; sfondo: string }> = {
   green: { dot: 'bg-emerald-500', testo: 'text-emerald-700', sfondo: 'bg-emerald-50 border-emerald-200' },
@@ -77,6 +70,8 @@ export default function BriefPanel() {
   const [cache, setCache] = useState<Partial<Record<Timeframe, Resp>>>({})
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState<string | null>(null)
+  const [azioneInCorso, setAzioneInCorso] = useState<string | null>(null)
+  const [azioniEsito, setAzioniEsito] = useState<Record<string, { ok: boolean; msg: string }>>({})
   const idratato = useRef(false)
 
   // Genera SEMPRE (usata sia dall'auto-load di un periodo mancante, sia dal tasto
@@ -124,6 +119,37 @@ export default function BriefPanel() {
   const brief = attuale?.brief
   const context = attuale?.context
   const sem = brief ? SEMAFORO[brief.status] ?? SEMAFORO.yellow : SEMAFORO.yellow
+
+  // Esegue un'azione proposta. Il "come" viene dal context (fidato), non dall'AI:
+  // 'link' naviga; 'sposta_in_cima' scrive sul DB DOPO conferma esplicita.
+  async function eseguiAzione(a: ProposedAction) {
+    const def = context?.allowedActions.find((x) => x.id === a.id)
+    if (!def) return
+    if (def.kind !== 'sposta_in_cima') {
+      if (def.target?.href) router.push(def.target.href)
+      return
+    }
+    const piattoId = def.target?.piattoId
+    const nome = def.target?.piattoNome ?? 'questo piatto'
+    if (!piattoId) return
+    if (!window.confirm(`Mettere "${nome}" in cima al suo menu? Cambia solo l'ordine, non prezzo o disponibilità.`)) return
+    setAzioneInCorso(a.id)
+    try {
+      const res = await fetch('/api/copilot/azioni/sposta-in-cima', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ piattoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Azione non riuscita.')
+      setAzioniEsito((e) => ({ ...e, [a.id]: { ok: true, msg: `Fatto: "${data.nome}" è ora in cima al menu.` } }))
+    } catch (err) {
+      setAzioniEsito((e) => ({ ...e, [a.id]: { ok: false, msg: err instanceof Error ? err.message : 'Errore, riprova.' } }))
+    } finally {
+      setAzioneInCorso(null)
+    }
+  }
 
   return (
     <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6">
@@ -237,21 +263,28 @@ export default function BriefPanel() {
               <p className="font-mono text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider mb-2">
                 Cosa fare
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2">
                 {brief.actions.map((a, i) => {
-                  const href = AZIONE_HREF[a.id]
+                  const def = context.allowedActions.find((x) => x.id === a.id)
+                  const esito = azioniEsito[a.id]
+                  const inCorso = azioneInCorso === a.id
+                  const scrive = def?.kind === 'sposta_in_cima'
                   return (
-                    <button
-                      key={i}
-                      onClick={() => href && router.push(href)}
-                      disabled={!href}
-                      className={`inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
-                        URGENZA[a.urgency] ?? URGENZA.medium
-                      }`}
-                    >
-                      {a.label}
-                      <span className="w-[14px] h-[14px]"><IconArrowRight /></span>
-                    </button>
+                    <div key={i} className="flex flex-col gap-1">
+                      <button
+                        onClick={() => eseguiAzione(a)}
+                        disabled={inCorso || !def || (esito?.ok ?? false)}
+                        className={`inline-flex items-center gap-1.5 self-start text-sm font-medium px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+                          URGENZA[a.urgency] ?? URGENZA.medium
+                        }`}
+                      >
+                        {inCorso ? 'Attendi…' : a.label}
+                        <span className="w-[14px] h-[14px]">{scrive ? <IconBolt /> : <IconArrowRight />}</span>
+                      </button>
+                      {esito && (
+                        <p className={`text-[11px] ${esito.ok ? 'text-emerald-600' : 'text-red-600'}`}>{esito.msg}</p>
+                      )}
+                    </div>
                   )
                 })}
               </div>

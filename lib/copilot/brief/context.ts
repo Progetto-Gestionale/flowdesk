@@ -77,6 +77,7 @@ async function salesAgg(userId: string, dal: string, al: string): Promise<Sales>
 
 interface DishAgg {
   nome: string
+  piattoId?: string // id del MenuPiatto (per le azioni), se la riga ce l'ha
   qty: number
   revenue: number // incasso di TUTTE le righe (per la popolarità)
   cost: number // costo delle sole righe che hanno il food cost
@@ -88,11 +89,12 @@ async function menuAgg(userId: string, dal: string, al: string): Promise<DishAgg
   const { from, to } = intervallo(dal, al)
   const righe = await prisma.rigaOrdine.findMany({
     where: { ordine: { userId, createdAt: { gte: from, lt: to } } },
-    select: { nome: true, prezzo: true, foodCost: true, quantita: true },
+    select: { nome: true, prezzo: true, foodCost: true, quantita: true, piattoId: true },
   })
   const map = new Map<string, DishAgg>()
   for (const r of righe) {
     const cur = map.get(r.nome) ?? { nome: r.nome, qty: 0, revenue: 0, cost: 0, costedRevenue: 0, withCost: false }
+    if (r.piattoId) cur.piattoId = r.piattoId // ultimo id non nullo visto per questo nome
     cur.qty += r.quantita
     cur.revenue += r.prezzo * r.quantita
     if (r.foodCost != null) {
@@ -108,7 +110,7 @@ async function menuAgg(userId: string, dal: string, al: string): Promise<DishAgg
 // Il "quadrante" del menu engineering lo calcola il codice (matematica), non l'AI:
 // popolarità (quantità) incrociata col margine %. L'AI spiega la conseguenza e
 // propone l'azione. Serve il food cost: se nessun piatto ce l'ha, niente sezione.
-function buildMenuMetrics(dishes: DishAgg[]): Metric[] {
+function buildMenuMetrics(dishes: DishAgg[]): { metrics: Metric[]; azioni: AllowedAction[] } {
   const totalRevenue = dishes.reduce((s, d) => s + d.revenue, 0)
   // Margine calcolato SOLO sulla parte di vendite che ha il food cost (stesso
   // perimetro numeratore/denominatore) → niente margini gonfiati dagli ordini
@@ -116,7 +118,7 @@ function buildMenuMetrics(dishes: DishAgg[]): Metric[] {
   const withCost = dishes
     .filter((d) => d.withCost && d.costedRevenue > 0)
     .map((d) => ({ ...d, marginPct: ((d.costedRevenue - d.cost) / d.costedRevenue) * 100 }))
-  if (!withCost.length) return []
+  if (!withCost.length) return { metrics: [], azioni: [] }
 
   const revWithCost = withCost.reduce((s, d) => s + d.costedRevenue, 0)
   const costTot = withCost.reduce((s, d) => s + d.cost, 0)
@@ -157,6 +159,7 @@ function buildMenuMetrics(dishes: DishAgg[]): Metric[] {
   }
 
   // Campione nascosto: poco venduto E margine sopra la media di almeno GAP punti.
+  const azioni: AllowedAction[] = []
   const campione = withCost
     .filter((d) => d.qty < median && d.marginPct >= margineMedio + GAP)
     .sort((a, b) => b.marginPct - a.marginPct)[0]
@@ -167,8 +170,18 @@ function buildMenuMetrics(dishes: DishAgg[]): Metric[] {
       value: campione.nome,
       deltaLabel: `${campione.qty} vendite, margine ${Math.round(campione.marginPct)}% (media ${Math.round(margineMedio)}%)`,
     })
+    // AZIONE REALE: se conosciamo l'id del piatto, offriamo di metterlo in cima al
+    // menu (gli dà visibilità: rende bene ma vende poco). L'id lo mettiamo noi, non l'AI.
+    if (campione.piattoId) {
+      azioni.push({
+        id: `sposta_in_cima_${campione.piattoId}`,
+        kind: 'sposta_in_cima',
+        target: { piattoId: campione.piattoId, piattoNome: campione.nome },
+        description: `Metti "${campione.nome}" in cima al suo menu per dargli visibilità (rende bene ma vende poco).`,
+      })
+    }
   }
-  return metrics
+  return { metrics, azioni }
 }
 
 // Azioni consentite per questi brief. In Fase A (sola lettura) sono deep-link a
@@ -177,11 +190,22 @@ function buildMenuMetrics(dishes: DishAgg[]): Metric[] {
 const AZIONI: AllowedAction[] = [
   {
     id: 'apri_menu',
+    kind: 'link',
+    target: { href: '/food/dashboard/menu' },
     description: 'Apri la sezione Menu per intervenire su un piatto (prezzo, disponibilità, ordine nel menu).',
-    params: { piatto: 'nome del piatto interessato' },
   },
-  { id: 'apri_analytics', description: 'Apri Analytics per approfondire i numeri (Analisi Menu / Ordini / Tavoli).' },
-  { id: 'apri_prenotazioni', description: 'Apri Prenotazioni tavoli per gestire le prenotazioni.' },
+  {
+    id: 'apri_analytics',
+    kind: 'link',
+    target: { href: '/food/dashboard/analytics' },
+    description: 'Apri Analytics per approfondire i numeri (Analisi Menu / Ordini / Tavoli).',
+  },
+  {
+    id: 'apri_prenotazioni',
+    kind: 'link',
+    target: { href: '/food/dashboard/clienti/preventivi' },
+    description: 'Apri Prenotazioni tavoli per gestire le prenotazioni.',
+  },
 ]
 
 // ── Costruzione del contesto ─────────────────────────────────────────────────
@@ -290,10 +314,12 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
   }
 
   // ── Menu engineering (serve volume: solo settimanale/mensile) ──
+  let azioniMenu: AllowedAction[] = []
   if (timeframe !== 'daily') {
     const dishes = await menuAgg(userId, curFrom, curTo)
-    const menuMetrics = buildMenuMetrics(dishes)
-    if (menuMetrics.length) sections.push({ key: 'menu', title: 'Menu engineering', metrics: menuMetrics })
+    const { metrics, azioni } = buildMenuMetrics(dishes)
+    if (metrics.length) sections.push({ key: 'menu', title: 'Menu engineering', metrics })
+    azioniMenu = azioni
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { nomeLocale: true } })
@@ -305,6 +331,7 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
     locale: 'it-IT',
     restaurantName: user?.nomeLocale ?? undefined,
     sections,
-    allowedActions: AZIONI,
+    // Prima le azioni concrete (es. sposta in cima), poi quelle di navigazione.
+    allowedActions: [...azioniMenu, ...AZIONI],
   }
 }

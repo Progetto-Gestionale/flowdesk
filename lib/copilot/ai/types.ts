@@ -44,6 +44,12 @@ export interface AllowedAction {
   description: string
   // Suggerimento dei parametri che l'AI deve riempire. Nome -> descrizione.
   params?: Record<string, string>
+  // Come il frontend esegue l'azione: 'link' = navigazione; le altre = scrittura
+  // con conferma. Assente = trattata come 'link'.
+  kind?: 'link' | 'sposta_in_cima'
+  // Payload FIDATO per l'esecuzione, riempito dal NOSTRO codice (non dall'AI):
+  // l'AI sceglie solo l'id, i parametri veri arrivano da qui.
+  target?: { href?: string; piattoId?: string; piattoNome?: string }
 }
 
 // Input deterministico del narratore. Prodotto interamente dal tuo codice.
