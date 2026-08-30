@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { IconBolt, IconArrowRight, IconRefresh } from '@/app/components/icons'
 // SOLO tipi: `import type` viene cancellato in compilazione → l'SDK AI NON entra
@@ -50,15 +50,38 @@ function formatValue(m: Metric): string {
   return num
 }
 
+// I brief generati restano salvati nel browser (per-dispositivo) SENZA scadenza:
+// una volta generato un periodo, resta finché non premi Rigenera. Niente TTL.
+const STORAGE_KEY = 'food:copilot-brief'
+
+function loadBrief(): Partial<Record<Timeframe, Resp>> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as Partial<Record<Timeframe, Resp>>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveBrief(cache: Partial<Record<Timeframe, Resp>>) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cache))
+  } catch {}
+}
+
 export default function BriefPanel() {
   const router = useRouter()
   const [timeframe, setTimeframe] = useState<Timeframe>('daily')
   const [cache, setCache] = useState<Partial<Record<Timeframe, Resp>>>({})
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState<string | null>(null)
+  const idratato = useRef(false)
 
-  const carica = useCallback(async (tf: Timeframe, forza = false) => {
-    if (!forza && cache[tf]) return // già in cache: niente chiamata (risparmio)
+  // Genera SEMPRE (usata sia dall'auto-load di un periodo mancante, sia dal tasto
+  // Rigenera). Il risultato viene salvato e resta finché non lo rigeneri.
+  const carica = useCallback(async (tf: Timeframe) => {
     setLoading(true)
     setErrore(null)
     try {
@@ -76,11 +99,26 @@ export default function BriefPanel() {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  // Idratazione una-tantum dai brief salvati (dopo il mount → niente mismatch SSR).
+  useEffect(() => {
+    const salvati = loadBrief()
+    if (Object.keys(salvati).length) setCache(salvati)
+    idratato.current = true
+  }, [])
+
+  // Persistenza a ogni cambio (mai l'oggetto vuoto iniziale, per non cancellare).
+  useEffect(() => {
+    if (idratato.current && Object.keys(cache).length > 0) saveBrief(cache)
   }, [cache])
 
+  // Auto-generazione SOLO se il periodo scelto non ha già un brief salvato.
   useEffect(() => {
+    if (!idratato.current) return
+    if (cache[timeframe] || loading) return
     void carica(timeframe)
-  }, [timeframe, carica])
+  }, [timeframe, cache, loading, carica])
 
   const attuale = cache[timeframe]
   const brief = attuale?.brief
@@ -99,7 +137,7 @@ export default function BriefPanel() {
           <p className="text-xs text-ink-navy/50">Cosa sta succedendo e cosa conviene fare</p>
         </div>
         <button
-          onClick={() => void carica(timeframe, true)}
+          onClick={() => void carica(timeframe)}
           disabled={loading}
           className="w-9 h-9 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:border-electric-blue hover:text-electric-blue transition-colors flex items-center justify-center disabled:opacity-40"
           title="Rigenera"
