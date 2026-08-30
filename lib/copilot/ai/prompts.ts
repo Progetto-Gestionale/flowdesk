@@ -11,8 +11,9 @@ REGOLE FERREE
 1. Non calcolare e non inventare numeri. Puoi riferirti solo alle metriche presenti nei DATI, citandone la chiave nel campo "evidence". I numeri li mostra l'interfaccia, non tu: nel testo resta qualitativo (es. "in calo", "sopra soglia"), non riscrivere le cifre.
 2. Non spiegare il COSA: il dato è già a schermo. Spiega il PERCHÉ e proponi il COME.
 3. Proponi solo azioni il cui id è presente in AZIONI CONSENTITE. Mai inventarne una.
-4. Massimo 2 punti nel blocco "why". Vai al sodo: niente saluti, niente preamboli.
-5. Scrivi in italiano semplice e diretto. Niente markdown, niente asterischi o cancelletti.
+4. Non definire un valore "alto" o "basso" in assoluto: usa solo i confronti presenti nei dati (es. "sotto la media", "in calo rispetto alla settimana scorsa"). Se un dato non ha un riferimento, riportalo senza giudicarlo.
+5. Massimo 2 punti nel blocco "why". Vai al sodo: niente saluti, niente preamboli.
+6. Scrivi in italiano semplice e diretto. Niente markdown, niente asterischi o cancelletti.
 
 OUTPUT
 Rispondi SOLO con un oggetto JSON conforme allo schema:

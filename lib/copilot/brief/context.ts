@@ -78,8 +78,9 @@ async function salesAgg(userId: string, dal: string, al: string): Promise<Sales>
 interface DishAgg {
   nome: string
   qty: number
-  revenue: number
-  cost: number
+  revenue: number // incasso di TUTTE le righe (per la popolarità)
+  cost: number // costo delle sole righe che hanno il food cost
+  costedRevenue: number // incasso delle SOLE righe con food cost (per il margine %)
   withCost: boolean
 }
 
@@ -91,11 +92,12 @@ async function menuAgg(userId: string, dal: string, al: string): Promise<DishAgg
   })
   const map = new Map<string, DishAgg>()
   for (const r of righe) {
-    const cur = map.get(r.nome) ?? { nome: r.nome, qty: 0, revenue: 0, cost: 0, withCost: false }
+    const cur = map.get(r.nome) ?? { nome: r.nome, qty: 0, revenue: 0, cost: 0, costedRevenue: 0, withCost: false }
     cur.qty += r.quantita
     cur.revenue += r.prezzo * r.quantita
     if (r.foodCost != null) {
       cur.cost += r.foodCost * r.quantita
+      cur.costedRevenue += r.prezzo * r.quantita // stesso perimetro del costo → margine coerente
       cur.withCost = true
     }
     map.set(r.nome, cur)
@@ -108,20 +110,27 @@ async function menuAgg(userId: string, dal: string, al: string): Promise<DishAgg
 // propone l'azione. Serve il food cost: se nessun piatto ce l'ha, niente sezione.
 function buildMenuMetrics(dishes: DishAgg[]): Metric[] {
   const totalRevenue = dishes.reduce((s, d) => s + d.revenue, 0)
+  // Margine calcolato SOLO sulla parte di vendite che ha il food cost (stesso
+  // perimetro numeratore/denominatore) → niente margini gonfiati dagli ordini
+  // vecchi senza food cost.
   const withCost = dishes
-    .filter((d) => d.withCost && d.revenue > 0)
-    .map((d) => ({ ...d, marginPct: ((d.revenue - d.cost) / d.revenue) * 100 }))
+    .filter((d) => d.withCost && d.costedRevenue > 0)
+    .map((d) => ({ ...d, marginPct: ((d.costedRevenue - d.cost) / d.costedRevenue) * 100 }))
   if (!withCost.length) return []
+
+  const revWithCost = withCost.reduce((s, d) => s + d.costedRevenue, 0)
+  const costTot = withCost.reduce((s, d) => s + d.cost, 0)
+  const fcPct = revWithCost > 0 ? round2((costTot / revWithCost) * 100) : null
+  // Margine medio del locale (pesato sul venduto): il benchmark onesto.
+  const margineMedio = revWithCost > 0 ? ((revWithCost - costTot) / revWithCost) * 100 : 0
+  // Quota di vendite che ha davvero il food cost impostato (trasparenza).
+  const coverage = totalRevenue > 0 ? Math.round((revWithCost / totalRevenue) * 100) : 0
 
   const qtys = withCost.map((d) => d.qty).sort((a, b) => a - b)
   const median = qtys[Math.floor(qtys.length / 2)]
-  const benVenduti = withCost.filter((d) => d.qty >= median).sort((a, b) => a.marginPct - b.marginPct)
-  const pocoVenduti = withCost.filter((d) => d.qty < median).sort((a, b) => b.marginPct - a.marginPct)
-
-  const revWithCost = withCost.reduce((s, d) => s + d.revenue, 0)
-  const costTot = withCost.reduce((s, d) => s + d.cost, 0)
-  const fcPct = revWithCost > 0 ? round2((costTot / revWithCost) * 100) : null
-  const coverage = totalRevenue > 0 ? Math.round((revWithCost / totalRevenue) * 100) : 0
+  // Scarto minimo dalla media per essere "notevole": evita di spacciare per
+  // basso/alto un margine che è solo il minimo/massimo relativo.
+  const GAP = 8
 
   const metrics: Metric[] = []
   if (fcPct != null) {
@@ -130,25 +139,33 @@ function buildMenuMetrics(dishes: DishAgg[]): Metric[] {
       label: 'Incidenza food cost sul venduto',
       value: fcPct,
       unit: '%',
-      deltaLabel: `calcolata sul ${coverage}% del venduto con food cost impostato`,
+      deltaLabel: `margine medio ${Math.round(margineMedio)}% · su ${coverage}% del venduto con food cost`,
     })
   }
-  const palla = benVenduti[0]
+
+  // Palla al piede: molto venduto E margine sotto la media di almeno GAP punti.
+  const palla = withCost
+    .filter((d) => d.qty >= median && d.marginPct <= margineMedio - GAP)
+    .sort((a, b) => a.marginPct - b.marginPct)[0]
   if (palla) {
     metrics.push({
       key: 'menu_palla_al_piede',
-      label: 'Molto venduto ma basso margine',
+      label: 'Molto venduto, margine sotto la media',
       value: palla.nome,
-      deltaLabel: `${palla.qty} vendite, margine ${Math.round(palla.marginPct)}%`,
+      deltaLabel: `${palla.qty} vendite, margine ${Math.round(palla.marginPct)}% (media ${Math.round(margineMedio)}%)`,
     })
   }
-  const campione = pocoVenduti[0]
+
+  // Campione nascosto: poco venduto E margine sopra la media di almeno GAP punti.
+  const campione = withCost
+    .filter((d) => d.qty < median && d.marginPct >= margineMedio + GAP)
+    .sort((a, b) => b.marginPct - a.marginPct)[0]
   if (campione) {
     metrics.push({
       key: 'menu_campione_nascosto',
-      label: 'Alto margine ma poche vendite',
+      label: 'Poco venduto, margine sopra la media',
       value: campione.nome,
-      deltaLabel: `${campione.qty} vendite, margine ${Math.round(campione.marginPct)}%`,
+      deltaLabel: `${campione.qty} vendite, margine ${Math.round(campione.marginPct)}% (media ${Math.round(margineMedio)}%)`,
     })
   }
   return metrics
