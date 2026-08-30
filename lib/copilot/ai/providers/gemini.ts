@@ -29,12 +29,18 @@ export class GeminiProvider implements AIProvider {
   }
 
   async complete(req: AICompletionRequest): Promise<AICompletionResponse> {
-    // @ts-ignore - dipendenza opzionale: presente solo se scegli Gemini (npm i @google/generative-ai)
-    const mod = await import('@google/generative-ai').catch(() => {
-      throw new Error(
-        "Provider 'gemini' selezionato ma '@google/generative-ai' non è installato. Esegui: npm i @google/generative-ai",
-      )
-    })
+    // Dipendenza opzionale: presente solo se scegli Gemini (npm i @google/generative-ai).
+    // I magic comment dicono a webpack/Turbopack di NON risolverlo a build-time (così
+    // il build Vercel non fallisce con "Module not found" finché il pacchetto non c'è);
+    // a runtime, se manca, l'import nativo lancia e lo catturiamo con un messaggio chiaro.
+    // @ts-ignore
+    const mod = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ '@google/generative-ai').catch(
+      () => {
+        throw new Error(
+          "Provider 'gemini' selezionato ma '@google/generative-ai' non è installato. Esegui: npm i @google/generative-ai",
+        )
+      },
+    )
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { GoogleGenerativeAI } = mod as any
 
