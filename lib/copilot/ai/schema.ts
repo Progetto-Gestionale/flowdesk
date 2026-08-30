@@ -39,13 +39,16 @@ export function buildBriefSchema(context: BriefContext): Record<string, unknown>
           type: 'object',
           additionalProperties: false,
           required: ['id', 'label', 'urgency'],
+          // NB: niente 'params' qui. Gli structured output vogliono
+          // additionalProperties:false su ogni oggetto, incompatibile con un
+          // oggetto params a chiavi libere. In Fase A i params non servono (le
+          // azioni sono deep-link). In Fase 2 si tipizzeranno per-azione.
           properties: {
             id: actionIds.length
               ? { type: 'string', enum: actionIds }
               : { type: 'string' },
             label: { type: 'string' },
             urgency: { type: 'string', enum: ['low', 'medium', 'high'] },
-            params: { type: 'object', additionalProperties: true },
           },
         },
       },
