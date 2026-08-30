@@ -18,8 +18,10 @@ export function buildBriefSchema(context: BriefContext): Record<string, unknown>
       status: { type: 'string', enum: ['green', 'yellow', 'red'] },
       headline: { type: 'string' },
       why: {
+        // NB: niente 'maxItems' — gli structured output non supportano i vincoli
+        // numerici sugli array (l'API risponde 400). Il limite di 2 è garantito
+        // dal prompt e dal codice (narrator.enforceGrounding → slice(0, 2)).
         type: 'array',
-        maxItems: 2,
         items: {
           type: 'object',
           additionalProperties: false,
