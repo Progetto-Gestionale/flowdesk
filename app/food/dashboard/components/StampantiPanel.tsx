@@ -87,9 +87,16 @@ export default function StampantiPanel() {
     if (res.ok) setJobs((await res.json()).jobs ?? [])
   }, [])
   const caricaOrdini = useCallback(async () => {
-    // Ultimi ordini (oggi + prenotati/pendenti) per l'anteprima con dati reali.
+    // Anteprima con dati reali: gli ultimi 5 ordini al tavolo + gli ultimi 5 asporto/delivery.
     const res = await fetch('/api/ordini?oggi=1&futuri=1')
-    if (res.ok) setOrdini(((await res.json()).ordini ?? []).slice(0, 40))
+    if (!res.ok) return
+    const all: OrdineLite[] = (await res.json()).ordini ?? [] // già ordinati per createdAt desc
+    const tavoli = all.filter(o => o.tipo !== 'asporto' && o.tipo !== 'delivery').slice(0, 5)
+    const asportoDelivery = all.filter(o => o.tipo === 'asporto' || o.tipo === 'delivery').slice(0, 5)
+    const dieci = [...tavoli, ...asportoDelivery].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    setOrdini(dieci)
   }, [])
 
   useEffect(() => {
@@ -311,15 +318,21 @@ export default function StampantiPanel() {
         )}
       </section>
 
-      {/* Coda di stampa */}
+      {/* Coda di stampa (a tendina) */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-bold text-ink-navy">Coda di stampa</h3>
-          <button onClick={caricaCoda} className="text-sm text-electric-blue hover:underline">Aggiorna</button>
-        </div>
-        <div className="space-y-2">
-          {jobs.length === 0 && <p className="text-sm text-ink-navy/50">Nessuna comanda in coda.</p>}
-          {jobs.map(job => (
+        <details className="group">
+          <summary className="flex items-center justify-between cursor-pointer list-none select-none">
+            <span className="text-base font-bold text-ink-navy flex items-center gap-2">
+              <span className="text-ink-navy/40 transition-transform group-open:rotate-90">▶</span>
+              Coda di stampa
+              <span className="text-xs font-normal text-ink-navy/40">({jobs.length})</span>
+            </span>
+            <span onClick={e => { e.preventDefault(); caricaCoda() }} className="text-sm text-electric-blue hover:underline">Aggiorna</span>
+          </summary>
+          <p className="text-xs text-ink-navy/40 mt-1 mb-3">Le comande già stampate vengono rimosse automaticamente dopo 24 ore.</p>
+          <div className="space-y-2">
+            {jobs.length === 0 && <p className="text-sm text-ink-navy/50">Nessuna comanda in coda.</p>}
+            {jobs.map(job => (
             <div key={job.id} className="flex items-start gap-3 border border-ink-navy/10 rounded-lg px-3 py-2.5">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -335,8 +348,9 @@ export default function StampantiPanel() {
                 Ristampa
               </button>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </details>
       </section>
     </div>
   )

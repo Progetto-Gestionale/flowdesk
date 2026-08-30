@@ -115,6 +115,22 @@ export async function enqueueComande(
   }
 }
 
+// Elimina i job GIÀ STAMPATI da più di 24 ore: una volta stampata, la comanda non serve più.
+// Chiamata all'apertura della coda (scoped userId, così la lista non mostra mai vecchi stampati) e
+// dalla cron giornaliera (senza userId → tutti gli utenti, per non far crescere la tabella).
+// I job in errore o in attesa restano (vanno gestiti). Ritorna quanti ne ha cancellati.
+export async function purgeVecchiJob(userId?: string): Promise<number> {
+  const limite = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const res = await prisma.printJob.deleteMany({
+    where: {
+      ...(userId ? { userId } : {}),
+      stato: 'stampata',
+      stampataAt: { lt: limite },
+    },
+  })
+  return res.count
+}
+
 // Ristampa: riaccoda un job esistente (nuovo tentativo di consegna con il transport attivo).
 export async function ristampaJob(jobId: string, userId: string): Promise<boolean> {
   const job = await prisma.printJob.findFirst({ where: { id: jobId, userId } })

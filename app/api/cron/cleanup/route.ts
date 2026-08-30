@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { purgeVecchiJob } from '@/lib/print/enqueue'
 
 // Chiamata ogni giorno alle 04:00 dalla cron Vercel
 // Protetta dal CRON_SECRET in produzione
@@ -139,6 +140,9 @@ export async function GET(req: Request) {
     richiesteConcluse += resConcl.count
   }
 
+  // 4. Elimina le comande già stampate da oltre 24h (una volta stampate non servono più).
+  const printJobEliminati = await purgeVecchiJob().catch(() => 0)
+
   return NextResponse.json({
     ok: true,
     appuntamentiCompletati: appAggiornati,
@@ -147,6 +151,7 @@ export async function GET(req: Request) {
 
     leadArchiviati: leadCancellati,
     conversazioniEliminate: convEliminate,
+    printJobEliminati,
     eseguitoAlle: ora.toISOString(),
   })
 }
