@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
 import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
+import { enqueueComande } from '@/lib/print/enqueue'
 
 async function ricalcolaTotale(id: string) {
   const righe = await prisma.rigaOrdine.findMany({ where: { ordineId: id } })
@@ -21,17 +22,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const esistente = await prisma.rigaOrdine.findFirst({
     where: { ordineId: id, piattoId, note: note ?? '' },
   })
+  let rigaId: string
   if (esistente) {
     await prisma.rigaOrdine.update({ where: { id: esistente.id }, data: { quantita: esistente.quantita + quantita } })
+    rigaId = esistente.id
   } else {
     const repMap = await repartoPerPiatti([piattoId])
     const fcMap = await foodCostPerPiatti([piattoId])
-    await prisma.rigaOrdine.create({
+    const creata = await prisma.rigaOrdine.create({
       data: { ordineId: id, piattoId, nome, prezzo: parseFloat(prezzo), foodCost: fcMap[piattoId] ?? null, quantita, note: note ?? '', reparto: repMap[piattoId] ?? null },
     })
+    rigaId = creata.id
   }
 
   const ordine = await ricalcolaTotale(id)
+  // Stampa una comanda per il SOLO piatto aggiunto (la quantità stampata è il delta appena inserito,
+  // non il totale accumulato sulla riga). Non invasivo.
+  await enqueueComande(id, { soloRigheIds: [rigaId], quantitaPerRiga: { [rigaId]: quantita } }).catch(() => {})
   return NextResponse.json({ ordine })
 }
 

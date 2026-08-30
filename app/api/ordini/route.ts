@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
 import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
+import { enqueueComande } from '@/lib/print/enqueue'
 
 export async function GET(req: Request) {
   const user = await getAuthUser()
@@ -101,6 +102,9 @@ export async function POST(req: Request) {
     },
     include: { righe: true },
   })
+
+  // Stampa comande (non invasivo: un errore qui non deve far fallire l'ordine, già salvato).
+  await enqueueComande(ordine.id).catch(() => {})
 
   return NextResponse.json({ ok: true, ordine })
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
 import { decrementaStock, StockError } from '@/lib/stock'
+import { enqueueComande } from '@/lib/print/enqueue'
 
 // GET — menu
 export async function GET(req: Request) {
@@ -132,6 +133,8 @@ export async function POST(req: Request) {
         include: { righe: true },
       })
     })
+    // Stampa comande (non invasivo: un errore qui non deve far fallire l'ordine, già salvato).
+    await enqueueComande(ordine.id).catch(() => {})
     return NextResponse.json({ ordine })
   } catch (e) {
     if (e instanceof StockError) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
 import { decrementaStock, StockError } from '@/lib/stock'
+import { enqueueComande } from '@/lib/print/enqueue'
 
 // POST pubblico — il cameriere invia un ordine per uno o più tavoli.
 // body: { publicId, tavoli: number[], righe, note }
@@ -108,6 +109,9 @@ export async function POST(req: Request) {
         include: { righe: true },
       })
     })
+
+    // Stampa comande (non invasivo: un errore qui non deve far fallire l'ordine, già salvato).
+    await enqueueComande(ordine.id).catch(() => {})
 
     return NextResponse.json({ ok: true, ordine })
   } catch (e) {

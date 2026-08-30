@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   IconHome, IconClock, IconRefresh, IconUsers, IconSettings, IconCalendar,
-  IconFork, IconCard, IconInfo, IconHelp, IconUser, IconCheck,
+  IconFork, IconCard, IconInfo, IconHelp, IconUser, IconCheck, IconReceipt,
   IconChat, IconCamera, IconPin,
 } from '@/app/components/icons'
 import { preparaFoto } from '@/lib/uploadFoto'
 import OrarioSelect from '@/app/components/OrarioSelect'
 import MenuStampaPanel from '@/app/food/dashboard/components/MenuStampaPanel'
+import StampantiPanel from '@/app/food/dashboard/components/StampantiPanel'
 import QRCode from 'qrcode'
 
 
@@ -50,6 +51,7 @@ const SEZIONI = [
   { id: 'turni', label: 'Turni', Icon: IconRefresh },
   { id: 'prenotazioni', label: 'Prenotazioni', Icon: IconCalendar },
   { id: 'menu', label: 'Menu & Offerta', Icon: IconFork },
+  { id: 'stampanti', label: 'Stampanti', Icon: IconReceipt },
   { id: 'camerieri', label: 'Camerieri', Icon: IconUsers },
   { id: 'bot', label: 'ID pubblico', Icon: IconInfo },
   { id: 'account', label: 'Account', Icon: IconUser },
@@ -1000,6 +1002,14 @@ export default function Impostazioni() {
                 </div>
               </div>
             </>
+          )}
+
+          {sezioneAttiva === 'stampanti' && (
+            <div>
+              <h2 className="font-semibold text-ink-navy text-lg">Stampanti</h2>
+              <p className="text-xs text-ink-navy/40 mt-0.5 mb-5">Stampa delle comande per reparto (cucina, bar, …) su stampanti termiche.</p>
+              <StampantiPanel />
+            </div>
           )}
 
           {sezioneAttiva === 'camerieri' && (

@@ -51,6 +51,8 @@ model User {
   menuCategorie      MenuCategoria[]
   menuPiatti         MenuPiatto[]
   ordini             Ordine[]
+  stampanti          Stampante[]
+  printJobs          PrintJob[]
   // Personalizzazione pagina ordine
   menuLogoUrl        String?
   menuColoreP        String?           @default("#4f46e5")
@@ -573,4 +575,46 @@ model Preventivo {
   user              User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+// Stampante termica per le comande. Transport-agnostica: descrive SOLO dove/cosa serve
+// (nome, reparto servito, indirizzo di rete), non COME le si consegna la stampa (PrintNode,
+// agente locale, …) — quella è responsabilità del transport (vedi lib/print/transport.ts).
+model Stampante {
+  id        String     @id @default(cuid())
+  userId    String
+  nome      String
+  reparto   String                       // reparto servito (Cucina/Bar/…) → match con RigaOrdine.reparto
+  indirizzo String?                       // es "192.168.1.50:9100" per stampanti di rete; null per "altro"
+  tipo      String     @default("rete")   // "rete" | "altro"
+  attiva    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id])
+  printJobs PrintJob[]
+
+  @@index([userId])
+}
+
+// Coda di stampa delle comande. Un job = una comanda (un reparto di un ordine) pronta da consegnare
+// a una stampante. Indipendente dal metodo di consegna: il transport (Mock/PrintNode/Agente) legge
+// `contenuto` (ESC/POS in base64) e aggiorna stato/stampataAt. `anteprima` è il ticket renderizzato in
+// testo, per verificare il layout senza hardware.
+model PrintJob {
+  id          String     @id @default(cuid())
+  userId      String                          // scoping veloce della coda per utente (senza join sull'ordine)
+  ordineId    String?                          // nullable: anteprima/test senza ordine
+  stampanteId String?                          // nullable: reparto senza stampante ancora assegnata
+  reparto     String                           // reparto della comanda (routing anche senza stampante)
+  contenuto   String                           // payload comanda: ESC/POS in base64
+  anteprima   String?                          // ticket renderizzato in testo monospace (verifica senza hardware)
+  stato       String     @default("in_attesa") // "in_attesa" | "stampata" | "errore"
+  errore      String?
+  tentativi   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  stampataAt  DateTime?
+  user        User       @relation(fields: [userId], references: [id])
+  stampante   Stampante? @relation(fields: [stampanteId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([stato])
 }

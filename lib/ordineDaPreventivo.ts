@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { repartoPerPiatti, foodCostPerPiatti } from '@/lib/reparti'
 import { parseInfoOrdine, type RigaPreventivo } from '@/lib/ordineInfo'
+import { enqueueComande } from '@/lib/print/enqueue'
 
 // Un preventivo asporto/delivery accettato diventa un Ordine vero (che entra in cucina e nella
 // pagina Asporto & Delivery). Le voci del carrello stanno negli items; i dati di consegna in note,
@@ -63,5 +64,7 @@ export async function creaOrdineDaPreventivo(preventivo: PreventivoLike, userId:
       },
     },
   })
+  // Stampa comande (non invasivo: un errore qui non deve far fallire l'accettazione della richiesta).
+  await enqueueComande(ordine.id).catch(() => {})
   return ordine.id
 }
