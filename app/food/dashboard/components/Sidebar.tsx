@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   IconGrid, IconUsers, IconClipboard, IconCalendar,
   IconFork, IconReceipt, IconTable, IconChartBar, IconSettings,
-  IconClock, IconCash, IconDelivery, IconBot, IconBolt,
+  IconClock, IconCash, IconDelivery, IconBot, IconCard,
 } from '@/app/components/icons'
 
 const navFood = [
@@ -26,6 +26,7 @@ const navFood = [
     items: [
       { label: 'Menu', href: '/food/dashboard/menu', Icon: IconFork },
       { label: 'Analytics', href: '/food/dashboard/analytics', Icon: IconChartBar },
+      { label: 'Contabilità', href: '/food/dashboard/contabilita', Icon: IconCard },
       { label: 'Staff', href: '/food/dashboard/staff', Icon: IconUsers },
       { label: 'QR Timbratura', href: '/food/dashboard/timbrature', Icon: IconClock },
     ],
@@ -33,8 +34,7 @@ const navFood = [
   {
     section: 'Account',
     items: [
-      { label: 'Brief AI', href: '/food/dashboard/brief', Icon: IconBolt },
-      { label: 'Assistente AI', href: '/food/dashboard/assistente', Icon: IconBot },
+      { label: 'Copilota AI', href: '/food/dashboard/assistente', Icon: IconBot },
       { label: 'Impostazioni', href: '/food/dashboard/impostazioni', Icon: IconSettings },
     ],
   },

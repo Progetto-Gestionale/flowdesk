@@ -11,70 +11,74 @@ datasource db {
 }
 
 model User {
-  id                 String            @id @default(cuid())
-  clerkId            String            @unique
-  name               String?
-  email              String?
-  niche              String?
-  objectives         String?
-  plan               String            @default("trial")
-  verticale          String            @default("food") // "food" | "care"
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  nomeLocale         String?
-  indirizzo          String?
-  telefono           String?
-  sitoWeb            String?
-  descrizioneBot     String?
-  maxCoperti         Int?
-  publicId           String?           @unique
-  orariApertura      String?
-  serviziOfferti     String?
-  regolePrenotazione String?
-  menuOfferta        String?
-  pagamenti          String?
-  infoPratiche       String?
-  faq                String?
-  appuntamenti       Appuntamento[]
-  contents           Content[]
-  conversazioni      Conversazione[]
-  dipendenti         Dipendente[]
-  leads              Lead[]
-  requisitiTurni     RequisitiTurni[]
-  listaAttesa        ListaAttesa[]
-  preventivi         Preventivo[]
-  slotDisponibili    SlotDisponibile[]
-  tavoli             Tavolo[]
-  sale               Sala[]
-  gruppiTavoli       GruppoTavoli[]
-  turni              Turno[]
-  menuCategorie      MenuCategoria[]
-  menuPiatti         MenuPiatto[]
-  ordini             Ordine[]
-  stampanti          Stampante[]
-  printJobs          PrintJob[]
+  id                    String                  @id @default(cuid())
+  clerkId               String                  @unique
+  name                  String?
+  email                 String?
+  niche                 String?
+  objectives            String?
+  plan                  String                  @default("trial")
+  verticale             String                  @default("food") // "food" | "care"
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  nomeLocale            String?
+  indirizzo             String?
+  telefono              String?
+  sitoWeb               String?
+  descrizioneBot        String?
+  maxCoperti            Int?
+  publicId              String?                 @unique
+  orariApertura         String?
+  serviziOfferti        String?
+  regolePrenotazione    String?
+  menuOfferta           String?
+  pagamenti             String?
+  infoPratiche          String?
+  faq                   String?
+  appuntamenti          Appuntamento[]
+  contents              Content[]
+  conversazioni         Conversazione[]
+  dipendenti            Dipendente[]
+  leads                 Lead[]
+  requisitiTurni        RequisitiTurni[]
+  listaAttesa           ListaAttesa[]
+  preventivi            Preventivo[]
+  slotDisponibili       SlotDisponibile[]
+  tavoli                Tavolo[]
+  sale                  Sala[]
+  gruppiTavoli          GruppoTavoli[]
+  turni                 Turno[]
+  menuCategorie         MenuCategoria[]
+  menuPiatti            MenuPiatto[]
+  ordini                Ordine[]
+  stampanti             Stampante[]
+  printJobs             PrintJob[]
   // Personalizzazione pagina ordine
-  menuLogoUrl        String?
-  menuColoreP        String?           @default("#4f46e5")
-  menuColoreS        String?           @default("#ffffff")
-  turniServizio      String?           // JSON: [{id, nome, oraInizio, oraFine}]
-  reparti            String?           // JSON: string[] reparti/centri di produzione (es. ["Cucina","Bar"]); null = default Cucina/Bar
-  fabbisognoStaff   String?           // JSON: [{giorno: 0-6, ruolo: string, persone: number, oraInizio: string, oraFine: string}]
-  mapElementi        String?           // JSON: [{id, tipo, label, x, y, w, h, colore}]
-  blockAsporto       Boolean           @default(false)
-  blockDelivery      Boolean           @default(false)
-  camerierePin       String?           // hash bcrypt del PIN per la pagina pubblica camerieri (null = nessun PIN)
-  qrTimbraturaFisso  Boolean           @default(false) // true = QR timbratura fisso stampabile; false = ciclante. Solo il token della modalità scelta è valido.
+  menuLogoUrl           String?
+  menuColoreP           String?                 @default("#4f46e5")
+  menuColoreS           String?                 @default("#ffffff")
+  turniServizio         String? // JSON: [{id, nome, oraInizio, oraFine}]
+  reparti               String? // JSON: string[] reparti/centri di produzione (es. ["Cucina","Bar"]); null = default Cucina/Bar
+  fabbisognoStaff       String? // JSON: [{giorno: 0-6, ruolo: string, persone: number, oraInizio: string, oraFine: string}]
+  mapElementi           String? // JSON: [{id, tipo, label, x, y, w, h, colore}]
+  blockAsporto          Boolean                 @default(false)
+  blockDelivery         Boolean                 @default(false)
+  camerierePin          String? // hash bcrypt del PIN per la pagina pubblica camerieri (null = nessun PIN)
+  qrTimbraturaFisso     Boolean                 @default(false) // true = QR timbratura fisso stampabile; false = ciclante. Solo il token della modalità scelta è valido.
   // Flowest Care
-  pazienti           Paziente[]
-  sedute             Seduta[]
-  documentiPazienti  DocumentoPaziente[]
-  tipiSeduta         TipoSeduta[]
+  pazienti              Paziente[]
+  sedute                Seduta[]
+  documentiPazienti     DocumentoPaziente[]
+  tipiSeduta            TipoSeduta[]
   disponibilitaOverride DisponibilitaOverride[]
-  notifiche          Notifica[]
-  todo               Todo[]
-  copilotUsage       CopilotUsage[]
-  menuStampaConfig   MenuStampaConfig?
+  notifiche             Notifica[]
+  todo                  Todo[]
+  copilotUsage          CopilotUsage[]
+  menuStampaConfig      MenuStampaConfig?
+  // Flowest Contabilità (owner-only)
+  contabilitaConfig     ContabilitaConfig?
+  costiFissi            CostoFisso[]
+  chiusureGiorno        ChiusuraGiorno[]
 }
 
 // Scelte del menu stampabile (PDF) del locale, condivise tra tutti i dispositivi.
@@ -82,7 +86,7 @@ model User {
 model MenuStampaConfig {
   id        String   @id @default(cuid())
   userId    String   @unique
-  dati      String   // JSON
+  dati      String // JSON
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
 }
@@ -92,7 +96,7 @@ model MenuStampaConfig {
 model CopilotUsage {
   id          String   @id @default(cuid())
   userId      String
-  mese        String   // "YYYY-MM" (mese in fuso Europe/Rome)
+  mese        String // "YYYY-MM" (mese in fuso Europe/Rome)
   costoUsd    Float    @default(0)
   tokenInput  Int      @default(0)
   tokenOutput Int      @default(0)
@@ -104,66 +108,70 @@ model CopilotUsage {
 }
 
 model MenuCategoria {
-  id        String       @id @default(cuid())
-  userId    String
-  nome      String
-  ordine    Int          @default(0)
-  tipo      String       @default("locale") // "locale" | "asporto"
-  reparto   String?      // reparto/centro di produzione a cui vanno i piatti (Cucina, Bar, Pizzeria…); null = Cucina
-  createdAt DateTime     @default(now())
-  user      User         @relation(fields: [userId], references: [id])
-  piatti    MenuPiatto[]
+  id              String       @id @default(cuid())
+  userId          String
+  nome            String
+  ordine          Int          @default(0)
+  tipo            String       @default("locale") // "locale" | "asporto"
+  reparto         String? // reparto/centro di produzione a cui vanno i piatti (Cucina, Bar, Pizzeria…); null = Cucina
+  // Contabilità: aliquota IVA di vendita per i piatti di questa categoria. null = eredita il default del locale (ContabilitaConfig.aliquotaVenditaDefault, tipicamente 0.10 somministrazione). Override tipico: alcolici in asporto (0.22).
+  aliquotaVendita Float?
+  createdAt       DateTime     @default(now())
+  user            User         @relation(fields: [userId], references: [id])
+  piatti          MenuPiatto[]
 
   @@index([userId, tipo])
 }
 
 model MenuPiatto {
-  id          String        @id @default(cuid())
-  userId      String
-  categoriaId String
-  nome        String
-  descrizione String?
-  prezzo      Float
-  foodCost    Float?        // costo di produzione della porzione (€). null = non impostato. Con prezzo → margine e guadagno netto in analytics. Separato per menu tavoli/asporto (righe distinte).
-  immagineUrl String?
-  allergeni   String[]      @default([]) // 14 allergeni UE (Reg. 1169/2011), es. ["glutine","latte"]
-  disponibile Boolean       @default(true)
-  quantita        Int?      // counter live rimanente. null = non gestita (illimitato). Scala man mano che i clienti ordinano; a 0 il piatto è "Esaurito". Separato per menu tavoli/asporto perché sono righe distinte.
-  quantitaSoglia  Int?      // visibilità del counter al cliente: null = mostra sempre (quando gestita); N = mostra "Ne restano X" solo quando quantita <= N.
-  etichetta       String?   // piccola scritta mostrata al cliente (es. "Best seller", "Il nostro classico").
-  etichettaColore String?   // colore dell'etichetta (hex, es. "#e11d48"). null = colore di default.
-  ordine      Int           @default(0)
-  createdAt   DateTime      @default(now())
-  user        User          @relation(fields: [userId], references: [id])
-  categoria   MenuCategoria @relation(fields: [categoriaId], references: [id])
-  righeOrdine RigaOrdine[]
+  id              String        @id @default(cuid())
+  userId          String
+  categoriaId     String
+  nome            String
+  descrizione     String?
+  prezzo          Float
+  foodCost        Float? // costo di produzione della porzione (€, NETTO IVA). null = non impostato. Con prezzo → margine e guadagno netto in analytics. Separato per menu tavoli/asporto (righe distinte).
+  // Contabilità: override dell'aliquota IVA di vendita sul singolo piatto. null = eredita da MenuCategoria.aliquotaVendita → poi dal default del locale. Raro: solo l'eccezione dell'eccezione.
+  aliquotaVendita Float?
+  immagineUrl     String?
+  allergeni       String[]      @default([]) // 14 allergeni UE (Reg. 1169/2011), es. ["glutine","latte"]
+  disponibile     Boolean       @default(true)
+  quantita        Int? // counter live rimanente. null = non gestita (illimitato). Scala man mano che i clienti ordinano; a 0 il piatto è "Esaurito". Separato per menu tavoli/asporto perché sono righe distinte.
+  quantitaSoglia  Int? // visibilità del counter al cliente: null = mostra sempre (quando gestita); N = mostra "Ne restano X" solo quando quantita <= N.
+  etichetta       String? // piccola scritta mostrata al cliente (es. "Best seller", "Il nostro classico").
+  etichettaColore String? // colore dell'etichetta (hex, es. "#e11d48"). null = colore di default.
+  ordine          Int           @default(0)
+  createdAt       DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id])
+  categoria       MenuCategoria @relation(fields: [categoriaId], references: [id])
+  righeOrdine     RigaOrdine[]
 
   @@index([userId])
   @@index([categoriaId])
 }
 
 model Ordine {
-  id          String        @id @default(cuid())
-  userId      String
-  tavolo      String
-  tavoloId    String?
-  gruppoId    String?
-  tipo        String        @default("tavolo") // "tavolo" | "asporto" | "delivery"
-  clienteInfo String?       // JSON: {nome, email, telefono, indirizzo, data, ora}
-  status      String        @default("nuovo")
-  totale      Float
-  coperti     Int?
-  note        String?
-  createdAt   DateTime      @default(now())
-  prontoAt    DateTime?     // quando l'ordine è marcato "pronto" in cucina (per tempo medio consegna)
-  closedAt    DateTime?
-  notatoNuovo  Boolean      @default(false) // deprecato: sostituito da notatoReparti (acknowledgment per reparto). Tenuto per compatibilità.
-  notatoReparti String?     // JSON dei reparti (Cucina/Bar/…) che hanno notato l'arrivo: il pulse rosso si spegne solo nel reparto che clicca, non negli altri
-  notatoPronto Boolean      @default(false) // la mappa Tavoli ha notato l'ordine pronto (conto aperto): spegne il badge "!" su tutti i dispositivi
-  user        User          @relation(fields: [userId], references: [id])
-  tavoloRel   Tavolo?       @relation(fields: [tavoloId], references: [id])
-  gruppoRel   GruppoTavoli? @relation(fields: [gruppoId], references: [id])
-  righe       RigaOrdine[]
+  id            String        @id @default(cuid())
+  userId        String
+  tavolo        String
+  tavoloId      String?
+  gruppoId      String?
+  tipo          String        @default("tavolo") // "tavolo" | "asporto" | "delivery"
+  clienteInfo   String? // JSON: {nome, email, telefono, indirizzo, data, ora}
+  status        String        @default("nuovo")
+  totale        Float
+  coperti       Int?
+  note          String?
+  createdAt     DateTime      @default(now())
+  prontoAt      DateTime? // quando l'ordine è marcato "pronto" in cucina (per tempo medio consegna)
+  closedAt      DateTime?
+  notatoNuovo   Boolean       @default(false) // deprecato: sostituito da notatoReparti (acknowledgment per reparto). Tenuto per compatibilità.
+  notatoReparti String? // JSON dei reparti (Cucina/Bar/…) che hanno notato l'arrivo: il pulse rosso si spegne solo nel reparto che clicca, non negli altri
+  notatoPronto  Boolean       @default(false) // la mappa Tavoli ha notato l'ordine pronto (conto aperto): spegne il badge "!" su tutti i dispositivi
+  user          User          @relation(fields: [userId], references: [id])
+  tavoloRel     Tavolo?       @relation(fields: [tavoloId], references: [id])
+  gruppoRel     GruppoTavoli? @relation(fields: [gruppoId], references: [id])
+  righe         RigaOrdine[]
 
   @@index([userId, createdAt])
   @@index([tavoloId])
@@ -171,21 +179,22 @@ model Ordine {
 }
 
 model RigaOrdine {
-  id       String     @id @default(cuid())
-  ordineId String
-  piattoId String?
-  nome     String
-  prezzo   Float
-  foodCost Float?                       // snapshot del food cost del piatto al momento dell'ordine (€/porzione). null = non impostato allora. Usato per guadagno netto/margine in analytics.
-  quantita Int
-  note     String?
-  mandata  Int       @default(1)       // portata/coursing: 1=antipasti-primi, 2=secondi, 3=dolce. Default 1 = tutto insieme.
-  reparto  String?                     // snapshot del reparto (Cucina/Bar/…) al momento dell'ordine → instradamento coerente anche per ordini passati
-  prontaAt DateTime?                    // quando la mandata di questa riga è marcata pronta in cucina (coursing per portata)
-  pagata         Boolean @default(false) // deprecato: sostituito da quantitaPagata (tenuto per compatibilità)
-  quantitaPagata Int     @default(0)     // quante unità di questa voce sono state pagate (0..quantita), aiuto cassa
-  ordine   Ordine      @relation(fields: [ordineId], references: [id])
-  piatto   MenuPiatto? @relation(fields: [piattoId], references: [id], onDelete: SetNull)
+  id              String      @id @default(cuid())
+  ordineId        String
+  piattoId        String?
+  nome            String
+  prezzo          Float
+  foodCost        Float? // snapshot del food cost del piatto al momento dell'ordine (€/porzione, NETTO IVA). null = non impostato allora. Usato per guadagno netto/margine in analytics.
+  aliquotaVendita Float? // snapshot dell'aliquota IVA di vendita al momento dell'ordine. null = non snapshottata (ordini storici) → la contabilità risolve a runtime piatto→categoria→default. Snapshot come foodCost: la storia non cambia se ritocchi le aliquote.
+  quantita        Int
+  note            String?
+  mandata         Int         @default(1) // portata/coursing: 1=antipasti-primi, 2=secondi, 3=dolce. Default 1 = tutto insieme.
+  reparto         String? // snapshot del reparto (Cucina/Bar/…) al momento dell'ordine → instradamento coerente anche per ordini passati
+  prontaAt        DateTime? // quando la mandata di questa riga è marcata pronta in cucina (coursing per portata)
+  pagata          Boolean     @default(false) // deprecato: sostituito da quantitaPagata (tenuto per compatibilità)
+  quantitaPagata  Int         @default(0) // quante unità di questa voce sono state pagate (0..quantita), aiuto cassa
+  ordine          Ordine      @relation(fields: [ordineId], references: [id])
+  piatto          MenuPiatto? @relation(fields: [piattoId], references: [id], onDelete: SetNull)
 
   @@index([ordineId])
   @@index([piattoId])
@@ -221,30 +230,30 @@ model Content {
 }
 
 model Appuntamento {
-  id           String   @id @default(cuid())
-  userId       String
-  clienteNome  String?
-  clienteEmail String?
-  servizio     String?
-  data         DateTime
-  durata       Int      @default(60)
-  status       String   @default("confermato")
-  note         String?
-  coperti      Int      @default(1)
-  allergie     String?
-  occasione    String?
-  tavoloId     String?
-  tavoliIds    String?
-  pazienteId   String?      // Flowest Care: collega l'appuntamento a un paziente
-  tipoSedutaId String?      // Flowest Care: collega l'appuntamento a un tipo di seduta
+  id                String      @id @default(cuid())
+  userId            String
+  clienteNome       String?
+  clienteEmail      String?
+  servizio          String?
+  data              DateTime
+  durata            Int         @default(60)
+  status            String      @default("confermato")
+  note              String?
+  coperti           Int         @default(1)
+  allergie          String?
+  occasione         String?
+  tavoloId          String?
+  tavoliIds         String?
+  pazienteId        String? // Flowest Care: collega l'appuntamento a un paziente
+  tipoSedutaId      String? // Flowest Care: collega l'appuntamento a un tipo di seduta
   // Flowest Care — proposta di un orario diverso, che il paziente accetta via email
-  tokenRisposta     String? @unique
+  tokenRisposta     String?     @unique
   messaggioProposta String?
-  createdAt    DateTime     @default(now())
-  tavolo       Tavolo?      @relation(fields: [tavoloId], references: [id])
-  user         User         @relation(fields: [userId], references: [id])
-  paziente     Paziente?    @relation(fields: [pazienteId], references: [id])
-  tipoSeduta   TipoSeduta?  @relation(fields: [tipoSedutaId], references: [id])
+  createdAt         DateTime    @default(now())
+  tavolo            Tavolo?     @relation(fields: [tavoloId], references: [id])
+  user              User        @relation(fields: [userId], references: [id])
+  paziente          Paziente?   @relation(fields: [pazienteId], references: [id])
+  tipoSeduta        TipoSeduta? @relation(fields: [tipoSedutaId], references: [id])
 
   @@index([userId, data])
   @@index([tavoloId])
@@ -258,7 +267,7 @@ model Paziente {
   email        String?
   telefono     String?
   dataNascita  DateTime?
-  note         String?             // anamnesi / note generali
+  note         String? // anamnesi / note generali
   cancellato   Boolean             @default(false)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
@@ -276,8 +285,8 @@ model TipoSeduta {
   prezzo       Float          @default(0)
   durata       Int            @default(45) // minuti
   attivo       Boolean        @default(true)
-  giorni       String?        // JSON array di codici giorno (es. ["lun","mer"]); vuoto/null = tutti i giorni di apertura
-  orari        String?        // fasce orarie consentite (es. "09:00-13:00, 15:00-18:00"); vuoto/null = tutti gli orari di apertura
+  giorni       String? // JSON array di codici giorno (es. ["lun","mer"]); vuoto/null = tutti i giorni di apertura
+  orari        String? // fasce orarie consentite (es. "09:00-13:00, 15:00-18:00"); vuoto/null = tutti gli orari di apertura
   ordine       Int            @default(0)
   createdAt    DateTime       @default(now())
   user         User           @relation(fields: [userId], references: [id])
@@ -287,10 +296,10 @@ model TipoSeduta {
 model Notifica {
   id        String   @id @default(cuid())
   userId    String
-  tipo      String   // richiesta | calendario | seduta
+  tipo      String // richiesta | calendario | seduta
   titolo    String
   dettaglio String?
-  link      String?  // dove portare al click
+  link      String? // dove portare al click
   letta     Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
@@ -299,16 +308,16 @@ model Notifica {
 }
 
 model Todo {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   testo     String
-  fatto     Boolean  @default(false)
+  fatto     Boolean   @default(false)
   // Quando è stata spuntata: 24 ore dopo la voce sparisce da sola.
   // Si azzera se viene rimessa fra le cose da fare.
   fattoAt   DateTime?
-  ordine    Int      @default(0)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
+  ordine    Int       @default(0)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
 
   @@index([userId, ordine])
 }
@@ -317,7 +326,7 @@ model DisponibilitaOverride {
   id        String   @id @default(cuid())
   userId    String
   data      DateTime // giorno specifico (solo la data conta)
-  slots     String   // JSON: ["08:00-14:00","16:00-18:00"] — [] = chiuso quel giorno
+  slots     String // JSON: ["08:00-14:00","16:00-18:00"] — [] = chiuso quel giorno
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
@@ -326,40 +335,40 @@ model DisponibilitaOverride {
 }
 
 model Seduta {
-  id         String   @id @default(cuid())
-  userId     String
-  pazienteId String
-  data       DateTime @default(now())
-  tipo       String?  // es. Valutazione, Terapia manuale, Rieducazione posturale
-  note       String?  // cosa è stato fatto, dolore percepito, esercizi assegnati
+  id             String   @id @default(cuid())
+  userId         String
+  pazienteId     String
+  data           DateTime @default(now())
+  tipo           String? // es. Valutazione, Terapia manuale, Rieducazione posturale
+  note           String? // cosa è stato fatto, dolore percepito, esercizi assegnati
   // Valorizzato per le sedute nate da un appuntamento segnato "completato".
   // Unique così l'aggiornamento è idempotente e non crea doppioni in cartella.
-  appuntamentoId String? @unique
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
-  paziente   Paziente @relation(fields: [pazienteId], references: [id])
+  appuntamentoId String?  @unique
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id])
+  paziente       Paziente @relation(fields: [pazienteId], references: [id])
 }
 
 model DocumentoPaziente {
-  id         String   @id @default(cuid())
-  userId     String
-  pazienteId String
-  nome       String
-  url        String?  // link esterno (Drive, Dropbox…) — alternativo al file caricato
+  id             String   @id @default(cuid())
+  userId         String
+  pazienteId     String
+  nome           String
+  url            String? // link esterno (Drive, Dropbox…) — alternativo al file caricato
   // I referti restano nel DB e si scaricano da una route protetta da auth: sono dati
   // sanitari, non possono finire nel bucket pubblico usato per le foto dei piatti.
-  contenuto  String?  // file caricato, in base64
-  mimeType   String?
-  dimensione Int?     // byte del file originale
-  tipo       String?  // referto | prescrizione | radiografia | altro
+  contenuto      String? // file caricato, in base64
+  mimeType       String?
+  dimensione     Int? // byte del file originale
+  tipo           String? // referto | prescrizione | radiografia | altro
   // Seduta a cui il documento si riferisce. Due colonne perché una seduta può
   // essere ancora un appuntamento in agenda (non svolto) oppure già una voce di
   // cartella clinica; ne è valorizzata al massimo una, nessuna = documento generico.
   appuntamentoId String?
   sedutaId       String?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
-  paziente   Paziente @relation(fields: [pazienteId], references: [id])
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id])
+  paziente       Paziente @relation(fields: [pazienteId], references: [id])
 
   @@index([pazienteId, appuntamentoId])
   @@index([pazienteId, sedutaId])
@@ -439,24 +448,27 @@ model ListaAttesa {
 }
 
 model Dipendente {
-  id          String                @id @default(cuid())
-  userId      String
-  nome        String
-  email       String
-  ruolo       String?
-  fotoUrl     String?
-  ordine      Int                   @default(0) // ordine di visualizzazione scelto dal titolare (turni + lista)
-  username    String?
-  passwordHash String?
-  mustChangePassword Boolean       @default(true)
-  token       String?               @unique
-  tokenExpiry DateTime?
-  createdAt   DateTime              @default(now())
-  user        User                  @relation(fields: [userId], references: [id])
-  richieste        RichiestaDipendente[]
-  turni            Turno[]
-  disponibilita    DisponibilitaDipendente[]
-  timbrature       Timbratura[]
+  id                         String                    @id @default(cuid())
+  userId                     String
+  nome                       String
+  email                      String
+  ruolo                      String?
+  fotoUrl                    String?
+  ordine                     Int                       @default(0) // ordine di visualizzazione scelto dal titolare (turni + lista)
+  // Contabilità F2 · Labor cost. paga netta oraria in tasca al dipendente; il moltiplicatore aggiunge i costi aziendali nascosti (INPS/INAIL/TFR/13ª/14ª ≈ +40%). Costo orario reale = paga * moltiplicatore.
+  pagaOrariaBaseNetta        Float?
+  moltiplicatoreCostoAzienda Float                     @default(1.40)
+  username                   String?
+  passwordHash               String?
+  mustChangePassword         Boolean                   @default(true)
+  token                      String?                   @unique
+  tokenExpiry                DateTime?
+  createdAt                  DateTime                  @default(now())
+  user                       User                      @relation(fields: [userId], references: [id])
+  richieste                  RichiestaDipendente[]
+  turni                      Turno[]
+  disponibilita              DisponibilitaDipendente[]
+  timbrature                 Timbratura[]
 
   @@unique([userId, username])
   @@index([userId])
@@ -467,7 +479,7 @@ model Timbratura {
   dipendenteId String
   dipendente   Dipendente @relation(fields: [dipendenteId], references: [id], onDelete: Cascade)
   userId       String
-  tipo         String     // "entrata" | "uscita"
+  tipo         String // "entrata" | "uscita"
   timestamp    DateTime   @default(now())
 
   @@index([dipendenteId])
@@ -475,17 +487,21 @@ model Timbratura {
 }
 
 model Turno {
-  id           String     @id @default(cuid())
-  userId       String
-  dipendenteId String
-  data         DateTime
-  oraInizio    String
-  oraFine      String
-  ruolo        String?
-  note         String?
-  createdAt    DateTime   @default(now())
-  dipendente   Dipendente @relation(fields: [dipendenteId], references: [id])
-  user         User       @relation(fields: [userId], references: [id])
+  id             String     @id @default(cuid())
+  userId         String
+  dipendenteId   String
+  data           DateTime
+  oraInizio      String
+  oraFine        String
+  ruolo          String?
+  note           String?
+  // Contabilità F2 · tariffa applicata al turno. maggiorazione moltiplica il costo orario (1.0 ordinario, 1.15/1.20 straordinario/notturno, 1.30/1.50 festivo/evento). forfaitImporto: se valorizzato, è il costo fisso del turno e ignora ore/maggiorazione (es. "oggi 100€ fissi per l'evento").
+  tipoTariffa    String     @default("ordinario") // "ordinario" | "straordinario" | "festivo_evento" | "forfait"
+  maggiorazione  Float      @default(1.0)
+  forfaitImporto Float?
+  createdAt      DateTime   @default(now())
+  dipendente     Dipendente @relation(fields: [dipendenteId], references: [id])
+  user           User       @relation(fields: [userId], references: [id])
 
   @@index([userId, data])
   @@index([dipendenteId])
@@ -510,8 +526,8 @@ model RichiestaDipendente {
 model DisponibilitaDipendente {
   id           String     @id @default(cuid())
   dipendenteId String
-  mese         DateTime   // primo giorno del mese
-  giorni       String     // JSON: [{data: "2026-07-07", oraInizio: "09:00", oraFine: "17:00", note: ""}]
+  mese         DateTime // primo giorno del mese
+  giorni       String // JSON: [{data: "2026-07-07", oraInizio: "09:00", oraFine: "17:00", note: ""}]
   createdAt    DateTime   @default(now())
   dipendente   Dipendente @relation(fields: [dipendenteId], references: [id])
 
@@ -522,7 +538,7 @@ model RequisitiTurni {
   id        String   @id @default(cuid())
   userId    String
   settimana DateTime
-  requisiti String   // JSON: [{giorno: 0-6, fascia: "pranzo"|"cena"|"mattina", persone: 2, ruolo: "cameriere"}]
+  requisiti String // JSON: [{giorno: 0-6, fascia: "pranzo"|"cena"|"mattina", persone: 2, ruolo: "cameriere"}]
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
 
@@ -584,9 +600,9 @@ model Stampante {
   id        String     @id @default(cuid())
   userId    String
   nome      String
-  reparto   String                       // reparto servito (Cucina/Bar/…) → match con RigaOrdine.reparto
-  indirizzo String?                       // es "192.168.1.50:9100" per stampanti di rete; null per "altro"
-  tipo      String     @default("rete")   // "rete" | "altro"
+  reparto   String // reparto servito (Cucina/Bar/…) → match con RigaOrdine.reparto
+  indirizzo String? // es "192.168.1.50:9100" per stampanti di rete; null per "altro"
+  tipo      String     @default("rete") // "rete" | "altro"
   attiva    Boolean    @default(true)
   createdAt DateTime   @default(now())
   user      User       @relation(fields: [userId], references: [id])
@@ -601,12 +617,12 @@ model Stampante {
 // testo, per verificare il layout senza hardware.
 model PrintJob {
   id          String     @id @default(cuid())
-  userId      String                          // scoping veloce della coda per utente (senza join sull'ordine)
-  ordineId    String?                          // nullable: anteprima/test senza ordine
-  stampanteId String?                          // nullable: reparto senza stampante ancora assegnata
-  reparto     String                           // reparto della comanda (routing anche senza stampante)
-  contenuto   String                           // payload comanda: ESC/POS in base64
-  anteprima   String?                          // ticket renderizzato in testo monospace (verifica senza hardware)
+  userId      String // scoping veloce della coda per utente (senza join sull'ordine)
+  ordineId    String? // nullable: anteprima/test senza ordine
+  stampanteId String? // nullable: reparto senza stampante ancora assegnata
+  reparto     String // reparto della comanda (routing anche senza stampante)
+  contenuto   String // payload comanda: ESC/POS in base64
+  anteprima   String? // ticket renderizzato in testo monospace (verifica senza hardware)
   stato       String     @default("in_attesa") // "in_attesa" | "stampata" | "errore"
   errore      String?
   tentativi   Int        @default(0)
@@ -617,4 +633,63 @@ model PrintJob {
 
   @@index([userId, createdAt])
   @@index([stato])
+}
+
+// ── Flowest Contabilità / Controllo di Gestione (owner-only) ──────────────────
+// Tutta questa sezione vive dietro getAuthUser() (Clerk = titolare). I dipendenti
+// usano un auth separato (dip_session) confinato alle pagine pubbliche, quindi non
+// raggiungono mai questi dati. Regola d'oro: food cost e margini SEMPRE al netto IVA.
+
+// Configurazione contabile del locale (1:1 con User, come MenuStampaConfig).
+model ContabilitaConfig {
+  id                               String   @id @default(cuid())
+  userId                           String   @unique
+  aliquotaVenditaDefault           Float    @default(0.10) // somministrazione al tavolo
+  percentualeAccantonamentoImposte Float    @default(0.15) // % sul margine → fondo imposte stimato
+  moltiplicatoreLaborDefault       Float    @default(1.40) // default per i nuovi dipendenti
+  regimeFiscale                    String   @default("ordinario") // "ordinario" | "forfettario"
+  updatedAt                        DateTime @updatedAt
+  user                             User     @relation(fields: [userId], references: [id])
+}
+
+// Costi fissi/semi-variabili di struttura. Inseriti UNA volta; il rateo giornaliero
+// si calcola a runtime (importoNetto normalizzato al mese / 30). Zero data-entry quotidiano.
+model CostoFisso {
+  id           String   @id @default(cuid())
+  userId       String
+  voce         String // "Affitto", "Commercialista", "Luce", "TARI", "SIAE", "SaaS"...
+  categoria    String   @default("altro") // "affitto"|"utenze"|"servizi"|"personale_extra"|"marketing"|"leasing"|"assicurazioni"|"manutenzioni"|"altro"
+  importoNetto Float
+  aliquota     Float    @default(0.22)
+  periodicita  String   @default("mensile") // "mensile"|"trimestrale"|"annuale"
+  attivo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// Snapshot contabile di fine giornata (fuso Europe/Rome). Congela i valori del giorno
+// per non ricalcolarli e per aggregare i mesi. Prodotta dal cron serale o on-demand.
+model ChiusuraGiorno {
+  id                    String   @id @default(cuid())
+  userId                String
+  data                  DateTime // giorno (mezzanotte italiana)
+  fatturatoLordo        Float    @default(0)
+  ivaDebito             Float    @default(0)
+  fatturatoNetto        Float    @default(0)
+  foodCostVenduto       Float    @default(0)
+  laborCost             Float    @default(0)
+  quotaCostiFissi       Float    @default(0)
+  ivaCredito            Float    @default(0) // dalle fatture del giorno (F3); 0 finché non c'è OCR
+  ivaNetta              Float    @default(0)
+  accantonamentoImposte Float    @default(0)
+  utileStimato          Float    @default(0)
+  spendibile            Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, data])
+  @@index([userId, data])
 }

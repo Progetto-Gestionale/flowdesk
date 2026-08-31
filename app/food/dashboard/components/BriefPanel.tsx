@@ -64,7 +64,16 @@ function saveBrief(cache: Partial<Record<Timeframe, Resp>>) {
   } catch {}
 }
 
-export default function BriefPanel() {
+// Callback opzionali per la pagina unica Copilota: le usa per sapere quale brief è
+// attivo (così la chat sotto può passarne il timeframe) e per aggiornare il
+// contatore spesa condiviso. Usato da solo (pagina /brief) i default non fanno nulla.
+interface BriefPanelProps {
+  onActive?: (timeframe: Timeframe, hasBrief: boolean) => void
+  onSpesa?: (costoEur: number) => void
+  embedded?: boolean // dentro la pagina unica: intestazione più sobria
+}
+
+export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelProps = {}) {
   const router = useRouter()
   const [timeframe, setTimeframe] = useState<Timeframe>('daily')
   const [cache, setCache] = useState<Partial<Record<Timeframe, Resp>>>({})
@@ -89,6 +98,7 @@ export default function BriefPanel() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Errore nella generazione del brief.')
       setCache((c) => ({ ...c, [tf]: data as Resp }))
+      if (typeof (data as Resp).spesaMese?.costoEur === 'number') onSpesa?.((data as Resp).spesaMese!.costoEur)
     } catch (e) {
       setErrore(e instanceof Error ? e.message : 'Errore di connessione.')
     } finally {
@@ -118,6 +128,11 @@ export default function BriefPanel() {
   const attuale = cache[timeframe]
   const brief = attuale?.brief
   const context = attuale?.context
+
+  // Comunica alla pagina unica quale brief è attivo (per la chat sotto).
+  useEffect(() => {
+    onActive?.(timeframe, !!cache[timeframe])
+  }, [timeframe, cache, onActive])
   const sem = brief ? SEMAFORO[brief.status] ?? SEMAFORO.yellow : SEMAFORO.yellow
 
   // Esegue un'azione proposta. Il "come" viene dal context (fidato), non dall'AI:
@@ -152,16 +167,21 @@ export default function BriefPanel() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6">
+    <div className={embedded ? 'w-full' : 'max-w-3xl mx-auto w-full px-4 sm:px-6 py-6'}>
       {/* Intestazione + tab */}
       <div className="flex items-center gap-3 mb-5">
-        <div className="w-9 h-9 rounded-[28%] bg-electric-blue flex items-center justify-center shrink-0 text-white">
-          <span className="w-[20px] h-[20px]"><IconBolt /></span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-base font-extrabold text-ink-navy leading-tight">Brief del locale</h1>
-          <p className="text-xs text-ink-navy/50">Cosa sta succedendo e cosa conviene fare</p>
-        </div>
+        {!embedded && (
+          <>
+            <div className="w-9 h-9 rounded-[28%] bg-electric-blue flex items-center justify-center shrink-0 text-white">
+              <span className="w-[20px] h-[20px]"><IconBolt /></span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-base font-extrabold text-ink-navy leading-tight">Brief del locale</h1>
+              <p className="text-xs text-ink-navy/50">Cosa sta succedendo e cosa conviene fare</p>
+            </div>
+          </>
+        )}
+        {embedded && <p className="flex-1 font-mono text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider">Brief del locale</p>}
         <button
           onClick={() => void carica(timeframe)}
           disabled={loading}

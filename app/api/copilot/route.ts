@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { buildCopilotPrompt } from '@/lib/copilot/prompt'
 import { copilotTools, eseguiCopilotTool } from '@/lib/copilot/tools'
 import { USD_TO_EUR, meseCorrente } from '@/lib/copilot/spesa'
+import { buildBriefContext } from '@/lib/copilot/brief'
+import { briefSystemBlock } from '@/lib/copilot/briefContextText'
+import type { Timeframe } from '@/lib/copilot/ai'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -51,17 +54,32 @@ async function registraSpesa(userId: string, uso: Uso): Promise<{ costoEur: numb
 }
 
 type MsgIn = { role: 'user' | 'assistant'; content: string }
+const TIMEFRAMES: Timeframe[] = ['daily', 'weekly', 'monthly']
 
 export async function POST(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
-  const { messages } = (await req.json()) as { messages: MsgIn[] }
+  const { messages, briefTimeframe } = (await req.json()) as { messages: MsgIn[]; briefTimeframe?: string }
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: 'messages obbligatorio' }, { status: 400 })
   }
 
   const system = buildCopilotPrompt(user)
+
+  // Se la chat è aperta sotto un brief attivo, ricostruiamo il context deterministico
+  // (nessun costo AI: sono query) e lo iniettiamo come SECONDO blocco system cacheable.
+  // Così i chiarimenti sul brief si rispondono dai numeri già visti, senza giri di
+  // tool-use → meno token. Il blocco è stabile per timeframe → cache-hit sui follow-up.
+  let briefBlock: string | null = null
+  if (briefTimeframe && TIMEFRAMES.includes(briefTimeframe as Timeframe)) {
+    try {
+      const ctx = await buildBriefContext(user.id, briefTimeframe as Timeframe)
+      briefBlock = briefSystemBlock(ctx)
+    } catch (e) {
+      console.error('[COPILOT] context brief per chat non disponibile:', e)
+    }
+  }
 
   // Storia della conversazione in formato Anthropic (partiamo dai messaggi del client).
   const convo: Anthropic.MessageParam[] = messages.map((m) => ({
@@ -70,6 +88,15 @@ export async function POST(req: Request) {
   }))
 
   const uso: Uso = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 }
+
+  // Blocchi system: la guida+tools (stabile, pesante) sempre in cache; il context
+  // del brief, se presente, come secondo blocco cacheable (stabile per timeframe).
+  const systemBlocks: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } },
+  ]
+  if (briefBlock) {
+    systemBlocks.push({ type: 'text', text: briefBlock, cache_control: { type: 'ephemeral', ttl: '1h' } })
+  }
 
   try {
     for (let i = 0; i < MAX_ITERAZIONI; i++) {
@@ -81,7 +108,7 @@ export async function POST(req: Request) {
         // giri di tool-use e nei messaggi successivi, quella parte si paga al
         // ~10% invece che piena. TTL 1 ora (finestra scorrevole, si rinnova a
         // ogni uso): adatta all'uso sporadico durante il servizio. Grosso risparmio.
-        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } }],
+        system: systemBlocks,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         tools: copilotTools as any,
         messages: convo,
