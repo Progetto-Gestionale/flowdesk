@@ -62,6 +62,10 @@ export interface BriefContext {
   sections: ContextSection[]
   // Azioni che l'AI può proporre per questo brief.
   allowedActions: AllowedAction[]
+  // Semaforo DETERMINISTICO (calcolato dal codice, es. dal margine netto della
+  // contabilità). Se presente, sovrascrive lo status scelto dall'AI: un dato
+  // certo non va lasciato all'interpretazione del modello. Assente = decide l'AI.
+  statusHint?: HealthStatus
 }
 
 // Un punto del "perché". `evidence` cita i Metric.key presenti nel contesto.

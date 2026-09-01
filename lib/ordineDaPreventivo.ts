@@ -42,6 +42,17 @@ export async function creaOrdineDaPreventivo(preventivo: PreventivoLike, userId:
 
   const repMap = await repartoPerPiatti(righe.map(r => r.piattoId))
   const fcMap = await foodCostPerPiatti(righe.map(r => r.piattoId))
+
+  // Un carrello può referenziare piatti ELIMINATI dal menu (menu ricreato/modificato tra
+  // richiesta e accettazione). RigaOrdine.piattoId ha una foreign key verso MenuPiatto:
+  // inserire un id che non esiste più fa fallire tutto l'ordine (P2003). Quindi teniamo il
+  // piattoId SOLO se il piatto esiste ancora; altrimenti null (nome e prezzo restano sulla
+  // riga → l'ordine nasce comunque, giusto senza il collegamento vivo al piatto).
+  const idsCarrello = [...new Set(righe.map(r => r.piattoId).filter((x): x is string => !!x))]
+  const idsEsistenti = idsCarrello.length
+    ? new Set((await prisma.menuPiatto.findMany({ where: { id: { in: idsCarrello } }, select: { id: true } })).map(p => p.id))
+    : new Set<string>()
+
   const ordine = await prisma.ordine.create({
     data: {
       userId,
@@ -52,15 +63,18 @@ export async function creaOrdineDaPreventivo(preventivo: PreventivoLike, userId:
       note: info.noteCliente || null,
       status: 'nuovo',
       righe: {
-        create: righe.map(r => ({
-          piattoId: r.piattoId ?? null,
-          nome: r.nome,
-          prezzo: r.prezzo,
-          foodCost: r.piattoId ? (fcMap[r.piattoId] ?? null) : null,
-          quantita: r.quantita,
-          note: r.note ?? null,
-          reparto: r.piattoId ? (repMap[r.piattoId] ?? null) : null,
-        })),
+        create: righe.map(r => {
+          const pid = r.piattoId && idsEsistenti.has(r.piattoId) ? r.piattoId : null
+          return {
+            piattoId: pid,
+            nome: r.nome,
+            prezzo: r.prezzo,
+            foodCost: pid ? (fcMap[pid] ?? null) : null,
+            quantita: r.quantita,
+            note: r.note ?? null,
+            reparto: pid ? (repMap[pid] ?? null) : null,
+          }
+        }),
       },
     },
   })

@@ -7,7 +7,7 @@ import { IconBolt, IconArrowRight, IconRefresh } from '@/app/components/icons'
 // nel bundle client.
 import type { Brief, BriefContext, Metric, ProposedAction, Timeframe } from '@/lib/copilot/ai'
 
-type Resp = { brief: Brief; context: BriefContext; spesaMese?: { costoEur: number } | null }
+type Resp = { brief: Brief; context: BriefContext; generatedAt?: string; spesaMese?: { costoEur: number } | null }
 
 const TABS: { id: Timeframe; label: string }[] = [
   { id: 'daily', label: 'Oggi' },
@@ -41,6 +41,22 @@ function formatValue(m: Metric): string {
   if (m.unit === '%') return `${num}%`
   if (m.unit) return `${num} ${m.unit}`
   return num
+}
+
+// "Generato stamattina alle 7:30" / "Generato alle 14:05" / "Generato ieri alle …".
+// Dà fiducia: il titolare sa quanto è fresco il brief che sta guardando.
+function formatGenerato(iso?: string): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const ora = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
+  const giornoGen = d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
+  const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
+  if (giornoGen === oggi) {
+    const mattino = d.getHours() < 12
+    return `Generato ${mattino ? 'stamattina' : 'oggi'} alle ${ora}`
+  }
+  return `Generato il ${d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', timeZone: 'Europe/Rome' })} alle ${ora}`
 }
 
 // I brief generati restano salvati nel browser (per-dispositivo) SENZA scadenza:
@@ -82,10 +98,14 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
   const [azioneInCorso, setAzioneInCorso] = useState<string | null>(null)
   const [azioniEsito, setAzioniEsito] = useState<Record<string, { ok: boolean; msg: string }>>({})
   const idratato = useRef(false)
+  // Periodi già sincronizzati col server in questa sessione: evita GET ripetuti,
+  // ma garantisce ALMENO un fetch del pronto anche se la cache locale è vecchia
+  // (così il brief del mattino sostituisce quello del giorno prima).
+  const sincronizzati = useRef<Set<Timeframe>>(new Set())
 
-  // Genera SEMPRE (usata sia dall'auto-load di un periodo mancante, sia dal tasto
-  // Rigenera). Il risultato viene salvato e resta finché non lo rigeneri.
-  const carica = useCallback(async (tf: Timeframe) => {
+  // RIGENERA (POST): ricalcola il brief e lo salva lato server. Usata dal tasto
+  // Rigenera e come fallback quando non c'è ancora nulla di pronto. Costa (AI).
+  const rigenera = useCallback(async (tf: Timeframe) => {
     setLoading(true)
     setErrore(null)
     try {
@@ -104,7 +124,30 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [onSpesa])
+
+  // CARICA IL PRONTO (GET): recupera il brief già generato dal cron del mattino
+  // (o dall'ultima rigenerazione). Nessun costo AI. Se non c'è nulla di salvato,
+  // ripiega su una generazione on-demand.
+  const caricaPronto = useCallback(async (tf: Timeframe) => {
+    setLoading(true)
+    setErrore(null)
+    try {
+      const res = await fetch(`/api/copilot/brief?timeframe=${tf}`, { credentials: 'include' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Errore nel caricamento del brief.')
+      if (data.brief) {
+        setCache((c) => ({ ...c, [tf]: data as Resp }))
+        setLoading(false)
+      } else {
+        // Niente di pronto per questo periodo → generalo ora.
+        await rigenera(tf)
+      }
+    } catch (e) {
+      setErrore(e instanceof Error ? e.message : 'Errore di connessione.')
+      setLoading(false)
+    }
+  }, [rigenera])
 
   // Idratazione una-tantum dai brief salvati (dopo il mount → niente mismatch SSR).
   useEffect(() => {
@@ -118,12 +161,17 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
     if (idratato.current && Object.keys(cache).length > 0) saveBrief(cache)
   }, [cache])
 
-  // Auto-generazione SOLO se il periodo scelto non ha già un brief salvato.
+  // Una volta per periodo e per sessione, sincronizza col server: recupera il
+  // brief pronto (cron del mattino o ultima rigenerazione). La cache locale serve
+  // solo al paint istantaneo; la verità è lato server. Se il server non ha nulla,
+  // caricaPronto ripiega su una generazione on-demand.
   useEffect(() => {
     if (!idratato.current) return
-    if (cache[timeframe] || loading) return
-    void carica(timeframe)
-  }, [timeframe, cache, loading, carica])
+    if (loading) return
+    if (sincronizzati.current.has(timeframe)) return
+    sincronizzati.current.add(timeframe)
+    void caricaPronto(timeframe)
+  }, [timeframe, loading, caricaPronto])
 
   const attuale = cache[timeframe]
   const brief = attuale?.brief
@@ -183,7 +231,7 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
         )}
         {embedded && <p className="flex-1 font-mono text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider">Brief del locale</p>}
         <button
-          onClick={() => void carica(timeframe)}
+          onClick={() => void rigenera(timeframe)}
           disabled={loading}
           className="w-9 h-9 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:border-electric-blue hover:text-electric-blue transition-colors flex items-center justify-center disabled:opacity-40"
           title="Rigenera"
@@ -229,7 +277,12 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
           {/* BLOCCO 1 — Semaforo + headline */}
           <div className={`rounded-2xl border px-4 py-4 flex items-start gap-3 ${sem.sfondo}`}>
             <span className={`w-3 h-3 rounded-full mt-1 shrink-0 ${sem.dot}`} />
-            <p className={`text-sm font-semibold leading-relaxed ${sem.testo}`}>{brief.headline}</p>
+            <div className="min-w-0">
+              <p className={`text-sm font-semibold leading-relaxed ${sem.testo}`}>{brief.headline}</p>
+              {formatGenerato(attuale?.generatedAt) && (
+                <p className={`text-[11px] mt-1 ${sem.testo} opacity-60`}>{formatGenerato(attuale?.generatedAt)}</p>
+              )}
+            </div>
           </div>
 
           {/* I NUMERI (dal context, non dal testo AI) */}

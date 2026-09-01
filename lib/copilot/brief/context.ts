@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
-import type { AllowedAction, BriefContext, ContextSection, Metric, Timeframe } from '@/lib/copilot/ai'
+import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
+import type { StatoSemaforo } from '@/lib/contabilita/spendibile'
+import type { AllowedAction, BriefContext, ContextSection, HealthStatus, Metric, Timeframe } from '@/lib/copilot/ai'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STRATO DATI (deterministico) del motore dei brief — Fase A.
@@ -184,10 +186,71 @@ function buildMenuMetrics(dishes: DishAgg[]): { metrics: Metric[]; azioni: Allow
   return { metrics, azioni }
 }
 
+// ── Salute economica (il PONTE con la Contabilità) ───────────────────────────
+// Riusa lo stesso motore della pagina Contabilità (riepilogoContabile): margine
+// netto reale, utile "soldi realmente tuoi", incidenza food cost e personale sul
+// venduto. Il semaforo è DETERMINISTICO (soglie sul margine netto) → pilota lo
+// status del brief, non l'AI. Così il brief non parla più solo di incasso lordo,
+// ma di quanto il locale guadagna davvero. Serve la contabilità configurata: se
+// non c'è venduto nel periodo, la sezione si omette (niente rumore).
+const SEMAFORO_TO_STATUS: Record<StatoSemaforo, HealthStatus> = {
+  verde: 'green',
+  giallo: 'yellow',
+  rosso: 'red',
+}
+const SEMAFORO_LABEL: Record<StatoSemaforo, string> = {
+  verde: 'in salute',
+  giallo: 'attenzione',
+  rosso: 'criticità',
+}
+
+async function buildEconomicSection(
+  userId: string,
+  from: Date,
+  to: Date,
+): Promise<{ section: ContextSection; statusHint: HealthStatus } | null> {
+  const r = await riepilogoContabile(userId, from, to)
+  const c = r.conto
+  if (c.fatturatoNetto <= 0) return null
+
+  const foodPct = round2((c.foodCostVenduto / c.fatturatoNetto) * 100)
+  const laborPct = round2((c.laborCost / c.fatturatoNetto) * 100)
+
+  const metrics: Metric[] = [
+    {
+      key: 'margine_netto',
+      label: 'Margine netto',
+      value: round2(c.marginePct * 100),
+      unit: '%',
+      deltaLabel: SEMAFORO_LABEL[r.semaforo],
+    },
+    {
+      key: 'utile_stimato',
+      label: 'Soldi realmente tuoi',
+      value: round2(c.utileStimato),
+      unit: 'EUR',
+      deltaLabel: 'utile netto stimato (dopo IVA, food, personale, fissi, tasse)',
+    },
+    { key: 'food_cost_pct', label: 'Food cost sul venduto', value: foodPct, unit: '%' },
+    { key: 'labor_pct', label: 'Personale sul venduto', value: laborPct, unit: '%' },
+  ]
+
+  return {
+    section: { key: 'economia', title: 'Salute economica', metrics },
+    statusHint: SEMAFORO_TO_STATUS[r.semaforo],
+  }
+}
+
 // Azioni consentite per questi brief. In Fase A (sola lettura) sono deep-link a
 // sezioni REALI del gestionale: il frontend le trasforma in pulsanti che portano
 // lì. In Fase 2 alcune diventeranno azioni di scrittura (con conferma).
 const AZIONI: AllowedAction[] = [
+  {
+    id: 'apri_contabilita',
+    kind: 'link',
+    target: { href: '/food/dashboard/contabilita' },
+    description: 'Apri la Contabilità per vedere il conto economico completo (margine netto, IVA, costi, utile).',
+  },
   {
     id: 'apri_menu',
     kind: 'link',
@@ -219,10 +282,12 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
   let compareLabel: string
 
   if (timeframe === 'daily') {
-    // Oggi finora, confrontato con la MEDIA degli stessi giorni delle ultime 4 settimane.
-    curFrom = oggi
-    curTo = oggi
-    const giorni = [addDays(oggi, -7), addDays(oggi, -14), addDays(oggi, -21), addDays(oggi, -28)]
+    // Brief del mattino: recap di IERI (giornata chiusa, numeri definitivi),
+    // confrontato con la MEDIA dello stesso giorno della settimana nelle 4
+    // settimane precedenti. L'outlook di OGGI (prenotazioni) è nella sezione sotto.
+    curFrom = ieri
+    curTo = ieri
+    const giorni = [addDays(ieri, -7), addDays(ieri, -14), addDays(ieri, -21), addDays(ieri, -28)]
     const past = await Promise.all(giorni.map((g) => salesAgg(userId, g, g)))
     const n = past.length || 1
     prev = {
@@ -278,7 +343,24 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
       venMetrics.push({ key: `incasso_${t}`, label: `Incasso ${t}`, value: round2(cur.perTipo[t]), unit: 'EUR' })
     }
   }
-  sections.push({ key: 'vendite', title: 'Vendite', metrics: venMetrics })
+  // Titolo: nel brief del mattino le vendite sono quelle di IERI (giornata chiusa).
+  const venTitle = timeframe === 'daily' ? 'Ieri' : 'Vendite'
+  sections.push({ key: 'vendite', title: venTitle, metrics: venMetrics })
+
+  // ── Salute economica (ponte con la Contabilità) ──
+  // Stesso periodo delle vendite. In try/catch: un problema della contabilità non
+  // deve far saltare l'intero brief (che resta valido con vendite e prenotazioni).
+  let statusHint: HealthStatus | undefined
+  try {
+    const { from, to } = intervallo(curFrom, curTo)
+    const eco = await buildEconomicSection(userId, from, to)
+    if (eco) {
+      sections.push(eco.section)
+      statusHint = eco.statusHint
+    }
+  } catch (e) {
+    console.error('[BRIEF] sezione economica non disponibile:', e)
+  }
 
   // ── Prenotazioni ──
   if (timeframe === 'daily') {
@@ -333,5 +415,7 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
     sections,
     // Prima le azioni concrete (es. sposta in cima), poi quelle di navigazione.
     allowedActions: [...azioniMenu, ...AZIONI],
+    // Semaforo deterministico dal margine netto: se c'è, pilota lo status del brief.
+    statusHint,
   }
 }

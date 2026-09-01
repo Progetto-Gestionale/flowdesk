@@ -453,7 +453,9 @@ export default function AnalyticsPage() {
   const [datiMenuAdv, setDatiMenuAdv] = useState<DatiMenuAdv | null>(null)
   const [loadingMenuAdv, setLoadingMenuAdv] = useState(false)
 
-  // Card riepilogo redditività (guadagno netto/margine): condivisa da tab Tavoli e Asporto/Delivery.
+  // Card riepilogo redditività LORDA (incasso − food cost): condivisa da tab Tavoli e Asporto/Delivery.
+  // Il netto REALE (dopo personale, costi fissi, IVA e tasse) vive in Contabilità: qui è solo il margine
+  // di contribuzione sulle materie prime.
   function CardRedditivita({ incasso, r }: { incasso: number; r: RedditivitaAdv }) {
     if (incasso <= 0) return null
     // Nessun food cost impostato sui piatti venduti: niente numeri fuorvianti, solo un invito ad attivarlo.
@@ -462,7 +464,7 @@ export default function AnalyticsPage() {
         <div className="bg-white rounded-2xl border border-ink-navy/10 p-4 shadow-sm flex items-start gap-3">
           <span className="text-lg leading-none mt-0.5">💡</span>
           <p className="text-sm text-ink-navy/60">
-            Imposta il <strong>food cost</strong> dei piatti (nel <Link href="/food/dashboard/menu" className="text-electric-blue underline">Menu</Link>) per vedere qui <strong>guadagno netto</strong> e <strong>margine</strong>.
+            Imposta il <strong>food cost</strong> dei piatti (nel <Link href="/food/dashboard/menu" className="text-electric-blue underline">Menu</Link>) per vedere qui <strong>guadagno lordo</strong> e <strong>margine</strong> sulle materie prime.
           </p>
         </div>
       )
@@ -470,7 +472,7 @@ export default function AnalyticsPage() {
     return (
       <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-ink-navy">Redditività del periodo</h2>
+          <h2 className="text-base font-semibold text-ink-navy">Redditività del periodo (lorda)</h2>
           {r.coperturaCosto < 0.999 && (
             <span className="text-[11px] text-amber-600 bg-amber-50 rounded-full px-2.5 py-1">
               Stima: food cost su {Math.round(r.coperturaCosto * 100)}% delle vendite
@@ -487,16 +489,20 @@ export default function AnalyticsPage() {
             <p className="text-xl font-bold text-ink-navy/70">{fmtEur(r.totaleCosto)}</p>
           </div>
           <div>
-            <p className="text-xs text-ink-navy/45 mb-1">Guadagno netto</p>
+            <p className="text-xs text-ink-navy/45 mb-1">Guadagno lordo</p>
             <p className={`text-xl font-bold ${r.totaleNetto < 0 ? 'text-red-500' : 'text-emerald-600'}`}>{fmtEur(r.totaleNetto)}</p>
           </div>
           <div>
-            <p className="text-xs text-ink-navy/45 mb-1">Margine</p>
+            <p className="text-xs text-ink-navy/45 mb-1">Margine sul food</p>
             <p className={`text-xl font-bold ${r.marginePerc == null ? 'text-ink-navy/30' : r.marginePerc < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
               {r.marginePerc == null ? '—' : `${Math.round(r.marginePerc)}%`}
             </p>
           </div>
         </div>
+        <p className="text-[11px] text-ink-navy/40 mt-4">
+          Questo è il guadagno <strong>lordo</strong> sulle materie prime. Il guadagno <strong>netto</strong> reale — dopo personale, costi fissi, IVA e tasse — lo trovi in{' '}
+          <Link href="/food/dashboard/contabilita" className="text-electric-blue underline">Contabilità</Link>.
+        </p>
       </div>
     )
   }
@@ -1455,14 +1461,14 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                   <div className="bg-white rounded-2xl border border-ink-navy/10 p-4 shadow-sm flex items-start gap-3">
                     <span className="text-lg leading-none mt-0.5">💡</span>
                     <p className="text-sm text-ink-navy/60">
-                      Imposta il <strong>food cost</strong> dei piatti (col pulsante di modifica qui nel <Link href="/food/dashboard/menu" className="text-electric-blue underline">Menu</Link>) per vedere qui <strong>guadagno netto</strong> e <strong>margini</strong>.
+                      Imposta il <strong>food cost</strong> dei piatti (col pulsante di modifica qui nel <Link href="/food/dashboard/menu" className="text-electric-blue underline">Menu</Link>) per vedere qui <strong>guadagno lordo</strong> e <strong>margini</strong> sulle materie prime.
                     </p>
                   </div>
                 )}
                 {rp && rp.incasso > 0 && rp.coperturaCosto > 0 && (
                   <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-base font-semibold text-ink-navy">Redditività del periodo</h2>
+                      <h2 className="text-base font-semibold text-ink-navy">Redditività del periodo (lorda)</h2>
                       {rp.coperturaCosto < 0.999 && (
                         <span className="text-[11px] text-amber-600 bg-amber-50 rounded-full px-2.5 py-1">
                           Stima: food cost su {Math.round(rp.coperturaCosto * 100)}% delle vendite
@@ -1479,7 +1485,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                         <p className="text-xl font-bold text-ink-navy/70">{fmtEur(rp.costo)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-ink-navy/45 mb-1">Guadagno netto</p>
+                        <p className="text-xs text-ink-navy/45 mb-1">Guadagno lordo</p>
                         <p className={`text-xl font-bold ${rp.netto < 0 ? 'text-red-500' : 'text-emerald-600'}`}>{fmtEur(rp.netto)}</p>
                       </div>
                       <div>
@@ -1489,6 +1495,10 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                         </p>
                       </div>
                     </div>
+                    <p className="text-[11px] text-ink-navy/40 mt-4">
+                      Guadagno <strong>lordo</strong> sulle materie prime. Il <strong>netto</strong> reale (dopo personale, costi fissi, IVA e tasse) è in{' '}
+                      <Link href="/food/dashboard/contabilita" className="text-electric-blue underline">Contabilità</Link>.
+                    </p>
                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1542,7 +1552,7 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                         <th className="text-left px-6 py-3">Piatto</th>
                         <th className="text-right px-4 py-3">Pz</th>
                         <th className="text-right px-4 py-3">Incasso</th>
-                        <th className="text-right px-4 py-3">Netto</th>
+                        <th className="text-right px-4 py-3">Guad. lordo</th>
                         <th className="text-right px-6 py-3">Margine</th>
                       </tr>
                     </thead>

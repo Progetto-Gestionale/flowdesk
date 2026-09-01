@@ -37,9 +37,13 @@ export async function generateBrief(
   const { why, actions } = enforceGrounding(raw, context)
 
   const brief: Brief = {
-    status: (['green', 'yellow', 'red'] as HealthStatus[]).includes(raw.status as HealthStatus)
-      ? (raw.status as HealthStatus)
-      : 'yellow',
+    // statusHint (semaforo deterministico, es. dal margine netto contabile) vince
+    // sempre sull'AI: se c'è, è la verità. Altrimenti si usa quello del modello.
+    status: context.statusHint
+      ? context.statusHint
+      : (['green', 'yellow', 'red'] as HealthStatus[]).includes(raw.status as HealthStatus)
+        ? (raw.status as HealthStatus)
+        : 'yellow',
     headline: typeof raw.headline === 'string' ? raw.headline : '',
     why,
     actions,
