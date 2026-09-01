@@ -50,6 +50,16 @@ export default function ImpostazioniContabiliPage() {
             <option value={0.04}>4% — beni prima necessità</option>
             <option value={0.22}>22% — ordinaria</option>
           </select>
+          <div className="mt-3 rounded-xl bg-mist/60 border border-ink-navy/10 px-3 py-2.5 flex items-start gap-3">
+            <p className="text-xs text-ink-navy/55 flex-1">
+              L&apos;override per singolo prodotto si imposta dal <b>Menu</b>: apri un piatto e scegli la sua &laquo;IVA di vendita&raquo;
+              (es. gli alcolici al 22%). Quello che scegli lì vince su questo default.
+            </p>
+            <Link href="/food/dashboard/menu"
+              className="shrink-0 text-xs font-semibold bg-white border border-ink-navy/15 rounded-lg px-3 py-2 text-ink-navy/70 hover:border-electric-blue hover:text-electric-blue transition-colors">
+              Vai al Menu →
+            </Link>
+          </div>
         </Campo>
 
         <Campo

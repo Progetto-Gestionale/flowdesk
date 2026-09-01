@@ -79,6 +79,7 @@ model User {
   contabilitaConfig     ContabilitaConfig?
   costiFissi            CostoFisso[]
   chiusureGiorno        ChiusuraGiorno[]
+  briefSalvati          BriefSalvato[]
 }
 
 // Scelte del menu stampabile (PDF) del locale, condivise tra tutti i dispositivi.
@@ -104,6 +105,26 @@ model CopilotUsage {
   user        User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, mese])
+  @@index([userId])
+}
+
+// Brief del Copilota generato e persistito lato server (Fase proattività): il cron
+// del mattino lo prepara per ogni locale, così il titolare lo trova già pronto invece
+// di generarlo a mano. Un record per (locale, periodo): l'ultimo generato sostituisce
+// il precedente (upsert). brief/context sono JSON serializzati (TEXT), renderizzati
+// dal frontend come per la generazione on-demand.
+model BriefSalvato {
+  id          String   @id @default(cuid())
+  userId      String
+  timeframe   String // "daily" | "weekly" | "monthly"
+  data        DateTime // giorno di riferimento del brief (mezzanotte italiana)
+  brief       String // JSON del Brief (semaforo, headline, why, actions, meta)
+  context     String // JSON del BriefContext (i numeri che il frontend disegna)
+  generatedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, timeframe])
   @@index([userId])
 }
 

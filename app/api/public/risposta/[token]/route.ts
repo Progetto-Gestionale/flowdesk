@@ -17,6 +17,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   if (!user) return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
 
   if (azione === 'accetta') {
+    // Asporto/Delivery: la proposta accettata diventa un Ordine vero (non un appuntamento tavolo).
+    const isOrdine = preventivo.tipo === 'asporto' || preventivo.tipo === 'delivery'
+
+    // Creiamo l'ordine PRIMA di marcare accettato: se qualcosa va storto, il link resta
+    // valido e il cliente può ritentare, invece di restare con una richiesta "accettata"
+    // ma senza ordine in cucina. creaOrdineDaPreventivo è idempotente (niente doppioni).
+    if (isOrdine) {
+      try {
+        await creaOrdineDaPreventivo(preventivo, user.id)
+      } catch (e) {
+        console.error('[risposta] creazione ordine fallita:', e)
+        return NextResponse.json({ error: 'Non siamo riusciti a registrare l\'ordine. Riprova tra poco.' }, { status: 500 })
+      }
+    }
+
     // Fix 3: aggiorna sia preventivo che lead ad "accettato/chiuso"
     await prisma.preventivo.update({
       where: { id: preventivo.id },
@@ -30,7 +45,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     }
 
     // Dati della proposta ricavati dalle note/righe del preventivo (usati sia per il calendario che per l'email)
-    const items = JSON.parse(preventivo.items ?? '[]') as Array<{ descrizione?: string; coperti?: number; allergie?: string; occasione?: string; durata?: number }>
+    let items: Array<{ descrizione?: string; coperti?: number; allergie?: string; occasione?: string; durata?: number }> = []
+    try { const a = JSON.parse(preventivo.items ?? '[]'); if (Array.isArray(a)) items = a } catch {}
     const note = preventivo.note ?? ''
     const dataMatch = note.match(/DATA_ISO:(\d{4}-\d{2}-\d{2})/)
     // L'ora può stare dentro DATA_ISO (prenotazioni pubbliche: DATA_ISO:YYYY-MM-DDThh:mm) oppure in ORA_ISO.
@@ -38,12 +54,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     const copertiNote = note.match(/Coperti:\s*(\d+)/)
     const allergieNote = note.match(/Allergie:\s*([^.]+)/)
     const occasioneNote = note.match(/Occasione:\s*([^.]+)/)
-
-    // Asporto/Delivery: la proposta accettata diventa un Ordine vero (non un appuntamento tavolo).
-    const isOrdine = preventivo.tipo === 'asporto' || preventivo.tipo === 'delivery'
-    if (isOrdine) {
-      await creaOrdineDaPreventivo(preventivo, user.id)
-    }
 
     // Prenotazione tavolo: inserisci in calendario, come quando il titolare accetta dal gestionale.
     // Solo se ha una data e se non c'è già un appuntamento per questa richiesta (evita duplicati).
@@ -74,25 +84,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       }
     }
 
-    // Email di conferma con i dati aggiornati dalla proposta
+    // Email di conferma con i dati aggiornati dalla proposta. Best-effort: se l'invio
+    // fallisce, l'ordine è comunque registrato e accettato → non facciamo fallire tutto.
     if (preventivo.clienteEmail) {
-      const info = isOrdine ? parseInfoOrdine(preventivo.note) : null
-      const cartItems = isOrdine ? (items as unknown as { nome: string; quantita: number; prezzo: number }[]) : undefined
-      await sendEmailConferma({
-        clienteEmail: preventivo.clienteEmail,
-        clienteNome: preventivo.clienteName,
-        nomeLocale: user.nomeLocale ?? 'Il locale',
-        tipo: preventivo.tipo,
-        // Questi dati riflettono le modifiche salvate nella proposta
-        data: isOrdine ? info?.data : dataMatch?.[1],
-        ora: isOrdine ? info?.ora : oraMatch?.[1],
-        coperti: items[0]?.coperti ?? (copertiNote ? parseInt(copertiNote[1]) : undefined),
-        allergie: items[0]?.allergie ?? allergieNote?.[1]?.trim(),
-        occasione: items[0]?.occasione ?? occasioneNote?.[1]?.trim(),
-        servizio: items[0]?.descrizione,
-        messaggioProposta: preventivo.messaggioProposta ?? undefined,
-        ...(isOrdine ? { items: cartItems, indirizzo: info?.indirizzo ?? null, totale: preventivo.totale } : {}),
-      })
+      try {
+        const info = isOrdine ? parseInfoOrdine(preventivo.note) : null
+        const cartItems = isOrdine ? (items as unknown as { nome: string; quantita: number; prezzo: number }[]) : undefined
+        await sendEmailConferma({
+          clienteEmail: preventivo.clienteEmail,
+          clienteNome: preventivo.clienteName,
+          nomeLocale: user.nomeLocale ?? 'Il locale',
+          tipo: preventivo.tipo,
+          // Questi dati riflettono le modifiche salvate nella proposta
+          data: isOrdine ? info?.data : dataMatch?.[1],
+          ora: isOrdine ? info?.ora : oraMatch?.[1],
+          coperti: items[0]?.coperti ?? (copertiNote ? parseInt(copertiNote[1]) : undefined),
+          allergie: items[0]?.allergie ?? allergieNote?.[1]?.trim(),
+          occasione: items[0]?.occasione ?? occasioneNote?.[1]?.trim(),
+          servizio: items[0]?.descrizione,
+          messaggioProposta: preventivo.messaggioProposta ?? undefined,
+          ...(isOrdine ? { items: cartItems, indirizzo: info?.indirizzo ?? null, totale: preventivo.totale } : {}),
+        })
+      } catch (e) {
+        console.error('[risposta] invio email conferma fallito:', e)
+      }
     }
     return NextResponse.json({ ok: true, azione: 'accettato' })
   }

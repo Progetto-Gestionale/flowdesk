@@ -13,6 +13,7 @@ interface Piatto {
   descrizione: string | null
   prezzo: number
   foodCost: number | null
+  aliquotaVendita: number | null
   immagineUrl: string | null
   allergeni: string[]
   disponibile: boolean
@@ -28,15 +29,23 @@ const ETICHETTA_COLORI = ['#e11d48', '#f59e0b', '#16a34a', '#2563eb', '#7c3aed',
 const ETICHETTA_COLORE_DEFAULT = '#2563eb'
 
 interface FormPiatto {
-  nome: string; descrizione: string; prezzo: string; foodCost: string; immagineUrl: string; allergeni: string[]
+  nome: string; descrizione: string; prezzo: string; foodCost: string; aliquotaVendita: string; immagineUrl: string; allergeni: string[]
   gestisciQuantita: boolean; quantita: string; mostraSempre: boolean; quantitaSoglia: string
   etichetta: string; etichettaColore: string
 }
 const EMPTY_FORM: FormPiatto = {
-  nome: '', descrizione: '', prezzo: '', foodCost: '', immagineUrl: '', allergeni: [],
+  nome: '', descrizione: '', prezzo: '', foodCost: '', aliquotaVendita: '', immagineUrl: '', allergeni: [],
   gestisciQuantita: false, quantita: '', mostraSempre: true, quantitaSoglia: '',
   etichetta: '', etichettaColore: '',
 }
+
+// Aliquote IVA di vendita disponibili nell'override per piatto (frazione salvata sul DB).
+const ALIQUOTE_IVA = [
+  { value: '', label: 'Predefinita del locale' },
+  { value: '0.04', label: '4% (beni prima necessità)' },
+  { value: '0.10', label: '10% (somministrazione/asporto food)' },
+  { value: '0.22', label: '22% (alcolici e altro)' },
+]
 
 interface Categoria {
   id: string
@@ -211,6 +220,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
     return {
       nome: formPiatto.nome, descrizione: formPiatto.descrizione, prezzo: formPiatto.prezzo,
       foodCost: formPiatto.foodCost === '' ? null : formPiatto.foodCost,
+      aliquotaVendita: formPiatto.aliquotaVendita === '' ? null : formPiatto.aliquotaVendita,
       immagineUrl: formPiatto.immagineUrl, allergeni: formPiatto.allergeni,
       quantita: formPiatto.gestisciQuantita ? (formPiatto.quantita === '' ? 0 : formPiatto.quantita) : null,
       quantitaSoglia: formPiatto.gestisciQuantita && !formPiatto.mostraSempre && formPiatto.quantitaSoglia !== '' ? formPiatto.quantitaSoglia : null,
@@ -275,6 +285,7 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
     setFormPiatto({
       nome: piatto.nome, descrizione: piatto.descrizione ?? '', prezzo: piatto.prezzo.toString(),
       foodCost: piatto.foodCost != null ? piatto.foodCost.toString() : '',
+      aliquotaVendita: piatto.aliquotaVendita != null ? piatto.aliquotaVendita.toString() : '',
       immagineUrl: piatto.immagineUrl ?? '', allergeni: piatto.allergeni ?? [],
       gestisciQuantita: piatto.quantita !== null,
       quantita: piatto.quantita !== null ? piatto.quantita.toString() : '',
@@ -537,12 +548,24 @@ function MenuEditor({ tipo }: { tipo: 'locale' | 'asporto' }) {
                     className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Food cost (€)</label>
+                  <label className="block text-sm font-medium text-ink-navy/70 mb-1">Food cost (€, senza IVA)</label>
                   <input type="number" step="0.10" min="0" value={formPiatto.foodCost}
                     onChange={e => setFormPiatto(f => ({ ...f, foodCost: e.target.value }))}
                     placeholder="0.00"
                     className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue" />
+                  <p className="text-[11px] text-ink-navy/40 mt-1">Costo della materia prima al netto dell&apos;IVA (l&apos;imponibile che paghi al fornitore, non il totale in fattura).</p>
                 </div>
+              </div>
+
+              {/* IVA di vendita: override per singolo piatto (default = quello del locale). */}
+              <div>
+                <label className="block text-sm font-medium text-ink-navy/70 mb-1">IVA di vendita</label>
+                <select value={formPiatto.aliquotaVendita}
+                  onChange={e => setFormPiatto(f => ({ ...f, aliquotaVendita: e.target.value }))}
+                  className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue">
+                  {ALIQUOTE_IVA.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                </select>
+                <p className="text-[11px] text-ink-navy/40 mt-1">Lascia &laquo;Predefinita del locale&raquo; per usare l&apos;aliquota impostata in Contabilità. Cambiala solo per i prodotti con IVA diversa (es. alcolici al 22%). La Contabilità userà questa per scorporare l&apos;IVA.</p>
               </div>
               {(() => {
                 const p = parseFloat(formPiatto.prezzo), c = parseFloat(formPiatto.foodCost)

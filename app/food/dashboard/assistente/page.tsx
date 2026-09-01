@@ -50,6 +50,10 @@ export default function CopilotaPage() {
   // così le domande di chiarimento usano i numeri del brief senza rifare i tool.
   const [briefTf, setBriefTf] = useState<Timeframe>('daily')
   const [briefReady, setBriefReady] = useState(false)
+  // Se il titolare vuole fare domande fuori dal brief, sgancia la chat: non passa più
+  // il periodo del brief → l'assistente risponde a tutto tramite i suoi strumenti.
+  const [libera, setLibera] = useState(false)
+  const agganciato = briefReady && !libera
   const scrollRef = useRef<HTMLDivElement>(null)
   const idratato = useRef(false)
 
@@ -94,7 +98,7 @@ export default function CopilotaPage() {
         credentials: 'include',
         // Se c'è un brief a schermo, agganciamo la chat a quel periodo: i chiarimenti
         // useranno quei numeri (meno token, coerenza con ciò che l'utente vede).
-        body: JSON.stringify({ messages: nuoviMessaggi, briefTimeframe: briefReady ? briefTf : undefined }),
+        body: JSON.stringify({ messages: nuoviMessaggi, briefTimeframe: agganciato ? briefTf : undefined }),
       })
       const data = await res.json()
       const risposta = res.ok ? (data.text || 'Non ho una risposta per questa domanda.') : `⚠️ ${data.error || 'Si è verificato un errore.'}`
@@ -107,7 +111,7 @@ export default function CopilotaPage() {
     }
   }
 
-  const suggerimenti = briefReady ? SUGGERIMENTI_BRIEF : SUGGERIMENTI_GENERICI
+  const suggerimenti = agganciato ? SUGGERIMENTI_BRIEF : SUGGERIMENTI_GENERICI
 
   return (
     <div className="h-full flex flex-col max-w-3xl mx-auto w-full">
@@ -147,7 +151,7 @@ export default function CopilotaPage() {
           {messages.length === 0 ? (
             <div className="text-center pt-2">
               <p className="text-ink-navy/70 text-sm mb-4 max-w-sm mx-auto">
-                {briefReady
+                {agganciato
                   ? 'Fai una domanda su questo brief: ho già i numeri sotto mano.'
                   : 'Fammi una domanda sul tuo locale o su come usare Flowest.'}
               </p>
@@ -191,10 +195,24 @@ export default function CopilotaPage() {
       {/* Input */}
       <div className="px-4 sm:px-6 py-4 border-t border-ink-navy/10">
         {briefReady && (
-          <p className="text-[11px] text-electric-blue/80 mb-2 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-electric-blue inline-block" />
-            Chat agganciata al brief di {TF_LABEL[briefTf]}: le domande di chiarimento usano quei numeri.
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-[11px] text-ink-navy/50 flex items-center gap-1.5 min-w-0">
+              <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${agganciato ? 'bg-electric-blue' : 'bg-ink-navy/25'}`} />
+              {agganciato
+                ? <>Chat sul brief di {TF_LABEL[briefTf]}: le domande usano quei numeri.</>
+                : <>Domande libere: chiedo a tutti i dati del locale.</>}
+            </p>
+            <div className="inline-flex bg-mist rounded-lg p-0.5 shrink-0">
+              <button onClick={() => setLibera(false)}
+                className={`text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors ${agganciato ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy'}`}>
+                Sul brief
+              </button>
+              <button onClick={() => setLibera(true)}
+                className={`text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors ${!agganciato ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy'}`}>
+                Domande libere
+              </button>
+            </div>
+          </div>
         )}
         <form onSubmit={(e) => { e.preventDefault(); invia(input) }} className="flex items-end gap-2">
           <textarea
@@ -202,7 +220,7 @@ export default function CopilotaPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(input) } }}
             rows={1}
-            placeholder={briefReady ? 'Chiedi un chiarimento sul brief…' : 'Scrivi una domanda…'}
+            placeholder={agganciato ? 'Chiedi un chiarimento sul brief…' : 'Scrivi una domanda…'}
             className="flex-1 resize-none rounded-xl border border-ink-navy/15 px-4 py-2.5 text-sm text-ink-navy focus:outline-none focus:border-electric-blue max-h-32"
           />
           <button type="submit" disabled={loading || !input.trim()}

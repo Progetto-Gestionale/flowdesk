@@ -47,6 +47,19 @@ export function normFoodCost(v: unknown): number | null {
   return n < 0 ? 0 : n
 }
 
+// Aliquota IVA di vendita del piatto (override). Salvata come frazione (0.10 = 10%).
+// null / '' / undefined → null (eredita: categoria → default del locale).
+// Accetta sia la frazione (0.1) sia la percentuale digitata a mano (10 → 0.10). Clamp 0..1.
+export function normAliquota(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null
+  let n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v)
+  if (!Number.isFinite(n)) return null
+  if (n > 1) n = n / 100 // l'utente ha digitato una percentuale (es. 22 → 0.22)
+  if (n < 0) n = 0
+  if (n > 1) n = 1
+  return n
+}
+
 // Testo dell'etichetta (es. "Best seller"). Trim, vuoto → null, max 40 caratteri.
 export function normEtichetta(v: unknown): string | null {
   if (typeof v !== 'string') return null
