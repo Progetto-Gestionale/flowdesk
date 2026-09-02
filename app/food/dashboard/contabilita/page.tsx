@@ -43,25 +43,51 @@ const CAT_COSTO_LABEL: Record<string, string> = {
   marketing: 'Marketing', leasing: 'Leasing', assicurazioni: 'Assicurazioni', manutenzioni: 'Manutenzioni', altro: 'Altro',
 }
 
+// Sposta il riferimento avanti/indietro di un'unità del periodo scelto (per navigare i mesi/settimane/anni passati).
+function spostaRiferimento(rif: Date, periodo: string, dir: 1 | -1): Date {
+  const d = new Date(rif)
+  if (periodo === 'settimana') d.setDate(d.getDate() + dir * 7)
+  else if (periodo === 'anno') d.setFullYear(d.getFullYear() + dir)
+  else if (periodo === 'oggi') d.setDate(d.getDate() + dir)
+  else d.setMonth(d.getMonth() + dir) // mese
+  return d
+}
+// Due date cadono nello stesso periodo? Serve a disabilitare "avanti" quando siamo già sul periodo corrente.
+function stessoPeriodo(a: Date, b: Date, periodo: string): boolean {
+  if (periodo === 'anno') return a.getFullYear() === b.getFullYear()
+  if (periodo === 'mese') return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+  if (periodo === 'settimana') {
+    const lun = (d: Date) => { const x = new Date(d); x.setDate(d.getDate() - ((d.getDay() + 6) % 7)); x.setHours(0, 0, 0, 0); return x.getTime() }
+    return lun(a) === lun(b)
+  }
+  return a.toDateString() === b.toDateString() // oggi
+}
+const refKey = (rif: Date) => rif.toISOString().slice(0, 10)
+
 export default function ContabilitaPage() {
   const [periodo, setPeriodo] = useState('mese')
+  const [riferimento, setRiferimento] = useState<Date>(new Date())
   const [data, setData] = useState<Summary | null>(() => getCache<Summary>('contabilita_mese') ?? null)
   const [loading, setLoading] = useState(false)
 
-  const carica = useCallback((p: string) => {
+  const carica = useCallback((p: string, rif: Date) => {
     setLoading(true)
-    fetch(`/api/contabilita/summary?periodo=${p}`, { credentials: 'include' })
+    fetch(`/api/contabilita/summary?periodo=${p}&riferimento=${rif.toISOString()}`, { credentials: 'include' })
       .then(r => r.json())
-      .then((d: Summary) => { setData(d); setCache(`contabilita_${p}`, d) })
+      .then((d: Summary) => { setData(d); setCache(`contabilita_${p}_${refKey(rif)}`, d) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
-    const cached = getCache<Summary>(`contabilita_${periodo}`)
+    const cached = getCache<Summary>(`contabilita_${periodo}_${refKey(riferimento)}`)
     if (cached) setData(cached)
-    carica(periodo)
-  }, [periodo, carica])
+    carica(periodo, riferimento)
+  }, [periodo, riferimento, carica])
+
+  const isCorrente = stessoPeriodo(riferimento, new Date(), periodo)
+  // Cambiare tipo di periodo riparte sempre da "adesso".
+  function cambiaPeriodo(p: string) { setPeriodo(p); setRiferimento(new Date()) }
 
   const c = data?.conto
   const sem = data ? SEMAFORO[data.semaforo] : SEMAFORO.giallo
@@ -88,15 +114,24 @@ export default function ContabilitaPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="inline-flex bg-white border border-ink-navy/10 rounded-lg p-1">
           {PERIODI.map(p => (
-            <button key={p.id} onClick={() => setPeriodo(p.id)}
+            <button key={p.id} onClick={() => cambiaPeriodo(p.id)}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${periodo === p.id ? 'bg-electric-blue text-white' : 'text-ink-navy/60 hover:text-ink-navy'}`}>
               {p.label}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-3 text-xs text-ink-navy/40">
-          {data && <span>{data.label} · {data.ordini} ordini · {data.coperti} coperti</span>}
-          <button onClick={() => carica(periodo)} className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} aria-label="Aggiorna"><IconRefresh /></button>
+        <div className="flex items-center gap-2">
+          {/* Navigazione periodi passati: ‹ periodo precedente · periodo · successivo › */}
+          <div className="inline-flex items-center gap-1 bg-white border border-ink-navy/10 rounded-lg px-1 py-1">
+            <button onClick={() => setRiferimento(spostaRiferimento(riferimento, periodo, -1))}
+              className="w-7 h-7 flex items-center justify-center rounded-md text-ink-navy/60 hover:bg-mist" aria-label="Periodo precedente">‹</button>
+            <span className="text-sm font-medium text-ink-navy min-w-[92px] text-center tabular-nums">{data?.label ?? '—'}</span>
+            <button onClick={() => { if (!isCorrente) setRiferimento(spostaRiferimento(riferimento, periodo, 1)) }}
+              disabled={isCorrente}
+              className="w-7 h-7 flex items-center justify-center rounded-md text-ink-navy/60 hover:bg-mist disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Periodo successivo">›</button>
+          </div>
+          {data && <span className="text-xs text-ink-navy/40 hidden sm:inline">{data.ordini} ordini · {data.coperti} coperti</span>}
+          <button onClick={() => carica(periodo, riferimento)} className={`w-4 h-4 text-ink-navy/40 ${loading ? 'animate-spin' : ''}`} aria-label="Aggiorna"><IconRefresh /></button>
         </div>
       </div>
 

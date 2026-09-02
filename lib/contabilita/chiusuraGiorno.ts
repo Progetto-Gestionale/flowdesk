@@ -72,6 +72,10 @@ export async function riepilogoContabile(
 
   const defaultLocale = config?.aliquotaVenditaDefault ?? 0.1
   const percAccantonamento = config?.percentualeAccantonamentoImposte ?? 0.15
+  // In regime forfettario non c'è IVA: non si applica in rivalsa sulle vendite e non si
+  // detrae sugli acquisti. Quindi niente scorporo (l'incasso è tutto imponibile) e niente
+  // IVA a credito sui costi fissi. Nel regime ordinario tutto resta come prima.
+  const forfettario = config?.regimeFiscale === 'forfettario'
 
   // ── Vendite: scorporo IVA riga per riga + split reparto/canale ──────────────
   let fatturatoLordo = 0
@@ -92,7 +96,7 @@ export async function riepilogoContabile(
         categoriaAliquota: r.piatto?.categoria?.aliquotaVendita,
         defaultLocale,
       })
-      const { imponibile, iva } = scorpora(lordoRiga, aliquota)
+      const { imponibile, iva } = forfettario ? { imponibile: lordoRiga, iva: 0 } : scorpora(lordoRiga, aliquota)
       fatturatoLordo += lordoRiga
       ivaDebito += iva
       foodCostVenduto += (r.foodCost ?? 0) * r.quantita
@@ -113,7 +117,7 @@ export async function riepilogoContabile(
   // ── Costi fissi: quota del periodo + IVA a credito proporzionale ────────────
   const giorni = giorniTrascorsi(inizio, fine)
   const quotaCostiFissi = quotaPeriodo(costiFissi, giorni)
-  const ivaCreditoFissi = (ivaCreditoMensile(costiFissi) / 30) * giorni
+  const ivaCreditoFissi = forfettario ? 0 : (ivaCreditoMensile(costiFissi) / 30) * giorni
 
   const perCategoriaCostoMap = new Map<string, number>()
   for (const c of costiFissi) {
