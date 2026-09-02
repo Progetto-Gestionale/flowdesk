@@ -18,6 +18,22 @@ const CATEGORIE = [
   ['marketing', 'Marketing'], ['leasing', 'Leasing'], ['assicurazioni', 'Assicurazioni'], ['manutenzioni', 'Manutenzioni'], ['altro', 'Altro'],
 ]
 const PERIODI = [['mensile', '/mese'], ['trimestrale', '/trim.'], ['annuale', '/anno']]
+
+// Aliquote IVA selezionabili per un costo fisso (frazione salvata sul DB).
+const ALIQUOTE_COSTO = [
+  ['0', 'Esente (0%)'], ['0.04', '4%'], ['0.1', '10%'], ['0.22', '22%'],
+] as const
+
+// IVA suggerita in base alla categoria (impostazione di partenza, sempre modificabile).
+// La quasi totalità dei costi di struttura ha IVA ordinaria 22%; l'eccezione classica sono
+// le assicurazioni, esenti IVA (art. 10). L'affitto spesso è esente ma può avere IVA al 22%
+// (locazione commerciale con opzione): lasciamo 22% e sarà il titolare a metterlo esente se serve.
+const IVA_SUGGERITA: Record<string, number> = {
+  assicurazioni: 0,
+  affitto: 0.22, utenze: 0.22, servizi: 0.22, personale_extra: 0.22,
+  marketing: 0.22, leasing: 0.22, manutenzioni: 0.22, altro: 0.22,
+}
+const labelIva = (a: number) => (a === 0 ? 'esente' : `IVA ${Math.round(a * 100)}%`)
 const eur = (n: number) => (n ?? 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 
 export default function CostiPage() {
@@ -78,7 +94,7 @@ export default function CostiPage() {
             <div key={c.id} className="flex items-center gap-3 py-2 border-b border-ink-navy/5 last:border-0">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink-navy truncate">{c.voce}</p>
-                <p className="text-xs text-ink-navy/40">{CATEGORIE.find(x => x[0] === c.categoria)?.[1]} · IVA {Math.round(c.aliquota * 100)}%</p>
+                <p className="text-xs text-ink-navy/40">{CATEGORIE.find(x => x[0] === c.categoria)?.[1]} · {labelIva(c.aliquota)}</p>
               </div>
               <span className="text-sm tabular-nums text-ink-navy">{eur(c.importoNetto)}<span className="text-ink-navy/40 text-xs">{PERIODI.find(p => p[0] === c.periodicita)?.[1]}</span></span>
               <button onClick={() => eliminaCosto(c.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500" aria-label="Elimina"><IconTrash /></button>
@@ -90,20 +106,26 @@ export default function CostiPage() {
         {/* Nuovo costo */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-mist rounded-xl p-3">
           <input value={nuovo.voce} onChange={e => setNuovo({ ...nuovo, voce: e.target.value })} placeholder="Voce (es. Affitto)"
-            className="sm:col-span-4 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
-          <select value={nuovo.categoria} onChange={e => setNuovo({ ...nuovo, categoria: e.target.value })}
+            className="sm:col-span-3 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          {/* Al cambio categoria proponiamo l'IVA tipica di quel costo (modificabile). */}
+          <select value={nuovo.categoria} onChange={e => setNuovo({ ...nuovo, categoria: e.target.value, aliquota: IVA_SUGGERITA[e.target.value] ?? 0.22 })}
             className="sm:col-span-3 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
             {CATEGORIE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           <input value={nuovo.importoNetto} onChange={e => setNuovo({ ...nuovo, importoNetto: e.target.value })} type="number" placeholder="€ netto" inputMode="decimal"
             className="sm:col-span-2 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
-          <select value={nuovo.periodicita} onChange={e => setNuovo({ ...nuovo, periodicita: e.target.value })}
+          <select value={String(nuovo.aliquota)} onChange={e => setNuovo({ ...nuovo, aliquota: Number(e.target.value) })}
+            title="IVA di questo costo"
             className="sm:col-span-2 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
+            {ALIQUOTE_COSTO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <select value={nuovo.periodicita} onChange={e => setNuovo({ ...nuovo, periodicita: e.target.value })}
+            className="sm:col-span-1 px-1 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
             {PERIODI.map(([v, l]) => <option key={v} value={v}>{l.replace('/', '')}</option>)}
           </select>
           <button onClick={aggiungiCosto} className="sm:col-span-1 bg-electric-blue text-white rounded-lg py-2 flex items-center justify-center" aria-label="Aggiungi"><span className="w-4 h-4"><IconArrowRight /></span></button>
         </div>
-        <p className="text-xs text-ink-navy/35 mt-2">Importo <b>senza IVA</b> (imponibile). L&apos;IVA serve solo per il cassetto fiscale.</p>
+        <p className="text-xs text-ink-navy/35 mt-2">Importo <b>senza IVA</b> (imponibile). L&apos;IVA (suggerita per categoria, modificabile) serve al cassetto fiscale: mettila <b>Esente</b> per assicurazioni, affitti senza IVA e simili.</p>
       </div>
 
       {/* Personale */}
