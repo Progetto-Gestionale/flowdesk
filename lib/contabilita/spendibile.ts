@@ -12,11 +12,15 @@
 export interface ContoInput {
   fatturatoLordo: number
   ivaDebito: number
-  ivaCredito?: number // acquisti (F3); 0 finché non c'è OCR bolle
+  ivaCredito?: number // acquisti: costi fissi + bolle fornitori (F3)
   foodCostVenduto: number
   laborCost: number
   quotaCostiFissi: number
-  percentualeAccantonamentoImposte: number // es. 0.15
+  percentualeAccantonamentoImposte: number // regime ordinario: % sull'EBITDA
+  // Regime fiscale per la stima delle imposte sul reddito (default: ordinario).
+  regimeFiscale?: 'ordinario' | 'forfettario'
+  coefficienteRedditivita?: number // forfettario: quota dei ricavi tassata (ristorazione ≈ 0.40)
+  aliquotaImpostaForfettario?: number // forfettario: 0.15 a regime, 0.05 primi 5 anni
 }
 
 export interface ContoEconomico {
@@ -49,7 +53,14 @@ export function calcolaContoEconomico(i: ContoInput): ContoEconomico {
   const primoMargine = fatturatoNetto - i.foodCostVenduto
   const margineDopoPersonale = primoMargine - i.laborCost
   const ebitda = margineDopoPersonale - i.quotaCostiFissi
-  const accantonamentoImposte = ebitda > 0 ? ebitda * i.percentualeAccantonamentoImposte : 0
+  // Accantonamento imposte sul reddito (stima prudenziale, non sostituisce il commercialista):
+  //  · Ordinario: % sull'EBITDA, solo se positivo (proxy di IRES/IRAP/IRPEF sull'utile).
+  //  · Forfettario: imposta sostitutiva su ricavi × coefficiente di redditività (40% ristorazione),
+  //    dovuta anche se l'EBITDA è negativo — dipende dai ricavi, non dai costi effettivi.
+  const accantonamentoImposte =
+    i.regimeFiscale === 'forfettario'
+      ? fatturatoNetto > 0 ? fatturatoNetto * (i.coefficienteRedditivita ?? 0.40) * (i.aliquotaImpostaForfettario ?? 0.15) : 0
+      : ebitda > 0 ? ebitda * i.percentualeAccantonamentoImposte : 0
   const utileStimato = ebitda - accantonamentoImposte
   const marginePct = fatturatoNetto > 0 ? utileStimato / fatturatoNetto : 0
 

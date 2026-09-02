@@ -16,8 +16,10 @@ import { registraSpesaBrief } from '@/lib/copilot/spesa'
 //      ("recap di ieri + prenotazioni di oggi") invece di generarlo a mano. Il
 //      brief usa Haiku (economico) e la spesa finisce nel contatore del mese.
 //
-// In vercel.json è schedulato alle 05:30 UTC = 06:30/07:30 ora italiana: ieri è
-// una giornata ormai chiusa (il cutoff serale delle 04:00 UTC è già passato).
+// In vercel.json è schedulato alle 04:00 UTC = 06:00 (ora legale) / 05:00 (solare)
+// italiana: i cron Vercel sono in UTC e non seguono l'ora legale, quindi d'inverno
+// anticipa a 05:00 — va bene, il brief dev'essere solo PRONTO prima che il titolare
+// apra l'app, non è una notifica. Ieri è comunque una giornata già chiusa.
 // Il calcolo dei giorni usa il fuso di Roma, non l'ora del server.
 // Protetto dal CRON_SECRET in produzione.
 // ─────────────────────────────────────────────────────────────────────────────

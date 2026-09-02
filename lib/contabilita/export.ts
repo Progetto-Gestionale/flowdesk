@@ -75,5 +75,33 @@ export async function generaReportContabile(
   cf.addRow(['Categoria costo', `Quota ${meta.periodoLabel}`]).font = { bold: true }
   for (const x of r.perCategoriaCosto) cf.addRow([x.categoria, x.importo]).getCell(2).numFmt = EUR
 
+  // ── Foglio 4 · Registro IVA (castelletto per aliquota) ──────────────────────
+  const reg = wb.addWorksheet('Registro IVA')
+  reg.columns = [{ width: 14 }, { width: 16 }, { width: 16 }]
+  const aliqLabel = (a: number) => (a === 0 ? 'Esente' : `${Math.round(a * 100)}%`)
+
+  reg.addRow(['IVA sulle vendite (a debito)']).font = { bold: true }
+  reg.addRow(['Aliquota', 'Imponibile', 'IVA']).font = { italic: true, color: { argb: 'FF666666' } }
+  for (const v of r.ivaVenditePerAliquota) {
+    const row = reg.addRow([aliqLabel(v.aliquota), v.imponibile, v.iva])
+    row.getCell(2).numFmt = EUR; row.getCell(3).numFmt = EUR
+  }
+  reg.addRow([])
+  reg.addRow(['IVA sugli acquisti (a credito)']).font = { bold: true }
+  reg.addRow(['Aliquota', 'Imponibile', 'IVA']).font = { italic: true, color: { argb: 'FF666666' } }
+  if (r.ivaAcquistiPerAliquota.length === 0) {
+    reg.addRow(['—', 'Nessuna bolla registrata', ''])
+  } else {
+    for (const a of r.ivaAcquistiPerAliquota) {
+      const row = reg.addRow([aliqLabel(a.aliquota), a.imponibile, a.iva])
+      row.getCell(2).numFmt = EUR; row.getCell(3).numFmt = EUR
+    }
+  }
+  reg.addRow([])
+  const saldo = reg.addRow(['Saldo IVA del periodo', '', c.ivaNetta])
+  saldo.getCell(3).numFmt = EUR; saldo.font = { bold: true }
+  reg.addRow([c.ivaNetta < 0 ? 'Credito a tuo favore (si porta avanti)' : 'Da versare allo Stato (F24)'])
+    .getCell(1).font = { italic: true, color: { argb: 'FF666666' } }
+
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer
 }

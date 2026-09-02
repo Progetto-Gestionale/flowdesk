@@ -78,6 +78,7 @@ model User {
   // Flowest Contabilità (owner-only)
   contabilitaConfig     ContabilitaConfig?
   costiFissi            CostoFisso[]
+  fatture               Fattura[]
   chiusureGiorno        ChiusuraGiorno[]
   briefSalvati          BriefSalvato[]
 }
@@ -490,8 +491,29 @@ model Dipendente {
   turni                      Turno[]
   disponibilita              DisponibilitaDipendente[]
   timbrature                 Timbratura[]
+  pagaStorico                DipendentePagaStorico[]
 
   @@unique([userId, username])
+  @@index([userId])
+}
+
+// Contabilità F2 · Storico tariffe del dipendente con date di validità. Il costo di un
+// turno usa la tariffa in vigore alla DATA del turno (l'ultima con dataInizio <= data):
+// così un aumento vale solo da lì in avanti e non riscrive la contabilità già passata.
+// Il primo inserimento usa dataInizio = epoch (1970) → copre retroattivamente tutte le ore
+// già lavorate (prima non c'era paga). I campi "correnti" restano su Dipendente come specchio
+// per la UI e come default. Un record con paga più recente = un aumento/variazione.
+model DipendentePagaStorico {
+  id                         String     @id @default(cuid())
+  dipendenteId               String
+  userId                     String
+  dataInizio                 DateTime // da quando la tariffa è valida (mezzanotte di Roma in UTC)
+  pagaOrariaBaseNetta        Float?
+  moltiplicatoreCostoAzienda Float      @default(1.40)
+  createdAt                  DateTime   @default(now())
+  dipendente                 Dipendente @relation(fields: [dipendenteId], references: [id], onDelete: Cascade)
+
+  @@index([dipendenteId, dataInizio])
   @@index([userId])
 }
 
@@ -666,11 +688,45 @@ model ContabilitaConfig {
   id                               String   @id @default(cuid())
   userId                           String   @unique
   aliquotaVenditaDefault           Float    @default(0.10) // somministrazione al tavolo
-  percentualeAccantonamentoImposte Float    @default(0.15) // % sul margine → fondo imposte stimato
+  percentualeAccantonamentoImposte Float    @default(0.15) // regime ordinario: % sull'EBITDA → fondo imposte stimato
   moltiplicatoreLaborDefault       Float    @default(1.40) // default per i nuovi dipendenti
   regimeFiscale                    String   @default("ordinario") // "ordinario" | "forfettario"
+  // Forfettario: l'imposta sostitutiva si calcola su ricavi × coefficiente di redditività
+  // (ristorazione ≈ 40%), non sull'utile. Aliquota 15% a regime, 5% per i primi 5 anni.
+  coefficienteRedditivita          Float    @default(0.40) // quota dei ricavi considerata reddito (forfettario)
+  aliquotaImpostaForfettario       Float    @default(0.15) // 0.15 a regime · 0.05 start-up primi 5 anni
   updatedAt                        DateTime @updatedAt
   user                             User     @relation(fields: [userId], references: [id])
+}
+
+// Fattura/bolla di un fornitore (F3). Alimenta l'IVA a credito REALE del cassetto fiscale
+// (Σ righe imponibile × aliquota) e il confronto "comprato vs consumato" (food cost teorico).
+// NON entra nell'EBITDA: il margine usa il food cost dei piatti venduti (competenza), non gli
+// acquisti (cassa). L'imponibile per aliquota si copia dal riquadro "Riepilogo IVA" della fattura.
+model Fattura {
+  id        String        @id @default(cuid())
+  userId    String
+  fornitore String?
+  numero    String?
+  data      DateTime // data documento (competenza IVA)
+  categoria String        @default("merci") // "merci"|"bevande"|"servizi"|"altro"
+  note      String?
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id])
+  righe     FatturaRiga[]
+
+  @@index([userId, data])
+}
+
+// Riga del castelletto IVA di una fattura: imponibile (netto) per una data aliquota.
+model FatturaRiga {
+  id         String  @id @default(cuid())
+  fatturaId  String
+  imponibile Float // netto IVA
+  aliquota   Float // 0 | 0.04 | 0.10 | 0.22
+  fattura    Fattura @relation(fields: [fatturaId], references: [id], onDelete: Cascade)
+
+  @@index([fatturaId])
 }
 
 // Costi fissi/semi-variabili di struttura. Inseriti UNA volta; il rateo giornaliero

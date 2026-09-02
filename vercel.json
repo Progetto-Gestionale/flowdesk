@@ -3,6 +3,6 @@
   "crons": [
     { "path": "/api/cron/cleanup", "schedule": "0 4 * * *" },
     { "path": "/api/cron/care-sedute", "schedule": "10 23 * * *" },
-    { "path": "/api/cron/brief-mattino", "schedule": "30 5 * * *" }
+    { "path": "/api/cron/brief-mattino", "schedule": "0 4 * * *" }
   ]
 }

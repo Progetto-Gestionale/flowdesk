@@ -233,7 +233,35 @@ async function buildEconomicSection(
     },
     { key: 'food_cost_pct', label: 'Food cost sul venduto', value: foodPct, unit: '%' },
     { key: 'labor_pct', label: 'Personale sul venduto', value: laborPct, unit: '%' },
+    // IVA: un CREDITO è a favore del locale (non si versa, compensa il futuro); un DEBITO
+    // va messo da parte per l'F24. Etichetta e segno già "masticati" per il narratore.
+    {
+      key: 'iva_netta',
+      label: c.ivaNetta < 0 ? 'Credito IVA' : 'IVA da versare',
+      value: round2(Math.abs(c.ivaNetta)),
+      unit: 'EUR',
+      deltaLabel: c.ivaNetta < 0 ? 'a tuo favore, compensa le imposte future' : "da mettere da parte per l'F24",
+    },
   ]
+
+  // Acquisti (bolle F3): se ci sono, confronto comprato vs consumato; se mancano del tutto
+  // ma c'è food cost, il credito IVA sulle merci non è tracciato → l'AI può suggerire di inserirle.
+  if (r.acquisti.numero > 0) {
+    metrics.push({
+      key: 'merci_comprate_vs_consumate',
+      label: 'Merci: comprate − consumate',
+      value: round2(r.acquisti.nettoMerci - c.foodCostVenduto),
+      unit: 'EUR',
+      deltaLabel: `acquisti ${round2(r.acquisti.nettoMerci)}€ vs food cost venduto ${round2(c.foodCostVenduto)}€ (netto)`,
+    })
+  } else if (c.foodCostVenduto > 0) {
+    metrics.push({
+      key: 'bolle_mancanti',
+      label: 'Bolle fornitori non inserite',
+      value: 'credito IVA merci non conteggiato',
+      deltaLabel: 'inserendo le bolle l’IVA a credito reale sarà più alta',
+    })
+  }
 
   return {
     section: { key: 'economia', title: 'Salute economica', metrics },
@@ -250,6 +278,12 @@ const AZIONI: AllowedAction[] = [
     kind: 'link',
     target: { href: '/food/dashboard/contabilita' },
     description: 'Apri la Contabilità per vedere il conto economico completo (margine netto, IVA, costi, utile).',
+  },
+  {
+    id: 'apri_acquisti',
+    kind: 'link',
+    target: { href: '/food/dashboard/contabilita/acquisti' },
+    description: 'Apri Acquisti/Bolle per registrare le fatture dei fornitori e recuperare l’IVA a credito reale.',
   },
   {
     id: 'apri_menu',

@@ -25,6 +25,27 @@ export function costoOrarioReale(
   return pagaOrariaBaseNetta * (moltiplicatore ?? MOLTIPLICATORE_DEFAULT)
 }
 
+// Una tariffa dello storico paga: valida da `dataInizio` in avanti.
+export interface TariffaStorica {
+  dataInizio: Date
+  pagaOrariaBaseNetta: number | null
+  moltiplicatoreCostoAzienda: number | null
+}
+
+// Tariffa in vigore a una certa data: l'ultima (dataInizio più recente) con dataInizio <= data.
+// `storico` non deve essere ordinato. Ritorna null se a quella data il dipendente non aveva
+// ancora una tariffa (turno antecedente al primo record) → costo 0, non "inventiamo" una paga.
+export function tariffaAllaData(storico: TariffaStorica[], data: Date): TariffaStorica | null {
+  const t = data.getTime()
+  let scelta: TariffaStorica | null = null
+  for (const r of storico) {
+    if (r.dataInizio.getTime() <= t && (!scelta || r.dataInizio.getTime() > scelta.dataInizio.getTime())) {
+      scelta = r
+    }
+  }
+  return scelta
+}
+
 export interface TurnoLike {
   oraInizio: string
   oraFine: string
