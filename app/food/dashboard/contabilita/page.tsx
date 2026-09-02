@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { getCache, setCache } from '@/lib/pageCache'
-import { IconSettings, IconCash, IconUsers, IconRefresh } from '@/app/components/icons'
+import { IconSettings, IconCash, IconRefresh, IconReceipt } from '@/app/components/icons'
 
 // ── Tipi allineati a /api/contabilita/summary ────────────────────────────────
 interface Conto {
@@ -13,12 +13,15 @@ interface Conto {
   ebitda: number; accantonamentoImposte: number; utileStimato: number; marginePct: number
   spendibile: { livello1: number; livello2: number; livello3: number; livello4: number }
 }
+interface Acquisti { nettoMerci: number; nettoTotale: number; ivaCredito: number; numero: number }
 interface Summary {
   periodo: string; label: string; semaforo: 'verde' | 'giallo' | 'rosso'
   giorni: number; coperti: number; ordini: number; conto: Conto
   perReparto: { reparto: string; netto: number }[]
   perCanale: { canale: string; netto: number }[]
   perCategoriaCosto: { categoria: string; importo: number }[]
+  acquisti: Acquisti
+  saldoIvaAnno: number // IVA netta cumulata da inizio anno (− = credito a tuo favore)
 }
 
 const PERIODI = [
@@ -91,6 +94,10 @@ export default function ContabilitaPage() {
 
   const c = data?.conto
   const sem = data ? SEMAFORO[data.semaforo] : SEMAFORO.giallo
+  // IVA netta < 0 = credito (a tuo favore); >= 0 = debito (da versare). Governa etichette,
+  // colori e testo del cassetto fiscale: un credito è una buona notizia, non va mostrato in rosso.
+  const ivaCredito = (c?.ivaNetta ?? 0) < 0
+  const acquisti = data?.acquisti
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
@@ -101,6 +108,9 @@ export default function ContabilitaPage() {
           <p className="text-sm text-ink-navy/50">Il conto economico reale del locale — al netto di IVA, costi e tasse.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/food/dashboard/contabilita/acquisti" className="flex items-center gap-1.5 text-sm font-medium text-ink-navy/70 hover:text-ink-navy bg-white border border-ink-navy/10 rounded-lg px-3 py-2">
+            <span className="w-4 h-4"><IconReceipt /></span> Acquisti / Bolle
+          </Link>
           <Link href="/food/dashboard/contabilita/costi" className="flex items-center gap-1.5 text-sm font-medium text-ink-navy/70 hover:text-ink-navy bg-white border border-ink-navy/10 rounded-lg px-3 py-2">
             <span className="w-4 h-4"><IconCash /></span> Costi & Personale
           </Link>
@@ -159,8 +169,12 @@ export default function ContabilitaPage() {
         <>
           {/* Cosa è stato messo da parte */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <MiniCard label="IVA da versare" valore={c.ivaNetta} hint="Cassetto fiscale" tono="rose" />
-            <MiniCard label="Food cost" valore={c.foodCostVenduto} hint="Materie prime" tono="amber" />
+            <MiniCard
+              label={ivaCredito ? 'IVA a credito' : 'IVA da versare'}
+              valore={Math.abs(c.ivaNetta)}
+              hint={ivaCredito ? 'A tuo favore' : 'Da mettere da parte'}
+              tono={ivaCredito ? 'emerald' : 'amber'} />
+            <MiniCard label="Food cost" valore={c.foodCostVenduto} hint="Materie prime (netto)" tono="amber" />
             <MiniCard label="Personale" valore={c.laborCost} hint="Labor cost" tono="amber" />
             <MiniCard label="Costi fissi" valore={c.quotaCostiFissi} hint={`Quota ${data?.giorni}gg`} tono="amber" />
           </div>
@@ -188,15 +202,39 @@ export default function ContabilitaPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Cassetto fiscale IVA */}
             <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-ink-navy mb-4">Cassetto fiscale IVA</h2>
+              <h2 className="text-base font-semibold text-ink-navy mb-1">Cassetto fiscale IVA</h2>
+              <p className="text-xs text-ink-navy/45 mb-4">L&apos;IVA è una partita di giro: la incassi dai clienti per lo Stato e la recuperi su ciò che compri. Non è né un guadagno né un costo.</p>
               <div className="space-y-1 text-sm">
-                <Riga label="IVA a debito (vendite)" valore={c.ivaDebito} />
-                <Riga label="IVA a credito (acquisti/fissi)" valore={-c.ivaCredito} muted />
+                <Riga label="IVA incassata dai clienti (vendite)" valore={c.ivaDebito} />
+                <Riga label="IVA pagata su acquisti e costi" valore={-c.ivaCredito} muted />
                 <div className="pt-2 mt-1 border-t border-ink-navy/10">
-                  <Riga label="Da versare allo Stato" valore={c.ivaNetta} bold />
+                  <Riga label={ivaCredito ? 'Credito verso lo Stato' : 'Da versare allo Stato (F24)'} valore={c.ivaNetta} bold />
                 </div>
               </div>
-              <p className="text-xs text-ink-navy/40 mt-3">Cifra già sottratta dal tuo &laquo;spendibile&raquo; e messa nel fondo tasse virtuale.</p>
+
+              {/* Nota dinamica: un CREDITO è una buona notizia, non un accantonamento. */}
+              <p className="text-xs text-ink-navy/55 mt-3 leading-relaxed">
+                {ivaCredito
+                  ? <>Questo mese <b>non versi IVA</b>: hai pagato ai fornitori più IVA di quanta ne hai incassata. Il credito di <b>{eur(Math.abs(c.ivaNetta))}</b> scenderà a ridurre l&apos;IVA (o le imposte) dei prossimi periodi. Non è un costo: quei soldi li hai già anticipati.</>
+                  : <>Questi <b>{eur(c.ivaNetta)}</b> non sono tuoi: li hai incassati per lo Stato e vanno versati con l&apos;F24. Sono già considerati nel calcolo dei &laquo;soldi realmente tuoi&raquo;.</>}
+              </p>
+
+              {/* Punto 2 · avviso onesto: senza bolle il credito IVA sulle merci non è conteggiato. */}
+              {(!acquisti || acquisti.numero === 0) && (
+                <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5">
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    ⚠️ Il credito IVA sulle <b>merci</b> (fatture dei fornitori) non è ancora conteggiato: l&apos;IVA reale a tuo favore è probabilmente più alta.{' '}
+                    <Link href="/food/dashboard/contabilita/acquisti" className="font-semibold underline">Inserisci le bolle →</Link>
+                  </p>
+                </div>
+              )}
+
+              {/* Punto 4a · saldo IVA progressivo da inizio anno (riporto del credito). */}
+              {data && data.saldoIvaAnno != null && (
+                <p className="text-[11px] text-ink-navy/40 mt-3 pt-3 border-t border-ink-navy/5">
+                  Saldo da inizio anno: <b className={data.saldoIvaAnno < 0 ? 'text-emerald-600' : 'text-ink-navy/60'}>{eur(Math.abs(data.saldoIvaAnno))} {data.saldoIvaAnno < 0 ? 'di credito' : 'di IVA maturata'}</b>. {data.saldoIvaAnno < 0 ? 'Il credito si porta avanti e compensa i versamenti futuri.' : ''}
+                </p>
+              )}
             </div>
 
             {/* Ricavi netti per reparto e canale */}
@@ -206,6 +244,24 @@ export default function ContabilitaPage() {
               <Breakdown titolo="Per canale" voci={data!.perCanale.map(x => ({ label: CANALE_LABEL[x.canale] ?? x.canale, valore: x.netto }))} />
             </div>
           </div>
+
+          {/* Food cost teorico (piatti venduti) vs acquisti reali (bolle) → scorte/scarti */}
+          {acquisti && acquisti.numero > 0 && (
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+              <h2 className="text-base font-semibold text-ink-navy mb-1">Merci: comprato vs consumato</h2>
+              <p className="text-xs text-ink-navy/45 mb-4">Confronto tra ciò che hai <b>acquistato</b> dai fornitori e il costo delle materie prime <b>finite nei piatti venduti</b>. Tutti i valori sono netto IVA.</p>
+              <div className="space-y-1 text-sm">
+                <Riga label="Acquisti merci del periodo (dalle bolle)" valore={acquisti.nettoMerci} />
+                <Riga label="Food cost venduto (nei piatti serviti)" valore={-c.foodCostVenduto} muted />
+                <div className="pt-2 mt-1 border-t border-ink-navy/10">
+                  <Riga label="Differenza (scorte, scarti, omaggi, sfridi)" valore={acquisti.nettoMerci - c.foodCostVenduto} bold />
+                </div>
+              </div>
+              <p className="text-xs text-ink-navy/45 mt-3 leading-relaxed">
+                Una differenza positiva è normale se stai facendo <b>magazzino</b>. Se resta alta mese dopo mese a magazzino stabile, sono <b>scarti, sprechi o ammanchi</b> da tenere d&apos;occhio.
+              </p>
+            </div>
+          )}
 
           {/* Costi fissi per categoria */}
           {data!.perCategoriaCosto.length > 0 && (
@@ -248,8 +304,8 @@ function Riga({ label, valore, muted, bold, big }: { label: string; valore: numb
   )
 }
 
-function MiniCard({ label, valore, hint, tono }: { label: string; valore: number; hint: string; tono: 'rose' | 'amber' }) {
-  const t = tono === 'rose' ? 'text-rose-600' : 'text-amber-600'
+function MiniCard({ label, valore, hint, tono }: { label: string; valore: number; hint: string; tono: 'rose' | 'amber' | 'emerald' }) {
+  const t = tono === 'rose' ? 'text-rose-600' : tono === 'emerald' ? 'text-emerald-600' : 'text-amber-600'
   return (
     <div className="bg-white rounded-xl border border-ink-navy/10 p-4 shadow-sm">
       <p className="text-xs text-ink-navy/40 mb-1">{label}</p>

@@ -8,6 +8,8 @@ interface Config {
   percentualeAccantonamentoImposte: number
   moltiplicatoreLaborDefault: number
   regimeFiscale: string
+  coefficienteRedditivita: number
+  aliquotaImpostaForfettario: number
 }
 
 export default function ImpostazioniContabiliPage() {
@@ -62,17 +64,19 @@ export default function ImpostazioniContabiliPage() {
           </div>
         </Campo>
 
-        <Campo
-          label="Accantonamento imposte"
-          hint="Percentuale del margine messa da parte come stima delle imposte (IRES/IRAP/IRPEF). Non sostituisce il commercialista: serve a non farti trovare senza liquidità."
-        >
-          <div className="flex items-center gap-2">
-            <input type="number" min={0} max={100} value={Math.round(cfg.percentualeAccantonamentoImposte * 100)}
-              onChange={e => setCfg({ ...cfg, percentualeAccantonamentoImposte: Number(e.target.value) / 100 })}
-              className="w-20 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
-            <span className="text-sm text-ink-navy/50">% del margine</span>
-          </div>
-        </Campo>
+        {cfg.regimeFiscale !== 'forfettario' && (
+          <Campo
+            label="Accantonamento imposte (regime ordinario)"
+            hint="Percentuale dell'utile (EBITDA) messa da parte come stima delle imposte sul reddito (IRES/IRAP/IRPEF). Non sostituisce il commercialista: serve a non farti trovare senza liquidità quando arriva l'F24."
+          >
+            <div className="flex items-center gap-2">
+              <input type="number" min={0} max={100} value={Math.round(cfg.percentualeAccantonamentoImposte * 100)}
+                onChange={e => setCfg({ ...cfg, percentualeAccantonamentoImposte: Number(e.target.value) / 100 })}
+                className="w-20 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+              <span className="text-sm text-ink-navy/50">% dell&apos;utile</span>
+            </div>
+          </Campo>
+        )}
 
         <Campo
           label="Moltiplicatore costo azienda (default)"
@@ -83,13 +87,39 @@ export default function ImpostazioniContabiliPage() {
             className="w-24 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
         </Campo>
 
-        <Campo label="Regime fiscale" hint="Usato per affinare le stime (dettaglio nelle fasi successive).">
+        <Campo label="Regime fiscale" hint="In forfettario non c'è IVA (non la incassi sulle vendite né la recuperi sugli acquisti) e l'imposta si calcola sui ricavi, non sull'utile. Cambia il modo in cui stimiamo le tasse.">
           <select value={cfg.regimeFiscale} onChange={e => setCfg({ ...cfg, regimeFiscale: e.target.value })}
             className="px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
             <option value="ordinario">Ordinario</option>
             <option value="forfettario">Forfettario</option>
           </select>
         </Campo>
+
+        {cfg.regimeFiscale === 'forfettario' && (
+          <>
+            <Campo
+              label="Coefficiente di redditività"
+              hint="Nel forfettario le tasse si pagano solo su una parte dei ricavi: per bar e ristoranti è il 40% (il resto è considerato costo forfettario dallo Stato). Lascia 40% salvo diversa indicazione del commercialista."
+            >
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} max={100} value={Math.round(cfg.coefficienteRedditivita * 100)}
+                  onChange={e => setCfg({ ...cfg, coefficienteRedditivita: Number(e.target.value) / 100 })}
+                  className="w-20 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+                <span className="text-sm text-ink-navy/50">% dei ricavi</span>
+              </div>
+            </Campo>
+            <Campo
+              label="Imposta sostitutiva"
+              hint="L'aliquota unica del forfettario: 15% a regime, oppure 5% nei primi 5 anni di una nuova attività (start-up). Si applica sui ricavi × coefficiente."
+            >
+              <select value={String(cfg.aliquotaImpostaForfettario)} onChange={e => setCfg({ ...cfg, aliquotaImpostaForfettario: Number(e.target.value) })}
+                className="px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
+                <option value="0.15">15% — a regime</option>
+                <option value="0.05">5% — start-up (primi 5 anni)</option>
+              </select>
+            </Campo>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-3">

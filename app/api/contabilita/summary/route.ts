@@ -13,5 +13,11 @@ export async function GET(req: Request) {
   const p = calcolaPeriodo(searchParams.get('periodo') ?? 'mese', searchParams.get('riferimento'))
   const r = await riepilogoContabile(user.id, p.inizio, p.fine)
 
-  return NextResponse.json({ periodo: p.periodo, label: p.label, ...r })
+  // Saldo IVA progressivo da inizio anno (riporto del credito): la liquidazione IVA cumulata
+  // dal 1° gennaio fino alla fine del periodo mostrato. Negativo = credito che si porta avanti.
+  const inizioAnno = new Date(p.inizio.getFullYear(), 0, 1)
+  const rAnno = await riepilogoContabile(user.id, inizioAnno, p.fine)
+  const saldoIvaAnno = rAnno.conto.ivaNetta
+
+  return NextResponse.json({ periodo: p.periodo, label: p.label, ...r, saldoIvaAnno })
 }

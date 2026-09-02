@@ -14,6 +14,8 @@ export async function GET() {
     percentualeAccantonamentoImposte: 0.15,
     moltiplicatoreLaborDefault: 1.4,
     regimeFiscale: 'ordinario',
+    coefficienteRedditivita: 0.40,
+    aliquotaImpostaForfettario: 0.15,
   })
 }
 
@@ -31,6 +33,8 @@ export async function POST(req: Request) {
     percentualeAccantonamentoImposte: clampPct(body.percentualeAccantonamentoImposte, 0.15),
     moltiplicatoreLaborDefault: Math.max(1, Number(body.moltiplicatoreLaborDefault) || 1.4),
     regimeFiscale: body.regimeFiscale === 'forfettario' ? 'forfettario' : 'ordinario',
+    coefficienteRedditivita: clampPct(body.coefficienteRedditivita, 0.40),
+    aliquotaImpostaForfettario: clampPct(body.aliquotaImpostaForfettario, 0.15),
   }
 
   const cfg = await prisma.contabilitaConfig.upsert({

@@ -4,9 +4,11 @@
 
 import { prisma } from '@/lib/prisma'
 import { scorpora, risolviAliquotaVendita } from './iva'
-import { costoOrarioReale, costoTurno } from './labor'
+import { costoOrarioReale, costoTurno, tariffaAllaData, type TariffaStorica } from './labor'
 import { quotaPeriodo, ivaCreditoMensile } from './costiFissi'
 import { calcolaContoEconomico, statoSemaforo, type ContoEconomico, type StatoSemaforo } from './spendibile'
+
+export interface RigaIvaAliquota { aliquota: number; imponibile: number; iva: number }
 
 export interface RiepilogoContabile {
   conto: ContoEconomico
@@ -17,6 +19,12 @@ export interface RiepilogoContabile {
   perCategoriaCosto: { categoria: string; importo: number }[]
   coperti: number
   ordini: number
+  // F3 · acquisti da bolle fornitori del periodo (netto). Alimentano l'IVA a credito reale
+  // e il confronto "comprato vs consumato"; NON entrano nell'EBITDA (che usa il food cost venduto).
+  acquisti: { nettoMerci: number; nettoTotale: number; ivaCredito: number; numero: number }
+  // Castelletto IVA per aliquota (per l'export/registro del commercialista).
+  ivaVenditePerAliquota: RigaIvaAliquota[]
+  ivaAcquistiPerAliquota: RigaIvaAliquota[]
 }
 
 // Numero di giorni "trascorsi" dell'intervallo (per spalmare i costi fissi in modo equo):
@@ -33,7 +41,7 @@ export async function riepilogoContabile(
   inizio: Date,
   fine: Date,
 ): Promise<RiepilogoContabile> {
-  const [config, ordini, turni, costiFissi] = await Promise.all([
+  const [config, ordini, turni, costiFissi, storicoPaga, fatture] = await Promise.all([
     prisma.contabilitaConfig.findUnique({ where: { userId } }),
     prisma.ordine.findMany({
       where: { userId, createdAt: { gte: inizio, lt: fine } },
@@ -59,6 +67,8 @@ export async function riepilogoContabile(
     prisma.turno.findMany({
       where: { userId, data: { gte: inizio, lt: fine } },
       select: {
+        data: true,
+        dipendenteId: true,
         oraInizio: true,
         oraFine: true,
         tipoTariffa: true,
@@ -68,7 +78,23 @@ export async function riepilogoContabile(
       },
     }),
     prisma.costoFisso.findMany({ where: { userId, attivo: true } }),
+    prisma.dipendentePagaStorico.findMany({
+      where: { userId },
+      select: { dipendenteId: true, dataInizio: true, pagaOrariaBaseNetta: true, moltiplicatoreCostoAzienda: true },
+    }),
+    prisma.fattura.findMany({
+      where: { userId, data: { gte: inizio, lt: fine } },
+      select: { categoria: true, righe: { select: { imponibile: true, aliquota: true } } },
+    }),
   ])
+
+  // Storico tariffe indicizzato per dipendente (per risolvere la paga alla data del turno).
+  const storicoPerDip = new Map<string, TariffaStorica[]>()
+  for (const s of storicoPaga) {
+    const arr = storicoPerDip.get(s.dipendenteId) ?? []
+    arr.push(s)
+    storicoPerDip.set(s.dipendenteId, arr)
+  }
 
   const defaultLocale = config?.aliquotaVenditaDefault ?? 0.1
   const percAccantonamento = config?.percentualeAccantonamentoImposte ?? 0.15
@@ -84,6 +110,8 @@ export async function riepilogoContabile(
   let coperti = 0
   const perRepartoMap = new Map<string, number>()
   const perCanaleMap = new Map<string, number>()
+  // Castelletto IVA vendite per aliquota → { imponibile, iva } (registro/commercialista).
+  const ivaVenditeMap = new Map<number, { imponibile: number; iva: number }>()
 
   for (const o of ordini) {
     coperti += o.coperti ?? 0
@@ -104,13 +132,50 @@ export async function riepilogoContabile(
       const reparto = r.piatto?.categoria?.reparto || 'Cucina'
       perRepartoMap.set(reparto, (perRepartoMap.get(reparto) ?? 0) + imponibile)
       perCanaleMap.set(canale, (perCanaleMap.get(canale) ?? 0) + imponibile)
+
+      const bucket = ivaVenditeMap.get(aliquota) ?? { imponibile: 0, iva: 0 }
+      bucket.imponibile += imponibile
+      bucket.iva += iva
+      ivaVenditeMap.set(aliquota, bucket)
     }
   }
 
-  // ── Labor cost dai turni (ciascuno porta la sua tariffa) ────────────────────
+  // ── Acquisti da bolle fornitori: IVA a credito reale + castelletto + totale merci ──
+  // In forfettario l'IVA sugli acquisti non si detrae → credito 0 (ma i totali netti restano
+  // per il confronto "comprato vs consumato"). Gli acquisti NON entrano nell'EBITDA.
+  let ivaCreditoAcquisti = 0
+  let acquistiNettoTotale = 0
+  let acquistiNettoMerci = 0
+  const ivaAcquistiMap = new Map<number, { imponibile: number; iva: number }>()
+  for (const f of fatture) {
+    const merce = f.categoria === 'merci' || f.categoria === 'bevande'
+    for (const r of f.righe) {
+      const ivaRiga = forfettario ? 0 : r.imponibile * r.aliquota
+      ivaCreditoAcquisti += ivaRiga
+      acquistiNettoTotale += r.imponibile
+      if (merce) acquistiNettoMerci += r.imponibile
+      const bucket = ivaAcquistiMap.get(r.aliquota) ?? { imponibile: 0, iva: 0 }
+      bucket.imponibile += r.imponibile
+      bucket.iva += ivaRiga
+      ivaAcquistiMap.set(r.aliquota, bucket)
+    }
+  }
+
+  // ── Labor cost dai turni ────────────────────────────────────────────────────
+  // La paga è quella in vigore alla DATA del turno (storico con date di validità): un
+  // aumento non riscrive la contabilità passata. Fallback alla paga corrente sul Dipendente
+  // solo per chi non ha ancora storico (stato legacy pre-migrazione).
   let laborCost = 0
   for (const t of turni) {
-    const oraria = costoOrarioReale(t.dipendente.pagaOrariaBaseNetta, t.dipendente.moltiplicatoreCostoAzienda)
+    const storico = storicoPerDip.get(t.dipendenteId)
+    let paga: number | null = t.dipendente.pagaOrariaBaseNetta
+    let molt: number | null = t.dipendente.moltiplicatoreCostoAzienda
+    if (storico && storico.length > 0) {
+      const tar = tariffaAllaData(storico, t.data)
+      paga = tar?.pagaOrariaBaseNetta ?? null
+      molt = tar?.moltiplicatoreCostoAzienda ?? null
+    }
+    const oraria = costoOrarioReale(paga, molt)
     laborCost += costoTurno(t, oraria)
   }
 
@@ -129,12 +194,19 @@ export async function riepilogoContabile(
   const conto = calcolaContoEconomico({
     fatturatoLordo,
     ivaDebito,
-    ivaCredito: ivaCreditoFissi,
+    ivaCredito: ivaCreditoFissi + ivaCreditoAcquisti, // fissi + bolle fornitori (F3)
     foodCostVenduto,
     laborCost,
     quotaCostiFissi,
     percentualeAccantonamentoImposte: percAccantonamento,
+    // Regime: forfettario tassa i ricavi × coefficiente; ordinario stima sull'EBITDA.
+    regimeFiscale: forfettario ? 'forfettario' : 'ordinario',
+    coefficienteRedditivita: config?.coefficienteRedditivita ?? 0.40,
+    aliquotaImpostaForfettario: config?.aliquotaImpostaForfettario ?? 0.15,
   })
+
+  const perAliquota = (m: Map<number, { imponibile: number; iva: number }>): RigaIvaAliquota[] =>
+    [...m.entries()].map(([aliquota, v]) => ({ aliquota, imponibile: v.imponibile, iva: v.iva })).sort((a, b) => a.aliquota - b.aliquota)
 
   return {
     conto,
@@ -145,6 +217,9 @@ export async function riepilogoContabile(
     perReparto: [...perRepartoMap.entries()].map(([reparto, netto]) => ({ reparto, netto })).sort((a, b) => b.netto - a.netto),
     perCanale: [...perCanaleMap.entries()].map(([canale, netto]) => ({ canale, netto })).sort((a, b) => b.netto - a.netto),
     perCategoriaCosto: [...perCategoriaCostoMap.entries()].map(([categoria, importo]) => ({ categoria, importo })).sort((a, b) => b.importo - a.importo),
+    acquisti: { nettoMerci: acquistiNettoMerci, nettoTotale: acquistiNettoTotale, ivaCredito: ivaCreditoAcquisti, numero: fatture.length },
+    ivaVenditePerAliquota: perAliquota(ivaVenditeMap),
+    ivaAcquistiPerAliquota: perAliquota(ivaAcquistiMap),
   }
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { IconTrash, IconArrowRight } from '@/app/components/icons'
 
@@ -40,7 +40,9 @@ export default function CostiPage() {
   const [costi, setCosti] = useState<CostoFisso[]>([])
   const [totaleMensile, setTotaleMensile] = useState(0)
   const [dip, setDip] = useState<Dip[]>([])
-  const [nuovo, setNuovo] = useState({ voce: '', importoNetto: '', categoria: 'utenze', aliquota: 0.22, periodicita: 'mensile' })
+  // `lordo` = quello che il ristoratore paga davvero (IVA inclusa: la bolletta dice "TOTALE").
+  // L'imponibile netto per il conto economico lo scorporiamo noi in fase di salvataggio.
+  const [nuovo, setNuovo] = useState({ voce: '', lordo: '', categoria: 'utenze', aliquota: 0.22, periodicita: 'mensile' })
 
   const caricaCosti = useCallback(() => {
     fetch('/api/contabilita/costi-fissi', { credentials: 'include' })
@@ -54,12 +56,14 @@ export default function CostiPage() {
   useEffect(() => { caricaCosti(); caricaDip() }, [caricaCosti, caricaDip])
 
   async function aggiungiCosto() {
-    if (!nuovo.voce.trim() || !nuovo.importoNetto) return
+    if (!nuovo.voce.trim() || !nuovo.lordo) return
+    // Scorporo: imponibile = lordo / (1 + aliquota). Esente (0%) → lordo = netto.
+    const importoNetto = Number(nuovo.lordo) / (1 + nuovo.aliquota)
     await fetch('/api/contabilita/costi-fissi', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...nuovo, importoNetto: Number(nuovo.importoNetto) }),
+      body: JSON.stringify({ voce: nuovo.voce, categoria: nuovo.categoria, aliquota: nuovo.aliquota, periodicita: nuovo.periodicita, importoNetto }),
     })
-    setNuovo({ voce: '', importoNetto: '', categoria: 'utenze', aliquota: 0.22, periodicita: 'mensile' })
+    setNuovo({ voce: '', lordo: '', categoria: 'utenze', aliquota: 0.22, periodicita: 'mensile' })
     caricaCosti()
   }
   async function eliminaCosto(id: string) {
@@ -71,7 +75,6 @@ export default function CostiPage() {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: d.id, pagaOrariaBaseNetta: paga === '' ? null : Number(paga), moltiplicatoreCostoAzienda: molt }),
     })
-    caricaDip()
   }
 
   return (
@@ -86,7 +89,7 @@ export default function CostiPage() {
       <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-ink-navy">Costi fissi</h2>
-          <span className="text-sm text-ink-navy/50">Totale <b className="text-ink-navy">{eur(totaleMensile)}</b>/mese</span>
+          <span className="text-sm text-ink-navy/50">Totale netto <b className="text-ink-navy">{eur(totaleMensile)}</b>/mese</span>
         </div>
 
         <div className="space-y-2 mb-4">
@@ -112,7 +115,7 @@ export default function CostiPage() {
             className="sm:col-span-3 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
             {CATEGORIE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          <input value={nuovo.importoNetto} onChange={e => setNuovo({ ...nuovo, importoNetto: e.target.value })} type="number" placeholder="€ netto" inputMode="decimal"
+          <input value={nuovo.lordo} onChange={e => setNuovo({ ...nuovo, lordo: e.target.value })} type="number" placeholder="€ pagato (IVA incl.)" inputMode="decimal"
             className="sm:col-span-2 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
           <select value={String(nuovo.aliquota)} onChange={e => setNuovo({ ...nuovo, aliquota: Number(e.target.value) })}
             title="IVA di questo costo"
@@ -125,7 +128,15 @@ export default function CostiPage() {
           </select>
           <button onClick={aggiungiCosto} className="sm:col-span-1 bg-electric-blue text-white rounded-lg py-2 flex items-center justify-center" aria-label="Aggiungi"><span className="w-4 h-4"><IconArrowRight /></span></button>
         </div>
-        <p className="text-xs text-ink-navy/35 mt-2">Importo <b>senza IVA</b> (imponibile). L&apos;IVA (suggerita per categoria, modificabile) serve al cassetto fiscale: mettila <b>Esente</b> per assicurazioni, affitti senza IVA e simili.</p>
+        <p className="text-xs text-ink-navy/35 mt-2">
+          Scrivi <b>quanto paghi davvero</b> (IVA inclusa, come sulla bolletta): scorporiamo noi netto e IVA.
+          Scegli l&apos;aliquota giusta e metti <b>Esente</b> per assicurazioni, affitti senza IVA e simili.
+          {Number(nuovo.lordo) > 0 && (
+            <span className="block mt-1 text-ink-navy/55">
+              = {eur(Number(nuovo.lordo) / (1 + nuovo.aliquota))} netto + {eur(Number(nuovo.lordo) - Number(nuovo.lordo) / (1 + nuovo.aliquota))} IVA
+            </span>
+          )}
+        </p>
       </div>
 
       {/* Personale */}
@@ -143,10 +154,28 @@ export default function CostiPage() {
   )
 }
 
-function RigaDip({ d, onSalva }: { d: Dip; onSalva: (d: Dip, paga: string, molt: number) => void }) {
+function RigaDip({ d, onSalva }: { d: Dip; onSalva: (d: Dip, paga: string, molt: number) => Promise<void> }) {
   const [paga, setPaga] = useState(d.pagaOrariaBaseNetta?.toString() ?? '')
   const [molt, setMolt] = useState(d.moltiplicatoreCostoAzienda ?? 1.4)
+  const [stato, setStato] = useState<'' | 'saving' | 'saved'>('')
+  const salvato = useRef({ paga, molt })
   const costo = paga ? Number(paga) * molt : 0
+
+  // Autosalvataggio: al blur di uno dei campi, se il valore è cambiato dall'ultimo
+  // salvataggio lo persiste da solo. Niente tasto Salva.
+  async function salvaSeCambiato() {
+    if (paga === salvato.current.paga && molt === salvato.current.molt) return
+    setStato('saving')
+    try {
+      await onSalva(d, paga, molt)
+      salvato.current = { paga, molt }
+      setStato('saved')
+      setTimeout(() => setStato(s => (s === 'saved' ? '' : s)), 1500)
+    } catch {
+      setStato('')
+    }
+  }
+
   return (
     <div className="flex items-center gap-3 py-2 border-b border-ink-navy/5 last:border-0 flex-wrap">
       <div className="flex-1 min-w-0">
@@ -155,16 +184,19 @@ function RigaDip({ d, onSalva }: { d: Dip; onSalva: (d: Dip, paga: string, molt:
       </div>
       <label className="flex items-center gap-1 text-xs text-ink-navy/50">
         Paga
-        <input value={paga} onChange={e => setPaga(e.target.value)} type="number" inputMode="decimal" placeholder="€/h"
+        <input value={paga} onChange={e => setPaga(e.target.value)} onBlur={salvaSeCambiato} type="number" inputMode="decimal" placeholder="€/h"
           className="w-20 px-2 py-1.5 text-sm rounded-lg border border-ink-navy/10 bg-white" />
       </label>
       <label className="flex items-center gap-1 text-xs text-ink-navy/50">
         ×
-        <input value={molt} onChange={e => setMolt(Number(e.target.value))} type="number" step="0.05" inputMode="decimal"
+        <input value={molt} onChange={e => setMolt(Number(e.target.value))} onBlur={salvaSeCambiato} type="number" step="0.05" inputMode="decimal"
           className="w-16 px-2 py-1.5 text-sm rounded-lg border border-ink-navy/10 bg-white" />
       </label>
       <span className="text-sm tabular-nums text-ink-navy w-20 text-right">{eur(costo)}<span className="text-ink-navy/40 text-xs">/h</span></span>
-      <button onClick={() => onSalva(d, paga, molt)} className="text-xs font-medium bg-ink-navy text-white rounded-lg px-3 py-1.5">Salva</button>
+      <span className="w-14 text-xs text-right" aria-live="polite">
+        {stato === 'saving' && <span className="text-ink-navy/40">salvo…</span>}
+        {stato === 'saved' && <span className="text-emerald-500">✓ salvato</span>}
+      </span>
     </div>
   )
 }
