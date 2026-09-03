@@ -227,7 +227,11 @@ export default function ContabilitaPage() {
                 <Riga label="IVA incassata dai clienti (vendite)" valore={c.ivaDebito} />
                 <Riga label="IVA pagata su acquisti e costi" valore={-c.ivaCredito} muted />
                 <div className="pt-2 mt-1 border-t border-ink-navy/10">
-                  <Riga label={ivaCredito ? 'Credito verso lo Stato' : 'Da versare allo Stato (F24)'} valore={c.ivaNetta} bold />
+                  <Riga
+                    label={ivaCredito ? 'Credito verso lo Stato' : 'Da versare allo Stato (F24)'}
+                    valore={ivaCredito ? Math.abs(c.ivaNetta) : c.ivaNetta}
+                    tono={ivaCredito ? 'positivo' : 'auto'}
+                    bold />
                 </div>
               </div>
 
@@ -312,12 +316,19 @@ export default function ContabilitaPage() {
 }
 
 // ── Componenti di supporto ───────────────────────────────────────────────────
-function Riga({ label, valore, muted, bold, big }: { label: string; valore: number; muted?: boolean; bold?: boolean; big?: boolean }) {
+// `tono`: 'auto' (default) colora di rosso i valori negativi (voci sottratte del conto
+// economico); 'positivo' forza il verde (es. un CREDITO IVA: è denaro a tuo favore, non
+// va mostrato col meno né in rosso). Un solo punto decide il colore → niente conflitti Tailwind.
+function Riga({ label, valore, muted, bold, big, tono = 'auto' }: { label: string; valore: number; muted?: boolean; bold?: boolean; big?: boolean; tono?: 'auto' | 'positivo' }) {
+  const coloreValore =
+    tono === 'positivo' ? 'text-emerald-600'
+      : valore < 0 ? 'text-rose-600'
+        : muted ? 'text-ink-navy/50' : 'text-ink-navy'
   return (
     // Sottile linea orizzontale tra le voci: aiuta a leggere a colpo d'occhio quale valore va con quale voce.
     <div className="flex items-center justify-between py-1.5 border-b border-ink-navy/5 last:border-b-0">
       <span className={`${bold ? 'font-semibold text-ink-navy' : muted ? 'text-ink-navy/50' : 'text-ink-navy/70'} ${big ? 'text-base' : ''}`}>{label}</span>
-      <span className={`tabular-nums ${bold ? 'font-bold text-ink-navy' : muted ? 'text-ink-navy/50' : 'text-ink-navy'} ${big ? 'text-lg' : ''} ${valore < 0 ? 'text-rose-600' : ''}`}>
+      <span className={`tabular-nums ${bold ? 'font-bold' : ''} ${big ? 'text-lg' : ''} ${coloreValore}`}>
         {eur(valore)}
       </span>
     </div>
