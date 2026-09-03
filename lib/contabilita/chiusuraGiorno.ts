@@ -4,7 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { scorpora, risolviAliquotaVendita } from './iva'
-import { costoOrarioReale, costoTurno, tariffaAllaData, type TariffaStorica } from './labor'
+import { costoOrarioReale, costoTurno, oreTraOrari, oreDaTimbrature, tariffaAllaData, MOLTIPLICATORE_DEFAULT, type TariffaStorica } from './labor'
 import { quotaPeriodo, ivaCreditoMensile } from './costiFissi'
 import { calcolaContoEconomico, statoSemaforo, type ContoEconomico, type StatoSemaforo } from './spendibile'
 
@@ -41,7 +41,7 @@ export async function riepilogoContabile(
   inizio: Date,
   fine: Date,
 ): Promise<RiepilogoContabile> {
-  const [config, ordini, turni, costiFissi, storicoPaga, fatture] = await Promise.all([
+  const [config, ordini, turni, costiFissi, storicoPaga, fatture, timbrature] = await Promise.all([
     prisma.contabilitaConfig.findUnique({ where: { userId } }),
     prisma.ordine.findMany({
       where: { userId, createdAt: { gte: inizio, lt: fine } },
@@ -85,6 +85,11 @@ export async function riepilogoContabile(
     prisma.fattura.findMany({
       where: { userId, data: { gte: inizio, lt: fine } },
       select: { categoria: true, righe: { select: { imponibile: true, aliquota: true } } },
+    }),
+    // Timbrature del periodo: servono solo se la fonte ore è "timbrature" (usate sotto).
+    prisma.timbratura.findMany({
+      where: { userId, timestamp: { gte: inizio, lt: fine } },
+      select: { dipendenteId: true, tipo: true, timestamp: true },
     }),
   ])
 
@@ -165,6 +170,34 @@ export async function riepilogoContabile(
   // La paga è quella in vigore alla DATA del turno (storico con date di validità): un
   // aumento non riscrive la contabilità passata. Fallback alla paga corrente sul Dipendente
   // solo per chi non ha ancora storico (stato legacy pre-migrazione).
+  //
+  // FONTE ORE (config.fonteOreLabor): "turni" usa gli orari pianificati; "timbrature" usa
+  // le ore reali entrata/uscita del giorno, RIDISTRIBUITE sui turni non-forfait di quel
+  // dipendente/giorno in proporzione alle ore pianificate (così le maggiorazioni per turno
+  // restano) — con fallback ai turni pianificati quando quel giorno non ci sono timbri.
+  const usaTimbrature = config?.fonteOreLabor === 'timbrature'
+  const giornoRoma = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
+
+  // Ore reali per (dipendente, giorno) dai timbri, e ore pianificate non-forfait per lo
+  // stesso raggruppamento (denominatore della ridistribuzione). Calcolati solo se servono.
+  const oreRealiPerDipGiorno = new Map<string, number>()
+  const orePianNonForfaitPerDipGiorno = new Map<string, number>()
+  if (usaTimbrature) {
+    const timbriPerGruppo = new Map<string, { tipo: string; timestamp: Date }[]>()
+    for (const tb of timbrature) {
+      const k = `${tb.dipendenteId}|${giornoRoma(tb.timestamp)}`
+      const arr = timbriPerGruppo.get(k) ?? []
+      arr.push({ tipo: tb.tipo, timestamp: tb.timestamp })
+      timbriPerGruppo.set(k, arr)
+    }
+    for (const [k, arr] of timbriPerGruppo) oreRealiPerDipGiorno.set(k, oreDaTimbrature(arr))
+    for (const t of turni) {
+      if (t.tipoTariffa === 'forfait') continue
+      const k = `${t.dipendenteId}|${giornoRoma(t.data)}`
+      orePianNonForfaitPerDipGiorno.set(k, (orePianNonForfaitPerDipGiorno.get(k) ?? 0) + oreTraOrari(t.oraInizio, t.oraFine))
+    }
+  }
+
   let laborCost = 0
   for (const t of turni) {
     const storico = storicoPerDip.get(t.dipendenteId)
@@ -176,7 +209,19 @@ export async function riepilogoContabile(
       molt = tar?.moltiplicatoreCostoAzienda ?? null
     }
     const oraria = costoOrarioReale(paga, molt)
-    laborCost += costoTurno(t, oraria)
+    const moltEff = molt ?? MOLTIPLICATORE_DEFAULT // usato per il gross-up del forfait (netto → azienda)
+
+    // Ore reali (ridistribuite) se la fonte è timbrature e ci sono timbri per quel giorno.
+    let oreReali: number | undefined
+    if (usaTimbrature && t.tipoTariffa !== 'forfait') {
+      const k = `${t.dipendenteId}|${giornoRoma(t.data)}`
+      const reali = oreRealiPerDipGiorno.get(k)
+      const pian = orePianNonForfaitPerDipGiorno.get(k) ?? 0
+      if (reali != null && reali > 0 && pian > 0) {
+        oreReali = reali * (oreTraOrari(t.oraInizio, t.oraFine) / pian)
+      }
+    }
+    laborCost += costoTurno(t, oraria, oreReali, moltEff)
   }
 
   // ── Costi fissi: quota del periodo + IVA a credito proporzionale ────────────

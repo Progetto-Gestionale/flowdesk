@@ -1,6 +1,7 @@
 import { getAuthUser } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseTariffaTurno } from '@/lib/contabilita/labor'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser()
@@ -9,7 +10,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json()
   await prisma.turno.updateMany({
     where: { id, userId: user.id },
-    data: { oraInizio: body.oraInizio, oraFine: body.oraFine, ruolo: body.ruolo || null, note: body.note || null },
+    data: { oraInizio: body.oraInizio, oraFine: body.oraFine, ruolo: body.ruolo || null, note: body.note || null, ...parseTariffaTurno(body) },
   })
   return NextResponse.json({ ok: true })
 }

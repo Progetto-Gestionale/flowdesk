@@ -1,6 +1,7 @@
 import { getAuthUser } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseTariffaTurno } from '@/lib/contabilita/labor'
 
 export async function GET(req: Request) {
   const user = await getAuthUser()
@@ -25,11 +26,13 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
-  const { dipendenteId, data, oraInizio, oraFine, ruolo, note } = await req.json()
+  const body = await req.json()
+  const { dipendenteId, data, oraInizio, oraFine, ruolo, note } = body
   if (!dipendenteId || !data || !oraInizio || !oraFine)
     return NextResponse.json({ error: 'Campi obbligatori mancanti' }, { status: 400 })
   const turno = await prisma.turno.create({
-    data: { userId: user.id, dipendenteId, data: new Date(data), oraInizio, oraFine, ruolo, note },
+    // ...parseTariffaTurno: tipo tariffa/maggiorazione/forfait (default ordinario ×1.0).
+    data: { userId: user.id, dipendenteId, data: new Date(data), oraInizio, oraFine, ruolo, note, ...parseTariffaTurno(body) },
     include: { dipendente: { select: { id: true, nome: true, ruolo: true } } },
   })
   return NextResponse.json({ turno })

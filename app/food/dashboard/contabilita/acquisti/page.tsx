@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { IconTrash } from '@/app/components/icons'
+import { IconTrash, IconCamera, IconFile } from '@/app/components/icons'
 
 // Aliquote IVA acquisti nella ristorazione (frazione salvata sul DB).
 const ALIQUOTE = [
@@ -45,6 +45,11 @@ export default function AcquistiPage() {
   const [imponibili, setImponibili] = useState<Record<string, string>>({}) // aliquotaKey → imponibile
   const [salvando, setSalvando] = useState(false)
   const [errore, setErrore] = useState('')
+  // OCR foto / import XML: precompilano il form, non salvano (il titolare conferma).
+  const [imports, setImports] = useState<'' | 'foto' | 'xml'>('')
+  const [precompilato, setPrecompilato] = useState(false)
+  const fotoRef = useRef<HTMLInputElement>(null)
+  const xmlRef = useRef<HTMLInputElement>(null)
 
   const carica = useCallback(() => {
     fetch('/api/contabilita/fatture', { credentials: 'include' })
@@ -80,6 +85,51 @@ export default function AcquistiPage() {
     carica()
   }
 
+  // Precompila il form da un estratto (OCR o XML). Non salva: il titolare controlla e conferma.
+  interface Estratto { fornitore: string | null; numero: string | null; data: string | null; categoria: string; righe: RigaOut[] }
+  function applicaEstratto(est: Estratto) {
+    if (est.fornitore) setFornitore(est.fornitore)
+    if (est.numero) setNumero(est.numero)
+    if (est.data) setData(est.data)
+    if (est.categoria) setCategoria(est.categoria)
+    const imp: Record<string, string> = {}
+    for (const r of est.righe) imp[String(r.aliquota)] = String(r.imponibile)
+    setImponibili(imp)
+    setPrecompilato(true)
+  }
+
+  async function onFoto(file: File) {
+    setErrore(''); setImports('foto')
+    try {
+      const dataUrl: string = await new Promise((res, rej) => {
+        const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = rej; fr.readAsDataURL(file)
+      })
+      const r = await fetch('/api/copilot/ocr-bolla', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl, mediaType: file.type }),
+      })
+      const d = await r.json()
+      if (!r.ok) { setErrore(d.error ?? 'Lettura foto non riuscita'); return }
+      applicaEstratto(d.estratto as Estratto)
+    } catch { setErrore('Errore nella lettura della foto') }
+    finally { setImports(''); if (fotoRef.current) fotoRef.current.value = '' }
+  }
+
+  async function onXml(file: File) {
+    setErrore(''); setImports('xml')
+    try {
+      const xml = await file.text()
+      const r = await fetch('/api/contabilita/xml-sdi', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ xml }),
+      })
+      const d = await r.json()
+      if (!r.ok) { setErrore(d.error ?? 'Import XML non riuscito'); return }
+      applicaEstratto(d.estratto as Estratto)
+    } catch { setErrore('Errore nella lettura dell’XML') }
+    finally { setImports(''); if (xmlRef.current) xmlRef.current.value = '' }
+  }
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
@@ -90,7 +140,29 @@ export default function AcquistiPage() {
 
       {/* Nuova bolla */}
       <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm space-y-4">
-        <h2 className="text-base font-semibold text-ink-navy">Aggiungi una bolla</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-base font-semibold text-ink-navy">Aggiungi una bolla</h2>
+          <div className="flex items-center gap-2">
+            <input ref={fotoRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onFoto(f) }} />
+            <button onClick={() => fotoRef.current?.click()} disabled={imports !== ''}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-ink-navy/15 text-ink-navy/70 hover:border-electric-blue hover:text-electric-blue disabled:opacity-40 transition-colors">
+              <span className="w-4 h-4"><IconCamera /></span>{imports === 'foto' ? 'Leggo…' : 'Foto bolla'}
+            </button>
+            <input ref={xmlRef} type="file" accept=".xml,text/xml,application/xml" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onXml(f) }} />
+            <button onClick={() => xmlRef.current?.click()} disabled={imports !== ''}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-ink-navy/15 text-ink-navy/70 hover:border-electric-blue hover:text-electric-blue disabled:opacity-40 transition-colors">
+              <span className="w-4 h-4"><IconFile /></span>{imports === 'xml' ? 'Importo…' : 'Importa XML'}
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-ink-navy/45 -mt-2">Scatta la foto della bolla o carica l&apos;XML della fattura elettronica: compilo io i campi, tu <b>controlli e salvi</b>.</p>
+        {precompilato && (
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
+            ✓ Campi precompilati automaticamente. <b>Controlla</b> importi e aliquote, poi premi «Salva bolla».
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <label className="text-xs text-ink-navy/55 sm:col-span-2">

@@ -53,17 +53,36 @@ export default function CopilotaPage() {
   // Se il titolare vuole fare domande fuori dal brief, sgancia la chat: non passa più
   // il periodo del brief → l'assistente risponde a tutto tramite i suoi strumenti.
   const [libera, setLibera] = useState(false)
-  const agganciato = briefReady && !libera
+  // Contesto Contabilità arrivato da "Approfondisci" (deep-link ?scope=contabilita…):
+  // le domande usano i numeri di quella schermata/periodo invece del brief operativo.
+  const [financial, setFinancial] = useState<{ periodo: string; riferimento: string } | null>(null)
+  const agganciato = briefReady && !libera && !financial
   const scrollRef = useRef<HTMLDivElement>(null)
   const idratato = useRef(false)
 
   useEffect(() => {
-    setMessages(caricaChat())
-    idratato.current = true
     fetch('/api/copilot/spesa', { credentials: 'include' })
       .then((r) => r.json())
       .then((d) => { if (typeof d.costoEur === 'number') setCostoEur(d.costoEur) })
       .catch(() => {})
+
+    // Deep-link da "Approfondisci" nella Contabilità: apre una chat FRESCA sul periodo,
+    // col contesto finanziario, e fa da sola la prima domanda.
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('scope') === 'contabilita' && sp.get('periodo')) {
+      const fin = { periodo: sp.get('periodo') as string, riferimento: sp.get('riferimento') ?? '' }
+      setFinancial(fin)
+      try { localStorage.removeItem(STORAGE_KEY) } catch {}
+      window.history.replaceState({}, '', '/food/dashboard/assistente') // niente re-seed al refresh
+      idratato.current = true
+      const q: Record<string, string> = { oggi: 'di oggi', settimana: 'della settimana', mese: 'del mese', anno: "dell'anno" }
+      invia(`Spiegami la contabilità ${q[fin.periodo] ?? 'del periodo'}: com'è la situazione e cosa mi conviene fare?`, fin)
+      return
+    }
+
+    setMessages(caricaChat())
+    idratato.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -84,21 +103,27 @@ export default function CopilotaPage() {
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
-  async function invia(testo: string) {
+  async function invia(testo: string, finOverride?: { periodo: string; riferimento: string }) {
     const domanda = testo.trim()
     if (!domanda || loading) return
     const nuoviMessaggi: Msg[] = [...messages, { role: 'user', content: domanda }]
     setMessages(nuoviMessaggi)
     setInput('')
     setLoading(true)
+    // Priorità al contesto Contabilità (da "Approfondisci"); altrimenti quello del brief.
+    const fin = finOverride ?? financial
     try {
       const res = await fetch('/api/copilot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        // Se c'è un brief a schermo, agganciamo la chat a quel periodo: i chiarimenti
-        // useranno quei numeri (meno token, coerenza con ciò che l'utente vede).
-        body: JSON.stringify({ messages: nuoviMessaggi, briefTimeframe: agganciato ? briefTf : undefined }),
+        // Contesto agganciato (numeri già visti → meno token, coerenza con la schermata):
+        // financial = Contabilità, altrimenti briefTimeframe = brief operativo.
+        body: JSON.stringify({
+          messages: nuoviMessaggi,
+          financial: fin ?? undefined,
+          briefTimeframe: !fin && agganciato ? briefTf : undefined,
+        }),
       })
       const data = await res.json()
       const risposta = res.ok ? (data.text || 'Non ho una risposta per questa domanda.') : `⚠️ ${data.error || 'Si è verificato un errore.'}`
@@ -194,7 +219,13 @@ export default function CopilotaPage() {
 
       {/* Input */}
       <div className="px-4 sm:px-6 py-4 border-t border-ink-navy/10">
-        {briefReady && (
+        {financial && (
+          <div className="mb-2 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full inline-block shrink-0 bg-electric-blue" />
+            <p className="text-[11px] text-ink-navy/50">Chat sulla <b>Contabilità</b> ({TF_LABEL[financial.periodo === 'settimana' ? 'weekly' : financial.periodo === 'oggi' ? 'daily' : 'monthly']}): le domande usano quei numeri.</p>
+          </div>
+        )}
+        {briefReady && !financial && (
           <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
             <p className="text-[11px] text-ink-navy/50 flex items-center gap-1.5 min-w-0">
               <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${agganciato ? 'bg-electric-blue' : 'bg-ink-navy/25'}`} />

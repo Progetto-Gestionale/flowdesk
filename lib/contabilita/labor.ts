@@ -46,6 +46,25 @@ export function tariffaAllaData(storico: TariffaStorica[], data: Date): TariffaS
   return scelta
 }
 
+export const TIPI_TARIFFA = ['ordinario', 'straordinario', 'festivo_evento', 'forfait'] as const
+
+// Estrae e valida i campi tariffa di un turno da un body JSON (POST/PATCH /api/turni).
+// La maggiorazione è LIBERA (la sceglie il titolare); clamp di sicurezza a [0.1, 5].
+// forfait → importo fisso del turno (le ore/maggiorazione vengono ignorate nel costo).
+export function parseTariffaTurno(b: { tipoTariffa?: unknown; maggiorazione?: unknown; forfaitImporto?: unknown }): {
+  tipoTariffa: string
+  maggiorazione: number
+  forfaitImporto: number | null
+} {
+  const tipo = (TIPI_TARIFFA as readonly string[]).includes(String(b.tipoTariffa)) ? String(b.tipoTariffa) : 'ordinario'
+  if (tipo === 'forfait') {
+    const f = Number(b.forfaitImporto)
+    return { tipoTariffa: 'forfait', maggiorazione: 1, forfaitImporto: Number.isFinite(f) && f > 0 ? Math.round(f * 100) / 100 : null }
+  }
+  const m = Number(b.maggiorazione)
+  return { tipoTariffa: tipo, maggiorazione: Number.isFinite(m) ? Math.min(5, Math.max(0.1, m)) : 1, forfaitImporto: null }
+}
+
 export interface TurnoLike {
   oraInizio: string
   oraFine: string
@@ -55,12 +74,15 @@ export interface TurnoLike {
 }
 
 // Costo di un singolo turno.
-//   forfait → l'importo fisso concordato (ignora ore e maggiorazione)
+//   forfait → importo NETTO concordato × moltiplicatore costi azienda (ignora ore e
+//             maggiorazione). Coerente con la paga oraria, anch'essa netta e gonfiata dal
+//             moltiplicatore: il titolare pensa a quanto dà in mano, il sistema aggiunge i
+//             costi nascosti. Passa `moltiplicatore` per il gross-up (assente = nessun gross-up).
 //   altrimenti → ore × costo orario reale × maggiorazione
 // `oreReali` (dalle timbrature) ha precedenza sulle ore pianificate del turno, quando fornito.
-export function costoTurno(turno: TurnoLike, costoOrario: number, oreReali?: number): number {
+export function costoTurno(turno: TurnoLike, costoOrario: number, oreReali?: number, moltiplicatore?: number): number {
   if (turno.tipoTariffa === 'forfait' && turno.forfaitImporto != null) {
-    return turno.forfaitImporto
+    return turno.forfaitImporto * (moltiplicatore ?? 1)
   }
   const ore = oreReali ?? oreTraOrari(turno.oraInizio, turno.oraFine)
   return ore * costoOrario * (turno.maggiorazione || 1)
