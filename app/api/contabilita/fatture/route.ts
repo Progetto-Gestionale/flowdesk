@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const fatture = await prisma.fattura.findMany({
     where: { userId: user.id, data: { gte: p.inizio, lt: p.fine } },
     orderBy: { data: 'desc' },
-    select: { id: true, fornitore: true, numero: true, data: true, categoria: true, note: true, righe: { select: { imponibile: true, aliquota: true } } },
+    select: { id: true, fornitore: true, partitaIvaFornitore: true, numero: true, data: true, categoria: true, note: true, righe: { select: { imponibile: true, aliquota: true } } },
   })
 
   // Ogni fattura con i suoi totali (netto, IVA, lordo) già calcolati per la UI.
@@ -59,6 +59,7 @@ export async function POST(req: Request) {
     data: {
       userId: user.id,
       fornitore: typeof b.fornitore === 'string' && b.fornitore.trim() ? b.fornitore.trim() : null,
+      partitaIvaFornitore: typeof b.partitaIvaFornitore === 'string' && b.partitaIvaFornitore.trim() ? b.partitaIvaFornitore.trim() : null,
       numero: typeof b.numero === 'string' && b.numero.trim() ? b.numero.trim() : null,
       data,
       categoria,
