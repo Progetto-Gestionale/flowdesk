@@ -64,18 +64,29 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
   }
 
+  // Genera SOLO su richiesta esplicita del titolare (tasto "Genera analisi") per i
+  // periodi passati. Per il periodo in corso la card genera in automatico (auto=1).
+  const genera = searchParams.get('genera') === '1'
+
   // Numeri (sempre dal codice) + hash per la cache.
-  const { context, hash, label, riferimentoKey, vuoto } = await buildFinancialContext(user.id, periodo, riferimento)
+  const { context, hash, label, riferimentoKey, vuoto, corrente } = await buildFinancialContext(user.id, periodo, riferimento)
 
   // 1. Cache per hash: stessi numeri dell'ultima volta → nessuna chiamata AI.
   const cached = await prisma.copilotInsight.findUnique({
     where: { userId_scope_periodo_riferimento: { userId: user.id, scope, periodo, riferimento: riferimentoKey } },
   }).catch(() => null)
   if (cached && cached.hash === hash) {
-    return NextResponse.json({ brief: JSON.parse(cached.brief) as Brief, label, cached: true, generatedAt: cached.generatedAt })
+    return NextResponse.json({ brief: JSON.parse(cached.brief) as Brief, label, cached: true, generatedAt: cached.generatedAt, corrente })
   }
 
-  // 2/3. Niente venduto o budget esaurito → verdetto deterministico (niente AI).
+  // 2. RISPARMIO TOKEN: se il periodo è PASSATO e non c'è una richiesta esplicita di
+  //    generazione, non chiamiamo l'AI. Restituiamo un placeholder "generabile" e la
+  //    card mostra un tasto "Genera analisi AI per questo periodo".
+  if (!corrente && !genera) {
+    return NextResponse.json({ brief: null, label, generabile: true, corrente })
+  }
+
+  // 3. Niente venduto o budget esaurito → verdetto deterministico (niente AI).
   if (vuoto || (await spesaMeseEur(user.id)) >= BUDGET_EUR) {
     const brief = briefDeterministico(context, label)
     await salvaInsight(user.id, scope, periodo, riferimentoKey, hash, brief)

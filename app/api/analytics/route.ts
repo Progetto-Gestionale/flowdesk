@@ -1,6 +1,7 @@
 import { getAuthUser } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { WHERE_CONTO_CHIUSO } from '@/lib/ordini/contoChiuso'
 
 export async function GET(req: Request) {
   const user = await getAuthUser()
@@ -55,7 +56,8 @@ export async function GET(req: Request) {
       select: { data: true, status: true },
     }),
     prisma.ordine.findMany({
-      where: { userId: user.id, createdAt: { gte: inizio, lt: limiteSuperiore } },
+      // Ricavi solo dai conti chiusi (coerente con la contabilità).
+      where: { userId: user.id, createdAt: { gte: inizio, lt: limiteSuperiore }, ...WHERE_CONTO_CHIUSO },
       select: { createdAt: true, totale: true },
     }),
   ])

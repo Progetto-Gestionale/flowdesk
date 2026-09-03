@@ -48,6 +48,31 @@ export function tariffaAllaData(storico: TariffaStorica[], data: Date): TariffaS
 
 export const TIPI_TARIFFA = ['ordinario', 'straordinario', 'festivo_evento', 'forfait'] as const
 
+// Maggiorazioni di partenza per ogni tipo di tariffa (moltiplicano il costo orario). Sono
+// solo il DEFAULT proposto in UI: il titolare può cambiarle e il suo valore viene ricordato
+// (ContabilitaConfig.maggiorazioniDefault). forfait non usa maggiorazione (importo fisso).
+export const MAGGIORAZIONI_DEFAULT: Record<string, number> = {
+  ordinario: 1,
+  straordinario: 1.15,
+  festivo_evento: 1.3,
+  forfait: 1,
+}
+
+// Unisce i default preferiti dal titolare (JSON salvato in config) sopra quelli di sistema.
+// Ignora valori non validi. Usata dall'API e come preset nella UI turni.
+export function mergeMaggiorazioni(json: string | null | undefined): Record<string, number> {
+  const out = { ...MAGGIORAZIONI_DEFAULT }
+  if (!json) return out
+  try {
+    const parsed = JSON.parse(json) as Record<string, unknown>
+    for (const tipo of TIPI_TARIFFA) {
+      const v = Number(parsed[tipo])
+      if (Number.isFinite(v) && v >= 0.1 && v <= 5) out[tipo] = v
+    }
+  } catch { /* JSON corrotto → solo default di sistema */ }
+  return out
+}
+
 // Estrae e valida i campi tariffa di un turno da un body JSON (POST/PATCH /api/turni).
 // La maggiorazione è LIBERA (la sceglie il titolare); clamp di sicurezza a [0.1, 5].
 // forfait → importo fisso del turno (le ore/maggiorazione vengono ignorate nel costo).

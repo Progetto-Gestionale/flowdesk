@@ -182,6 +182,28 @@ function buildMenuMetrics(dishes: DishAgg[]): { metrics: Metric[]; azioni: Allow
     }
   }
 
+  // Piatto in perdita: margine NEGATIVO (il food cost supera il prezzo → perdi soldi a
+  // ogni vendita). Oltre al ritocco di prezzo, l'AI può proporre di toglierlo dal menu
+  // (segnarlo esaurito) finché non se ne rivede prezzo o ricetta. È l'azione più forte,
+  // per questo la limitiamo al caso davvero critico (margine sotto zero).
+  const inPerdita = withCost
+    .filter((d) => d.marginPct < 0 && d.piattoId && d.qty > 0)
+    .sort((a, b) => a.marginPct - b.marginPct)[0]
+  if (inPerdita) {
+    metrics.push({
+      key: 'menu_in_perdita',
+      label: 'Venduto in perdita (food cost oltre il prezzo)',
+      value: inPerdita.nome,
+      deltaLabel: `${inPerdita.qty} vendite, margine ${Math.round(inPerdita.marginPct)}%`,
+    })
+    azioni.push({
+      id: `imposta_disponibilita_${inPerdita.piattoId}`,
+      kind: 'imposta_disponibilita',
+      target: { piattoId: inPerdita.piattoId, piattoNome: inPerdita.nome, disponibile: false },
+      description: `Segna "${inPerdita.nome}" come esaurito: ogni vendita è in perdita (il food cost supera il prezzo). Toglilo dal menu finché non ne rivedi prezzo o ricetta.`,
+    })
+  }
+
   // Campione nascosto: poco venduto E margine sopra la media di almeno GAP punti.
   const campione = withCost
     .filter((d) => d.qty < median && d.marginPct >= margineMedio + GAP)
@@ -265,6 +287,39 @@ async function buildEconomicSection(
     },
   ]
 
+  // ── Allerta PERSONALE (per l'azione "apri_staff") ──
+  // Due lacune opposte, entrambe importanti per la salute reale:
+  //  · labor non tracciato (laborPct = 0 con venduto) → l'utile è gonfiato, mancano le paghe.
+  //  · labor troppo alto (oltre soglia) → il personale erode il margine, turni da rivedere.
+  if (laborPct <= 0) {
+    metrics.push({
+      key: 'labor_non_tracciato',
+      label: 'Costo del personale non impostato',
+      value: 'paghe/turni non conteggiati',
+      deltaLabel: 'senza costo del personale il margine netto è sovrastimato',
+    })
+  } else if (laborPct >= 40) {
+    metrics.push({
+      key: 'labor_alto',
+      label: 'Personale sopra soglia',
+      value: laborPct,
+      unit: '%',
+      deltaLabel: 'oltre ~40% del venduto: i turni pesano molto sul margine',
+    })
+  }
+
+  // ── Allerta COSTI FISSI (per l'azione "apri_costi") ──
+  // Nessun costo fisso imputato al periodo pur avendo venduto → affitto/utenze/servizi
+  // probabilmente non registrati: il margine netto e i "soldi realmente tuoi" sono gonfiati.
+  if (c.quotaCostiFissi <= 0) {
+    metrics.push({
+      key: 'costi_fissi_mancanti',
+      label: 'Costi fissi non registrati',
+      value: 'affitto/utenze/servizi assenti',
+      deltaLabel: 'senza costi fissi il margine netto è sovrastimato',
+    })
+  }
+
   // Acquisti (bolle F3): se ci sono, confronto comprato vs consumato; se mancano del tutto
   // ma c'è food cost, il credito IVA sulle merci non è tracciato → l'AI può suggerire di inserirle.
   if (r.acquisti.numero > 0) {
@@ -311,6 +366,18 @@ const AZIONI: AllowedAction[] = [
     kind: 'link',
     target: { href: '/food/dashboard/menu' },
     description: 'Apri la sezione Menu per intervenire su un piatto (prezzo, disponibilità, ordine nel menu).',
+  },
+  {
+    id: 'apri_costi',
+    kind: 'link',
+    target: { href: '/food/dashboard/contabilita/costi' },
+    description: 'Apri Costi & Personale per registrare costi fissi (affitto, utenze, servizi) o rivedere le paghe del personale.',
+  },
+  {
+    id: 'apri_staff',
+    kind: 'link',
+    target: { href: '/food/dashboard/staff' },
+    description: 'Apri Staff per rivedere i turni e il costo del personale (aggiungere/togliere una persona, rigenerare i turni).',
   },
   {
     id: 'apri_analytics',

@@ -25,10 +25,10 @@ const navFood = [
     section: 'Gestione',
     items: [
       { label: 'Menu', href: '/food/dashboard/menu', Icon: IconFork },
-      { label: 'Analytics', href: '/food/dashboard/analytics', Icon: IconChartBar },
-      { label: 'Contabilità', href: '/food/dashboard/contabilita', Icon: IconCard },
       { label: 'Staff', href: '/food/dashboard/staff', Icon: IconUsers },
       { label: 'QR Timbratura', href: '/food/dashboard/timbrature', Icon: IconClock },
+      { label: 'Analytics', href: '/food/dashboard/analytics', Icon: IconChartBar },
+      { label: 'Contabilità', href: '/food/dashboard/contabilita', Icon: IconCard },
     ],
   },
   {

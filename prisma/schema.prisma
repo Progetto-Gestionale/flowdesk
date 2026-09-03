@@ -79,6 +79,7 @@ model User {
   // Flowest Contabilità (owner-only)
   contabilitaConfig     ContabilitaConfig?
   costiFissi            CostoFisso[]
+  costiUnaTantum        CostoUnaTantum[]
   fatture               Fattura[]
   chiusureGiorno        ChiusuraGiorno[]
   briefSalvati          BriefSalvato[]
@@ -718,6 +719,11 @@ model ContabilitaConfig {
   // Da dove prendere le ore per il costo del personale: "turni" (pianificate, default) o
   // "timbrature" (ore reali entrata/uscita, con fallback ai turni quando mancano i timbri).
   fonteOreLabor                    String   @default("turni") // "turni" | "timbrature"
+  // Moltiplicatori "maggiorazione" preferiti dal titolare per ogni tipoTariffa dei turni.
+  // JSON { "straordinario": 1.15, "festivo_evento": 1.5, ... }: parte dai default di sistema,
+  // ma quando il titolare cambia il moltiplicatore di un turno quel valore diventa il default
+  // per quel tipo (festivo/evento/straordinario) finché non lo ricambia. Vuoto = usa i default.
+  maggiorazioniDefault             String   @default("{}")
   updatedAt                        DateTime @updatedAt
   user                             User     @relation(fields: [userId], references: [id])
 }
@@ -767,6 +773,27 @@ model CostoFisso {
   user         User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+// Costi una tantum / spot: NON ricorrenti, legati a un intervallo di date preciso
+// (un giorno, una settimana, un mese…). Esempi: un cameriere in più per un evento, una
+// riparazione, spese accessorie occasionali. A differenza di CostoFisso (spalmato ogni
+// giorno per sempre), qui l'importo netto TOTALE del periodo si spalma SOLO sui giorni tra
+// dataInizio e dataFine (inclusa): così il conto economico dei giorni/mesi coinvolti è
+// corretto e i periodi non toccati non vedono nulla. Singolo giorno → dataFine = dataInizio.
+model CostoUnaTantum {
+  id           String   @id @default(cuid())
+  userId       String
+  voce         String // "Cameriere extra sabato", "Riparazione frigo", "Spese accessorie"…
+  categoria    String   @default("altro") // stesse categorie di CostoFisso (incl. "personale_extra")
+  importoNetto Float // netto IVA, TOTALE del periodo (verrà spalmato sui giorni)
+  aliquota     Float    @default(0.22)
+  dataInizio   DateTime // primo giorno coperto (mezzanotte Roma in UTC)
+  dataFine     DateTime // ultimo giorno coperto, incluso (= dataInizio se singolo giorno)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, dataInizio])
 }
 
 // Snapshot contabile di fine giornata (fuso Europe/Rome). Congela i valori del giorno
