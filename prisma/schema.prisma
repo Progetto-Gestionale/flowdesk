@@ -708,6 +708,10 @@ model PrintJob {
 model ContabilitaConfig {
   id                               String   @id @default(cuid())
   userId                           String   @unique
+  // Anagrafica fiscale del locale, usata nell'intestazione del report per il commercialista.
+  ragioneSociale                   String? // es. "Trattoria Da Mario S.r.l."
+  partitaIva                       String?
+  codiceFiscale                    String?
   aliquotaVenditaDefault           Float    @default(0.10) // somministrazione al tavolo
   percentualeAccantonamentoImposte Float    @default(0.15) // regime ordinario: % sull'EBITDA → fondo imposte stimato
   moltiplicatoreLaborDefault       Float    @default(1.40) // default per i nuovi dipendenti
@@ -736,6 +740,7 @@ model Fattura {
   id        String        @id @default(cuid())
   userId    String
   fornitore String?
+  partitaIvaFornitore String? // P.IVA del fornitore, per il registro acquisti (facoltativa)
   numero    String?
   data      DateTime // data documento (competenza IVA)
   categoria String        @default("merci") // "merci"|"bevande"|"servizi"|"altro"

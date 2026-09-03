@@ -55,6 +55,7 @@ export default function AcquistiPage() {
 
   // Form nuova bolla. Gli importi per aliquota si copiano dal riquadro "Riepilogo IVA".
   const [fornitore, setFornitore] = useState('')
+  const [partitaIvaFornitore, setPartitaIvaFornitore] = useState('')
   const [numero, setNumero] = useState('')
   const [data, setData] = useState(oggiISO())
   const [categoria, setCategoria] = useState('merci')
@@ -88,13 +89,13 @@ export default function AcquistiPage() {
     setSalvando(true)
     const res = await fetch('/api/contabilita/fatture', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fornitore, numero, data, categoria, righe: righeAnteprima }),
+      body: JSON.stringify({ fornitore, partitaIvaFornitore, numero, data, categoria, righe: righeAnteprima }),
     })
     setSalvando(false)
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErrore(d.error ?? 'Errore nel salvataggio'); return }
     // Salta al mese della bolla appena salvata, così la vedi subito nell'elenco.
     const meseBolla = primoDelMese(new Date(data))
-    setFornitore(''); setNumero(''); setData(oggiISO()); setCategoria('merci'); setImponibili({}); setPrecompilato(false)
+    setFornitore(''); setPartitaIvaFornitore(''); setNumero(''); setData(oggiISO()); setCategoria('merci'); setImponibili({}); setPrecompilato(false)
     if (meseBolla.getTime() !== rifMese.getTime()) setRifMese(meseBolla) // il cambio mese ricarica da solo
     else carica()
   }
@@ -187,6 +188,11 @@ export default function AcquistiPage() {
           <label className="text-xs text-ink-navy/55 sm:col-span-2">
             Fornitore
             <input value={fornitore} onChange={e => setFornitore(e.target.value)} placeholder="es. Ittica Rossi"
+              className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white text-ink-navy" />
+          </label>
+          <label className="text-xs text-ink-navy/55 sm:col-span-2">
+            P.IVA fornitore <span className="text-ink-navy/35">(facoltativa)</span>
+            <input value={partitaIvaFornitore} onChange={e => setPartitaIvaFornitore(e.target.value)} inputMode="numeric" placeholder="es. 01234567890"
               className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white text-ink-navy" />
           </label>
           <label className="text-xs text-ink-navy/55">

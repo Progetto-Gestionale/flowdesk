@@ -29,7 +29,12 @@ export async function POST(req: Request) {
     const n = Number(v)
     return Number.isFinite(n) && n >= 0 && n <= 1 ? n : def
   }
+  // Stringa "pulita" o null (anagrafica fiscale, facoltativa).
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
   const data = {
+    ragioneSociale: str(body.ragioneSociale),
+    partitaIva: str(body.partitaIva),
+    codiceFiscale: str(body.codiceFiscale),
     aliquotaVenditaDefault: clampPct(body.aliquotaVenditaDefault, 0.1),
     percentualeAccantonamentoImposte: clampPct(body.percentualeAccantonamentoImposte, 0.15),
     moltiplicatoreLaborDefault: Math.max(1, Number(body.moltiplicatoreLaborDefault) || 1.4),

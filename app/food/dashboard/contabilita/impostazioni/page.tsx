@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 interface Config {
+  ragioneSociale?: string | null
+  partitaIva?: string | null
+  codiceFiscale?: string | null
   aliquotaVenditaDefault: number
   percentualeAccantonamentoImposte: number
   moltiplicatoreLaborDefault: number
@@ -40,6 +43,28 @@ export default function ImpostazioniContabiliPage() {
         <Link href="/food/dashboard/contabilita" className="text-xs text-ink-navy/50 hover:text-ink-navy">← Contabilità</Link>
         <h1 className="text-xl font-bold text-ink-navy mt-1">Impostazioni contabili</h1>
         <p className="text-sm text-ink-navy/50">Valgono per tutto il locale. Le eccezioni si impostano sulla singola categoria/piatto.</p>
+      </div>
+
+      {/* Dati fiscali del locale: usati nell'intestazione del report per il commercialista. */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm space-y-5">
+        <div>
+          <p className="text-sm font-semibold text-ink-navy">Dati fiscali del locale</p>
+          <p className="text-xs text-ink-navy/45">Compaiono nell&apos;intestazione del report Excel per il commercialista. Facoltativi ma consigliati.</p>
+        </div>
+        <Campo label="Ragione sociale" hint="Es. «Trattoria Da Mario S.r.l.». Se vuota, nel report si usa il nome del locale.">
+          <input type="text" value={cfg.ragioneSociale ?? ''} onChange={e => setCfg({ ...cfg, ragioneSociale: e.target.value })}
+            placeholder="Ragione sociale" className="w-full max-w-md px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+        </Campo>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Campo label="Partita IVA" hint="11 cifre.">
+            <input type="text" inputMode="numeric" value={cfg.partitaIva ?? ''} onChange={e => setCfg({ ...cfg, partitaIva: e.target.value })}
+              placeholder="01234567890" className="w-full px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          </Campo>
+          <Campo label="Codice Fiscale" hint="Del titolare o della società.">
+            <input type="text" value={cfg.codiceFiscale ?? ''} onChange={e => setCfg({ ...cfg, codiceFiscale: e.target.value })}
+              placeholder="Codice Fiscale" className="w-full px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          </Campo>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm space-y-5">

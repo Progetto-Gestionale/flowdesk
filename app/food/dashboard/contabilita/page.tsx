@@ -298,9 +298,9 @@ export default function ContabilitaPage() {
           <div className="flex items-center justify-between bg-white rounded-2xl border border-ink-navy/10 p-5 shadow-sm">
             <div>
               <p className="text-sm font-semibold text-ink-navy">Report per il commercialista</p>
-              <p className="text-xs text-ink-navy/50">Excel con conto economico, ricavi e costi del periodo.</p>
+              <p className="text-xs text-ink-navy/50">Excel mensile: corrispettivi giornalieri, registri IVA vendite/acquisti, liquidazione IVA, conto economico e dettaglio costi.</p>
             </div>
-            <a href={`/api/contabilita/export?periodo=${periodo}`}
+            <a href={`/api/contabilita/export?riferimento=${riferimento.toISOString()}`}
               className="text-sm font-semibold bg-ink-navy text-white rounded-lg px-4 py-2.5 hover:bg-ink-navy/90">
               Esporta Excel
             </a>
