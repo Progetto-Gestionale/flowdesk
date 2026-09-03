@@ -74,6 +74,16 @@ export interface BriefContext {
   // contabilità). Se presente, sovrascrive lo status scelto dall'AI: un dato
   // certo non va lasciato all'interpretazione del modello. Assente = decide l'AI.
   statusHint?: HealthStatus
+  // Solo per periodi di CALENDARIO che possono essere ancora in corso (contabilità:
+  // oggi/settimana/mese/anno correnti). Se `inProgress`, i totali sono PARZIALI: il
+  // narratore deve dichiararlo e NON deve confrontare un periodo parziale con uno
+  // concluso come se fosse definitivo. Assente = periodo concluso o finestra mobile.
+  periodProgress?: {
+    inProgress: boolean
+    elapsedDays: number // giorni già trascorsi del periodo (min 1)
+    totalDays: number // giorni totali del periodo
+    pct: number // 0..100, quota del periodo trascorsa
+  }
 }
 
 // Un punto del "perché". `evidence` cita i Metric.key presenti nel contesto.

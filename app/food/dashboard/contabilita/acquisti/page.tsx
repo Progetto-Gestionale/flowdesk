@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { IconTrash, IconCamera, IconFile } from '@/app/components/icons'
+import { MiniCalendario } from '@/app/components/MiniCalendario'
 
 // Aliquote IVA acquisti nella ristorazione (frazione salvata sul DB).
 const ALIQUOTE = [
@@ -32,10 +33,25 @@ interface Totali { netto: number; iva: number; numero: number }
 
 const CAT_LABEL: Record<string, string> = Object.fromEntries(CATEGORIE.map(([v, l]) => [v, l]))
 
+// Primo giorno del mese di una data (a mezzogiorno, per evitare slittamenti di fuso).
+const primoDelMese = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 15, 12, 0, 0)
+// Riferimento "YYYY-MM-15" da passare all'API (calcola il mese senza ambiguità di fuso).
+const rifISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-15`
+const MESI_NAV_INDIETRO = 24 // quanto indietro si può navigare dalla UI (le bolle restano comunque nel DB)
+
 export default function AcquistiPage() {
   const [fatture, setFatture] = useState<Fattura[]>([])
   const [totali, setTotali] = useState<Totali>({ netto: 0, iva: 0, numero: 0 })
   const [label, setLabel] = useState('')
+
+  // Mese visualizzato nell'elenco bolle. Default = mese corrente; frecce ◀ ▶ per navigare.
+  const meseCorrente = primoDelMese(new Date())
+  const [rifMese, setRifMese] = useState<Date>(meseCorrente)
+  const limiteIndietro = new Date(meseCorrente.getFullYear(), meseCorrente.getMonth() - MESI_NAV_INDIETRO, 15, 12, 0, 0)
+  const puoAvanti = rifMese < meseCorrente
+  const puoIndietro = rifMese > limiteIndietro
+  const cambiaMese = (delta: number) => setRifMese(m => new Date(m.getFullYear(), m.getMonth() + delta, 15, 12, 0, 0))
+  const [calAperto, setCalAperto] = useState(false)
 
   // Form nuova bolla. Gli importi per aliquota si copiano dal riquadro "Riepilogo IVA".
   const [fornitore, setFornitore] = useState('')
@@ -52,11 +68,11 @@ export default function AcquistiPage() {
   const xmlRef = useRef<HTMLInputElement>(null)
 
   const carica = useCallback(() => {
-    fetch('/api/contabilita/fatture', { credentials: 'include' })
+    fetch(`/api/contabilita/fatture?periodo=mese&riferimento=${rifISO(rifMese)}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { setFatture(d.fatture ?? []); setTotali(d.totali ?? { netto: 0, iva: 0, numero: 0 }); setLabel(d.label ?? '') })
       .catch(() => {})
-  }, [])
+  }, [rifMese])
   useEffect(() => { carica() }, [carica])
 
   // Anteprima live di IVA e totale della bolla che si sta compilando.
@@ -76,8 +92,11 @@ export default function AcquistiPage() {
     })
     setSalvando(false)
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErrore(d.error ?? 'Errore nel salvataggio'); return }
-    setFornitore(''); setNumero(''); setData(oggiISO()); setCategoria('merci'); setImponibili({})
-    carica()
+    // Salta al mese della bolla appena salvata, così la vedi subito nell'elenco.
+    const meseBolla = primoDelMese(new Date(data))
+    setFornitore(''); setNumero(''); setData(oggiISO()); setCategoria('merci'); setImponibili({}); setPrecompilato(false)
+    if (meseBolla.getTime() !== rifMese.getTime()) setRifMese(meseBolla) // il cambio mese ricarica da solo
+    else carica()
   }
 
   async function elimina(id: string) {
@@ -227,8 +246,31 @@ export default function AcquistiPage() {
 
       {/* Elenco bolle del periodo */}
       <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-ink-navy">Bolle di {label || 'questo mese'}</h2>
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <div className="relative flex items-center gap-1">
+            <button onClick={() => cambiaMese(-1)} disabled={!puoIndietro}
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist disabled:opacity-30 disabled:hover:bg-transparent"
+              aria-label="Mese precedente">‹</button>
+            {/* Clic sull'etichetta = apre il calendarietto per saltare a un mese (come in Analytics). */}
+            <button onClick={() => setCalAperto(v => !v)}
+              className="text-base font-semibold text-ink-navy min-w-[8rem] text-center rounded-lg px-2 py-0.5 hover:bg-mist transition-colors">
+              Bolle di {label || 'questo mese'}
+            </button>
+            <button onClick={() => cambiaMese(1)} disabled={!puoAvanti}
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-ink-navy/10 text-ink-navy/60 hover:bg-mist disabled:opacity-30 disabled:hover:bg-transparent"
+              aria-label="Mese successivo">›</button>
+            {rifMese < meseCorrente && (
+              <button onClick={() => setRifMese(meseCorrente)} className="ml-1 text-xs text-electric-blue hover:underline">oggi</button>
+            )}
+            {calAperto && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setCalAperto(false)} />
+                <MiniCalendario periodo="mese" riferimento={rifMese}
+                  onScegli={d => { setRifMese(primoDelMese(d)); setCalAperto(false) }}
+                  onChiudi={() => setCalAperto(false)} />
+              </>
+            )}
+          </div>
           <span className="text-sm text-ink-navy/50">Credito IVA <b className="text-emerald-600">{eur(totali.iva)}</b> · su {eur(totali.netto)} netto</span>
         </div>
         <div className="space-y-2">

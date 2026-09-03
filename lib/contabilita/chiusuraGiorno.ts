@@ -7,6 +7,7 @@ import { scorpora, risolviAliquotaVendita } from './iva'
 import { costoOrarioReale, costoTurno, oreTraOrari, oreDaTimbrature, tariffaAllaData, MOLTIPLICATORE_DEFAULT, type TariffaStorica } from './labor'
 import { quotaPeriodo, ivaCreditoMensile } from './costiFissi'
 import { calcolaContoEconomico, statoSemaforo, type ContoEconomico, type StatoSemaforo } from './spendibile'
+import { WHERE_CONTO_CHIUSO } from '@/lib/ordini/contoChiuso'
 
 export interface RigaIvaAliquota { aliquota: number; imponibile: number; iva: number }
 
@@ -36,15 +37,36 @@ function giorniTrascorsi(inizio: Date, fine: Date): number {
   return Math.max(1, Math.ceil(ms / 86_400_000))
 }
 
+// Quota netta di un costo una tantum che cade nell'intervallo [inizio, fine).
+// Il costo copre [dataInizio, dataFine+1giorno) (dataFine inclusa); l'importo totale si
+// spalma equamente sui giorni coperti, e restituiamo la parte proporzionale ai giorni che
+// intersecano il periodo richiesto. Così una spesa "cameriere extra 6-12 lug" contribuisce
+// per intero al mese di luglio e per i soli giorni giusti a un report settimanale.
+function quotaUnaTantum(
+  c: { importoNetto: number; dataInizio: Date; dataFine: Date },
+  inizio: Date,
+  fine: Date,
+): number {
+  const DAY = 86_400_000
+  const covStart = c.dataInizio.getTime()
+  const covEnd = c.dataFine.getTime() + DAY // dataFine inclusa
+  const giorniCoperti = Math.max(1, Math.round((covEnd - covStart) / DAY))
+  const overlapStart = Math.max(covStart, inizio.getTime())
+  const overlapEnd = Math.min(covEnd, fine.getTime())
+  const giorniOverlap = Math.max(0, (overlapEnd - overlapStart) / DAY)
+  return c.importoNetto * (giorniOverlap / giorniCoperti)
+}
+
 export async function riepilogoContabile(
   userId: string,
   inizio: Date,
   fine: Date,
 ): Promise<RiepilogoContabile> {
-  const [config, ordini, turni, costiFissi, storicoPaga, fatture, timbrature] = await Promise.all([
+  const [config, ordini, turni, costiFissi, storicoPaga, fatture, timbrature, costiUnaTantum] = await Promise.all([
     prisma.contabilitaConfig.findUnique({ where: { userId } }),
     prisma.ordine.findMany({
-      where: { userId, createdAt: { gte: inizio, lt: fine } },
+      // Solo conti CHIUSI: finché il conto non è chiuso i suoi dati non entrano in contabilità.
+      where: { userId, createdAt: { gte: inizio, lt: fine }, ...WHERE_CONTO_CHIUSO },
       select: {
         tipo: true,
         coperti: true,
@@ -90,6 +112,11 @@ export async function riepilogoContabile(
     prisma.timbratura.findMany({
       where: { userId, timestamp: { gte: inizio, lt: fine } },
       select: { dipendenteId: true, tipo: true, timestamp: true },
+    }),
+    // Costi una tantum il cui intervallo interseca il periodo (spalmati per giorno sotto).
+    prisma.costoUnaTantum.findMany({
+      where: { userId, dataInizio: { lt: fine }, dataFine: { gte: inizio } },
+      select: { importoNetto: true, aliquota: true, categoria: true, dataInizio: true, dataFine: true },
     }),
   ])
 
@@ -236,13 +263,25 @@ export async function riepilogoContabile(
     perCategoriaCostoMap.set(c.categoria, (perCategoriaCostoMap.get(c.categoria) ?? 0) + (mensile / 30) * giorni)
   }
 
+  // ── Costi una tantum: quota netta spalmata sui giorni del periodo + IVA a credito ──
+  // Entrano nei costi di struttura del periodo (come i fissi, ma solo nei giorni coperti).
+  let quotaUnaTantumTot = 0
+  let ivaCreditoUnaTantum = 0
+  for (const c of costiUnaTantum) {
+    const q = quotaUnaTantum(c, inizio, fine)
+    if (q <= 0) continue
+    quotaUnaTantumTot += q
+    if (!forfettario) ivaCreditoUnaTantum += q * c.aliquota
+    perCategoriaCostoMap.set(c.categoria, (perCategoriaCostoMap.get(c.categoria) ?? 0) + q)
+  }
+
   const conto = calcolaContoEconomico({
     fatturatoLordo,
     ivaDebito,
-    ivaCredito: ivaCreditoFissi + ivaCreditoAcquisti, // fissi + bolle fornitori (F3)
+    ivaCredito: ivaCreditoFissi + ivaCreditoAcquisti + ivaCreditoUnaTantum, // fissi + bolle (F3) + una tantum
     foodCostVenduto,
     laborCost,
-    quotaCostiFissi,
+    quotaCostiFissi: quotaCostiFissi + quotaUnaTantumTot, // fissi (rateo) + una tantum (giorni coperti)
     percentualeAccantonamentoImposte: percAccantonamento,
     // Regime: forfettario tassa i ricavi × coefficiente; ordinario stima sull'EBITDA.
     regimeFiscale: forfettario ? 'forfettario' : 'ordinario',

@@ -8,6 +8,10 @@ interface CostoFisso {
   id: string; voce: string; categoria: string; importoNetto: number
   aliquota: number; periodicita: string; attivo: boolean
 }
+interface CostoUnaTantum {
+  id: string; voce: string; categoria: string; importoNetto: number
+  aliquota: number; dataInizio: string; dataFine: string
+}
 interface Dip {
   id: string; nome: string; ruolo: string | null
   pagaOrariaBaseNetta: number | null; moltiplicatoreCostoAzienda: number; costoOrarioReale: number
@@ -35,6 +39,11 @@ const IVA_SUGGERITA: Record<string, number> = {
 }
 const labelIva = (a: number) => (a === 0 ? 'esente' : `IVA ${Math.round(a * 100)}%`)
 const eur = (n: number) => (n ?? 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+const oggiISO = () => new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD locale
+const giornoBreve = (iso: string) => new Date(iso).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
+// Etichetta del periodo di un costo una tantum: "5 set" per il singolo giorno, "5–12 set" per un intervallo.
+const periodoLabel = (inizio: string, fine: string) =>
+  inizio.slice(0, 10) === fine.slice(0, 10) ? giornoBreve(inizio) : `${giornoBreve(inizio)} – ${giornoBreve(fine)}`
 
 export default function CostiPage() {
   const [costi, setCosti] = useState<CostoFisso[]>([])
@@ -44,16 +53,24 @@ export default function CostiPage() {
   // L'imponibile netto per il conto economico lo scorporiamo noi in fase di salvataggio.
   const [nuovo, setNuovo] = useState({ voce: '', lordo: '', categoria: 'utenze', aliquota: 0.22, periodicita: 'mensile' })
 
+  // Costi una tantum (spot): importo TOTALE su un intervallo di date, spalmato dal conto economico.
+  const [costiUT, setCostiUT] = useState<CostoUnaTantum[]>([])
+  const [nuovoUT, setNuovoUT] = useState({ voce: '', lordo: '', categoria: 'personale_extra', aliquota: 0.22, dataInizio: oggiISO(), dataFine: '' })
+
   const caricaCosti = useCallback(() => {
     fetch('/api/contabilita/costi-fissi', { credentials: 'include' })
       .then(r => r.json()).then(d => { setCosti(d.costi ?? []); setTotaleMensile(d.totaleMensile ?? 0) }).catch(() => {})
+  }, [])
+  const caricaUT = useCallback(() => {
+    fetch('/api/contabilita/costi-una-tantum', { credentials: 'include' })
+      .then(r => r.json()).then(d => setCostiUT(d.costi ?? [])).catch(() => {})
   }, [])
   const caricaDip = useCallback(() => {
     fetch('/api/contabilita/labor', { credentials: 'include' })
       .then(r => r.json()).then(d => setDip(d.dipendenti ?? [])).catch(() => {})
   }, [])
 
-  useEffect(() => { caricaCosti(); caricaDip() }, [caricaCosti, caricaDip])
+  useEffect(() => { caricaCosti(); caricaDip(); caricaUT() }, [caricaCosti, caricaDip, caricaUT])
 
   async function aggiungiCosto() {
     if (!nuovo.voce.trim() || !nuovo.lordo) return
@@ -69,6 +86,25 @@ export default function CostiPage() {
   async function eliminaCosto(id: string) {
     await fetch(`/api/contabilita/costi-fissi?id=${id}`, { method: 'DELETE', credentials: 'include' })
     caricaCosti()
+  }
+
+  async function aggiungiUT() {
+    if (!nuovoUT.voce.trim() || !nuovoUT.lordo || !nuovoUT.dataInizio) return
+    // Scorporo: imponibile = lordo / (1 + aliquota). dataFine vuota → singolo giorno.
+    const importoNetto = Number(nuovoUT.lordo) / (1 + nuovoUT.aliquota)
+    await fetch('/api/contabilita/costi-una-tantum', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        voce: nuovoUT.voce, categoria: nuovoUT.categoria, aliquota: nuovoUT.aliquota, importoNetto,
+        dataInizio: nuovoUT.dataInizio, dataFine: nuovoUT.dataFine || nuovoUT.dataInizio,
+      }),
+    })
+    setNuovoUT({ voce: '', lordo: '', categoria: 'personale_extra', aliquota: 0.22, dataInizio: oggiISO(), dataFine: '' })
+    caricaUT()
+  }
+  async function eliminaUT(id: string) {
+    await fetch(`/api/contabilita/costi-una-tantum?id=${id}`, { method: 'DELETE', credentials: 'include' })
+    caricaUT()
   }
   async function salvaPaga(d: Dip, paga: string, molt: number) {
     await fetch('/api/contabilita/labor', {
@@ -136,6 +172,65 @@ export default function CostiPage() {
               = {eur(Number(nuovo.lordo) / (1 + nuovo.aliquota))} netto + {eur(Number(nuovo.lordo) - Number(nuovo.lordo) / (1 + nuovo.aliquota))} IVA
             </span>
           )}
+        </p>
+      </div>
+
+      {/* Costi una tantum (spot) */}
+      <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-base font-semibold text-ink-navy">Costi una tantum</h2>
+        </div>
+        <p className="text-sm text-ink-navy/50 mb-4">Spese occasionali legate a giorni precisi: un cameriere in più per un evento, una riparazione, spese accessorie. Il conto economico le conta <b>solo nei giorni del periodo</b> che indichi.</p>
+
+        <div className="space-y-2 mb-4">
+          {costiUT.map(c => (
+            <div key={c.id} className="flex items-center gap-3 py-2 border-b border-ink-navy/5 last:border-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-ink-navy truncate">{c.voce}</p>
+                <p className="text-xs text-ink-navy/40">
+                  {periodoLabel(c.dataInizio, c.dataFine)} · {CATEGORIE.find(x => x[0] === c.categoria)?.[1]} · {labelIva(c.aliquota)}
+                </p>
+              </div>
+              <span className="text-sm tabular-nums text-ink-navy">{eur(c.importoNetto)}<span className="text-ink-navy/40 text-xs"> netto</span></span>
+              <button onClick={() => eliminaUT(c.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500" aria-label="Elimina"><IconTrash /></button>
+            </div>
+          ))}
+          {costiUT.length === 0 && <p className="text-sm text-ink-navy/40 py-2">Nessun costo una tantum. Aggiungi spese occasionali legate a date precise.</p>}
+        </div>
+
+        {/* Nuovo costo una tantum */}
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-mist rounded-xl p-3">
+          <input value={nuovoUT.voce} onChange={e => setNuovoUT({ ...nuovoUT, voce: e.target.value })} placeholder="Voce (es. Cameriere extra)"
+            className="sm:col-span-3 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          <select value={nuovoUT.categoria} onChange={e => setNuovoUT({ ...nuovoUT, categoria: e.target.value, aliquota: IVA_SUGGERITA[e.target.value] ?? 0.22 })}
+            className="sm:col-span-2 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
+            {CATEGORIE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <input value={nuovoUT.lordo} onChange={e => setNuovoUT({ ...nuovoUT, lordo: e.target.value })} type="number" placeholder="€ totale (IVA incl.)" inputMode="decimal"
+            className="sm:col-span-2 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          <select value={String(nuovoUT.aliquota)} onChange={e => setNuovoUT({ ...nuovoUT, aliquota: Number(e.target.value) })}
+            title="IVA di questo costo"
+            className="sm:col-span-1 px-1 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
+            {ALIQUOTE_COSTO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <input value={nuovoUT.dataInizio} onChange={e => setNuovoUT({ ...nuovoUT, dataInizio: e.target.value })} type="date" title="Dal giorno"
+            className="sm:col-span-2 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          <input value={nuovoUT.dataFine} onChange={e => setNuovoUT({ ...nuovoUT, dataFine: e.target.value })} type="date" title="Al giorno (vuoto = singolo giorno)" min={nuovoUT.dataInizio}
+            className="sm:col-span-1 px-1 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          <button onClick={aggiungiUT} className="sm:col-span-1 bg-electric-blue text-white rounded-lg py-2 flex items-center justify-center" aria-label="Aggiungi"><span className="w-4 h-4"><IconArrowRight /></span></button>
+        </div>
+        <p className="text-xs text-ink-navy/35 mt-2">
+          Scrivi l&apos;importo <b>totale</b> (IVA inclusa) e le date <b>dal / al</b> (lascia «al» vuoto per un solo giorno): spalmiamo la spesa in modo uniforme sui giorni indicati.
+          {Number(nuovoUT.lordo) > 0 && (() => {
+            const inizio = nuovoUT.dataInizio, fine = nuovoUT.dataFine || nuovoUT.dataInizio
+            const gg = inizio && fine ? Math.max(1, Math.round((new Date(fine).getTime() - new Date(inizio).getTime()) / 86_400_000) + 1) : 1
+            const netto = Number(nuovoUT.lordo) / (1 + nuovoUT.aliquota)
+            return (
+              <span className="block mt-1 text-ink-navy/55">
+                = {eur(netto)} netto su {gg} {gg === 1 ? 'giorno' : 'giorni'} ({eur(netto / gg)}/giorno)
+              </span>
+            )
+          })()}
         </p>
       </div>
 

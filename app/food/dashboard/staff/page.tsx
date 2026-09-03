@@ -180,6 +180,9 @@ export default function StaffPage() {
   const [editTurno, setEditTurno] = useState<Turno | null>(null)
   const [editForm, setEditForm] = useState({ oraInizio: '09:00', oraFine: '17:00', ruolo: '', note: '', tipoTariffa: 'ordinario', maggiorazione: 1, forfaitImporto: '' })
   const [savingEdit, setSavingEdit] = useState(false)
+  // Moltiplicatori "maggiorazione" preferiti dal titolare (sticky per tipo): preset nella modale.
+  // Cambiandone uno e salvando il turno, quel valore diventa il default per quel tipo (festivo/evento…).
+  const [maggDefault, setMaggDefault] = useState<Record<string, number>>({ ordinario: 1, straordinario: 1.15, festivo_evento: 1.3, forfait: 1 })
 
   // Fabbisogno (caricato dalle impostazioni, usato come base per la settimana)
   const [fabbisogno, setFabbisogno] = useState<Requisito[]>([])
@@ -264,6 +267,11 @@ export default function StaffPage() {
   }
 
   useEffect(() => { fetchFabbisogno() }, [])
+  // Carica una volta i moltiplicatori maggiorazione preferiti (default proposti nella modale turno).
+  useEffect(() => {
+    fetch('/api/contabilita/maggiorazioni', { credentials: 'include' })
+      .then(r => r.json()).then(d => { if (d.maggiorazioni) setMaggDefault(d.maggiorazioni) }).catch(() => {})
+  }, [])
 
 
   useEffect(() => {
@@ -415,9 +423,23 @@ export default function StaffPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editForm),
     })
+    // Sticky: se ho cambiato il moltiplicatore di un tipo (non forfait), lo memorizzo come
+    // nuovo default per quel tipo (festivo/evento/straordinario…) per i turni futuri.
+    memorizzaMaggiorazione(editForm.tipoTariffa, editForm.maggiorazione)
     setSavingEdit(false)
     setEditTurno(null)
     ricaricaTurni()
+  }
+
+  // Persiste, se cambiato, il moltiplicatore preferito per un tipo di tariffa (fire-and-forget).
+  function memorizzaMaggiorazione(tipo: string, maggiorazione: number) {
+    if (tipo === 'forfait') return
+    if (maggDefault[tipo] === maggiorazione) return
+    setMaggDefault(prev => ({ ...prev, [tipo]: maggiorazione }))
+    fetch('/api/contabilita/maggiorazioni', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipoTariffa: tipo, maggiorazione }),
+    }).catch(() => {})
   }
 
   function apriEditTurno(t: Turno) {
@@ -1640,8 +1662,8 @@ export default function StaffPage() {
                 <select value={editForm.tipoTariffa}
                   onChange={e => {
                     const tipo = e.target.value
-                    const sugg: Record<string, number> = { ordinario: 1, straordinario: 1.15, festivo_evento: 1.3, forfait: 1 }
-                    setEditForm(f => ({ ...f, tipoTariffa: tipo, maggiorazione: sugg[tipo] ?? 1 }))
+                    // Preset = ultimo moltiplicatore scelto dal titolare per quel tipo (sticky).
+                    setEditForm(f => ({ ...f, tipoTariffa: tipo, maggiorazione: maggDefault[tipo] ?? 1 }))
                   }}
                   className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue/30">
                   <option value="ordinario">Ordinario</option>

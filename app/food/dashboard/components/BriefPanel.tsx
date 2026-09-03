@@ -43,6 +43,25 @@ function formatValue(m: Metric): string {
   return num
 }
 
+// Etichetta leggibile del PERIODO a cui si riferisce il brief. Il brief usa finestre
+// mobili GIÀ CHIUSE: daily = ieri, weekly = ultimi 7 giorni fino a ieri, monthly =
+// ultimi 30 giorni fino a ieri. Mostrarlo toglie l'ambiguità ("a che settimana si
+// riferisce?"). period.start/period.end sono "YYYY-MM-DD".
+function formatPeriodo(timeframe: Timeframe, period?: { start: string; end: string }): string | null {
+  if (!period?.start || !period?.end) return null
+  const parse = (ymd: string) => {
+    const [y, m, d] = ymd.split('-').map(Number)
+    return new Date(y, (m ?? 1) - 1, d ?? 1)
+  }
+  const giorno = (dt: Date, conAnno = false) =>
+    dt.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', ...(conAnno ? { year: 'numeric' } : {}) })
+  const start = parse(period.start)
+  const end = parse(period.end)
+  if (timeframe === 'daily') return `Ieri, ${giorno(end, true)}`
+  const prefisso = timeframe === 'weekly' ? 'Ultimi 7 giorni' : 'Ultimi 30 giorni'
+  return `${prefisso} · ${giorno(start)} – ${giorno(end, true)}`
+}
+
 // "Generato stamattina alle 7:30" / "Generato alle 14:05" / "Generato ieri alle …".
 // Dà fiducia: il titolare sa quanto è fresco il brief che sta guardando.
 function formatGenerato(iso?: string): string | null {
@@ -222,6 +241,20 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
       }
       endpoint = '/api/copilot/azioni/cambia-prezzo'
       body = { piattoId, nuovoPrezzo }
+    } else if (def.kind === 'imposta_disponibilita') {
+      // L'AI propone di segnare un piatto esaurito o di rimetterlo disponibile.
+      const disponibile = def.target?.disponibile ?? false
+      const verbo = disponibile ? 'rimettere disponibile' : 'segnare come esaurito'
+      if (!window.confirm(`Vuoi ${verbo} "${nome}"?`)) return
+      endpoint = '/api/copilot/azioni/disponibilita'
+      body = { piattoId, disponibile }
+    } else if (def.kind === 'imposta_aliquota') {
+      // L'AI propone un'aliquota IVA di vendita per il piatto (es. alcolici in asporto).
+      const aliquota = def.target?.aliquota
+      if (aliquota == null) return
+      if (!window.confirm(`Impostare l'aliquota IVA di "${nome}" al ${Math.round(aliquota * 100)}%?`)) return
+      endpoint = '/api/copilot/azioni/aliquota-piatto'
+      body = { piattoId, aliquota }
     } else {
       return
     }
@@ -236,9 +269,16 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Azione non riuscita.')
-      const msg = def.kind === 'cambia_prezzo'
-        ? `Fatto: "${data.nome}" ora costa ${data.prezzoNuovo}€ (era ${data.prezzoVecchio}€).`
-        : `Fatto: "${data.nome}" è ora in cima al menu.`
+      let msg: string
+      if (def.kind === 'cambia_prezzo') {
+        msg = `Fatto: "${data.nome}" ora costa ${data.prezzoNuovo}€ (era ${data.prezzoVecchio}€).`
+      } else if (def.kind === 'imposta_disponibilita') {
+        msg = `Fatto: "${data.nome}" è ora ${data.disponibile ? 'di nuovo disponibile' : 'segnato come esaurito'}.`
+      } else if (def.kind === 'imposta_aliquota') {
+        msg = `Fatto: aliquota di "${data.nome}" impostata al ${data.aliquota != null ? Math.round(data.aliquota * 100) + '%' : 'valore di default'}.`
+      } else {
+        msg = `Fatto: "${data.nome}" è ora in cima al menu.`
+      }
       setAzioniEsito((e) => ({ ...e, [a.id]: { ok: true, msg } }))
     } catch (err) {
       setAzioniEsito((e) => ({ ...e, [a.id]: { ok: false, msg: err instanceof Error ? err.message : 'Errore, riprova.' } }))
@@ -274,7 +314,7 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
         </button>
       </div>
 
-      <div className="flex gap-1 mb-6 bg-mist rounded-xl p-1 w-fit">
+      <div className="flex gap-1 mb-2 bg-mist rounded-xl p-1 w-fit">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -287,6 +327,11 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
           </button>
         ))}
       </div>
+
+      {/* Periodo di riferimento: toglie l'ambiguità su "a quale settimana/mese si riferisce" (punto 1). */}
+      <p className="text-xs text-ink-navy/45 mb-6">
+        {formatPeriodo(timeframe, brief?.meta?.period ?? context?.period) ?? ' '}
+      </p>
 
       {loading && !attuale && (
         <div className="flex items-center gap-2 text-ink-navy/50 text-sm py-10 justify-center">
@@ -374,7 +419,7 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
                   const def = context.allowedActions.find((x) => x.id === a.id)
                   const esito = azioniEsito[a.id]
                   const inCorso = azioneInCorso === a.id
-                  const scrive = def?.kind === 'sposta_in_cima' || def?.kind === 'cambia_prezzo'
+                  const scrive = def?.kind === 'sposta_in_cima' || def?.kind === 'cambia_prezzo' || def?.kind === 'imposta_disponibilita' || def?.kind === 'imposta_aliquota'
                   return (
                     <div key={i} className="flex flex-col gap-1">
                       <button

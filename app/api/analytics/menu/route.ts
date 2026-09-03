@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/getAuthUser'
+import { WHERE_CONTO_CHIUSO } from '@/lib/ordini/contoChiuso'
 
 export async function GET(req: Request) {
   const user = await getAuthUser()
@@ -44,6 +45,8 @@ export async function GET(req: Request) {
       ordine: {
         userId: user.id,
         createdAt: { gte: from, lt: toEffettivo },
+        // Solo piatti di conti chiusi: il "venduto" è ciò che è stato effettivamente incassato.
+        ...WHERE_CONTO_CHIUSO,
       },
     },
     select: {

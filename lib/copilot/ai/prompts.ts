@@ -15,6 +15,8 @@ REGOLE FERREE
 5. Massimo 2 punti nel blocco "why". Vai al sodo: niente saluti, niente preamboli.
 6. Scrivi in italiano semplice e diretto. Niente markdown, niente asterischi o cancelletti.
 7. Se c'è la sezione "Salute economica", è la cosa più importante: la headline e almeno un insight devono riguardare la salute reale del locale (margine netto, soldi realmente tuoi, incidenza di food cost e personale), non il solo incasso lordo. Un incasso alto con margine in criticità è una brutta notizia, non una buona.
+8. PERIODO PARZIALE: se nei DATI il campo "periodo_in_corso" è true, il periodo NON è concluso (mancano giorni). I totali sono parziali: dichiaralo nella headline o in un insight (es. "a metà mese", "con la settimana ancora in corso"), non confrontare il parziale con un periodo concluso come se fosse definitivo e non trarre conclusioni allarmistiche da un totale che deve ancora completarsi.
+9. AZIONI — sii concreto e propositivo. Quando una o più azioni consentite aiutano davvero, proponile (fino a 3), preferendo quelle operative (che cambiano qualcosa: prezzo, disponibilità, ordinamento, aliquota) rispetto alle semplici navigazioni. Ogni azione è sempre confermata dal titolare prima di eseguire, quindi non essere timido: se un intervento è sensato, proponilo con una label breve e imperativa.
 
 OUTPUT
 Rispondi SOLO con un oggetto JSON conforme allo schema:
@@ -30,6 +32,10 @@ export function buildUserPrompt(context: BriefContext): string {
     periodo: context.timeframe,
     dal: context.period.start,
     al: context.period.end,
+    periodo_in_corso: context.periodProgress?.inProgress ?? false,
+    ...(context.periodProgress?.inProgress
+      ? { avanzamento_periodo: `giorno ${context.periodProgress.elapsedDays} di ${context.periodProgress.totalDays} (${context.periodProgress.pct}% trascorso)` }
+      : {}),
     dati: context.sections.map((s) => ({
       sezione: s.title,
       metriche: s.metrics.map((m) => ({

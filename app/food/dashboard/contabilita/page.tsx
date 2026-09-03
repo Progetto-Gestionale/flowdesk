@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { getCache, setCache } from '@/lib/pageCache'
 import { IconSettings, IconCash, IconRefresh, IconReceipt } from '@/app/components/icons'
+import { MiniCalendario } from '@/app/components/MiniCalendario'
 import AiInsightCard from './AiInsightCard'
 
 // ── Tipi allineati a /api/contabilita/summary ────────────────────────────────
@@ -71,6 +72,7 @@ const refKey = (rif: Date) => rif.toISOString().slice(0, 10)
 export default function ContabilitaPage() {
   const [periodo, setPeriodo] = useState('mese')
   const [riferimento, setRiferimento] = useState<Date>(new Date())
+  const [calendarioAperto, setCalendarioAperto] = useState(false)
   const [data, setData] = useState<Summary | null>(() => getCache<Summary>('contabilita_mese') ?? null)
   const [loading, setLoading] = useState(false)
 
@@ -133,13 +135,25 @@ export default function ContabilitaPage() {
         </div>
         <div className="flex items-center gap-2">
           {/* Navigazione periodi passati: ‹ periodo precedente · periodo · successivo › */}
-          <div className="inline-flex items-center gap-1 bg-white border border-ink-navy/10 rounded-lg px-1 py-1">
+          <div className="relative inline-flex items-center gap-1 bg-white border border-ink-navy/10 rounded-lg px-1 py-1">
             <button onClick={() => setRiferimento(spostaRiferimento(riferimento, periodo, -1))}
               className="w-7 h-7 flex items-center justify-center rounded-md text-ink-navy/60 hover:bg-mist" aria-label="Periodo precedente">‹</button>
-            <span className="text-sm font-medium text-ink-navy min-w-[92px] text-center tabular-nums">{data?.label ?? '—'}</span>
+            {/* Clic sull'etichetta = apre il calendarietto per saltare a una data (come in Analytics). */}
+            <button onClick={() => setCalendarioAperto(v => !v)}
+              className="text-sm font-medium text-ink-navy min-w-[92px] text-center tabular-nums rounded-md px-1.5 py-0.5 hover:bg-mist transition-colors">
+              {data?.label ?? '—'}
+            </button>
             <button onClick={() => { if (!isCorrente) setRiferimento(spostaRiferimento(riferimento, periodo, 1)) }}
               disabled={isCorrente}
               className="w-7 h-7 flex items-center justify-center rounded-md text-ink-navy/60 hover:bg-mist disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Periodo successivo">›</button>
+            {calendarioAperto && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setCalendarioAperto(false)} />
+                <MiniCalendario periodo={periodo} riferimento={riferimento}
+                  onScegli={d => { setRiferimento(d); setCalendarioAperto(false) }}
+                  onChiudi={() => setCalendarioAperto(false)} />
+              </>
+            )}
           </div>
           {data && <span className="text-xs text-ink-navy/40 hidden sm:inline">{data.ordini} ordini · {data.coperti} coperti</span>}
           <button onClick={() => carica(periodo, riferimento)} className={`w-4 h-4 text-ink-navy/40 ${loading ? 'animate-spin' : ''}`} aria-label="Aggiorna"><IconRefresh /></button>
@@ -168,8 +182,9 @@ export default function ContabilitaPage() {
 
       {c && (
         <>
-          {/* Ponte AI (F4): verdetto in parole semplici sul periodo mostrato */}
-          <AiInsightCard periodo={periodo} riferimento={riferimento} />
+          {/* Ponte AI (F4): verdetto in parole semplici sul periodo mostrato.
+              key = periodo+riferimento → la card rimonta a ogni cambio periodo (stato pulito). */}
+          <AiInsightCard key={`${periodo}_${refKey(riferimento)}`} periodo={periodo} riferimento={riferimento} label={data?.label} corrente={isCorrente} />
 
           {/* Cosa è stato messo da parte */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -299,7 +314,8 @@ export default function ContabilitaPage() {
 // ── Componenti di supporto ───────────────────────────────────────────────────
 function Riga({ label, valore, muted, bold, big }: { label: string; valore: number; muted?: boolean; bold?: boolean; big?: boolean }) {
   return (
-    <div className="flex items-center justify-between">
+    // Sottile linea orizzontale tra le voci: aiuta a leggere a colpo d'occhio quale valore va con quale voce.
+    <div className="flex items-center justify-between py-1.5 border-b border-ink-navy/5 last:border-b-0">
       <span className={`${bold ? 'font-semibold text-ink-navy' : muted ? 'text-ink-navy/50' : 'text-ink-navy/70'} ${big ? 'text-base' : ''}`}>{label}</span>
       <span className={`tabular-nums ${bold ? 'font-bold text-ink-navy' : muted ? 'text-ink-navy/50' : 'text-ink-navy'} ${big ? 'text-lg' : ''} ${valore < 0 ? 'text-rose-600' : ''}`}>
         {eur(valore)}
