@@ -74,6 +74,7 @@ model User {
   notifiche             Notifica[]
   todo                  Todo[]
   copilotUsage          CopilotUsage[]
+  copilotInsight        CopilotInsight[]
   menuStampaConfig      MenuStampaConfig?
   // Flowest Contabilità (owner-only)
   contabilitaConfig     ContabilitaConfig?
@@ -126,6 +127,25 @@ model BriefSalvato {
   user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, timeframe])
+  @@index([userId])
+}
+
+// Cache delle "insight card" AI (verdetto di 3 righe in cima a una schermata, es.
+// Contabilità). Chiave = (locale, schermata, periodo, riferimento). `hash` è l'impronta
+// dei numeri interpretati: se combacia con la richiesta corrente si serve il testo salvato
+// SENZA chiamare l'AI (controllo costi). Il brief è JSON (headline+why+status).
+model CopilotInsight {
+  id          String   @id @default(cuid())
+  userId      String
+  scope       String // schermata: "contabilita" (estendibile)
+  periodo     String // "oggi" | "settimana" | "mese" | "anno"
+  riferimento String // ancora del periodo "YYYY-MM-DD" (distingue mesi/settimane diversi)
+  hash        String // impronta dei numeri: cambia → si rigenera
+  brief       String // JSON del Brief (headline, why, status)
+  generatedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, scope, periodo, riferimento])
   @@index([userId])
 }
 
@@ -695,6 +715,9 @@ model ContabilitaConfig {
   // (ristorazione ≈ 40%), non sull'utile. Aliquota 15% a regime, 5% per i primi 5 anni.
   coefficienteRedditivita          Float    @default(0.40) // quota dei ricavi considerata reddito (forfettario)
   aliquotaImpostaForfettario       Float    @default(0.15) // 0.15 a regime · 0.05 start-up primi 5 anni
+  // Da dove prendere le ore per il costo del personale: "turni" (pianificate, default) o
+  // "timbrature" (ore reali entrata/uscita, con fallback ai turni quando mancano i timbri).
+  fonteOreLabor                    String   @default("turni") // "turni" | "timbrature"
   updatedAt                        DateTime @updatedAt
   user                             User     @relation(fields: [userId], references: [id])
 }

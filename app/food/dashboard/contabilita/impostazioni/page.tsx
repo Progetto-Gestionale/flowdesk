@@ -10,6 +10,7 @@ interface Config {
   regimeFiscale: string
   coefficienteRedditivita: number
   aliquotaImpostaForfettario: number
+  fonteOreLabor: string
 }
 
 export default function ImpostazioniContabiliPage() {
@@ -85,6 +86,17 @@ export default function ImpostazioniContabiliPage() {
           <input type="number" step="0.05" min={1} value={cfg.moltiplicatoreLaborDefault}
             onChange={e => setCfg({ ...cfg, moltiplicatoreLaborDefault: Number(e.target.value) })}
             className="w-24 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+        </Campo>
+
+        <Campo
+          label="Ore per il costo del personale"
+          hint="Da dove prendere le ore lavorate. «Turni pianificati» usa gli orari che programmi (semplice). «Timbrature reali» usa entrata/uscita effettive dei dipendenti, con ritorno automatico ai turni quando per quel giorno non ci sono timbri."
+        >
+          <select value={cfg.fonteOreLabor} onChange={e => setCfg({ ...cfg, fonteOreLabor: e.target.value })}
+            className="px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
+            <option value="turni">Turni pianificati</option>
+            <option value="timbrature">Timbrature reali (con fallback ai turni)</option>
+          </select>
         </Campo>
 
         <Campo label="Regime fiscale" hint="In forfettario non c'è IVA (non la incassi sulle vendite né la recuperi sugli acquisti) e l'imposta si calcola sui ricavi, non sull'utile. Cambia il modo in cui stimiamo le tasse.">

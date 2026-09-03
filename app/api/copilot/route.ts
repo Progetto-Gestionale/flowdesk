@@ -6,6 +6,7 @@ import { buildCopilotPrompt } from '@/lib/copilot/prompt'
 import { copilotTools, eseguiCopilotTool } from '@/lib/copilot/tools'
 import { USD_TO_EUR, meseCorrente } from '@/lib/copilot/spesa'
 import { buildBriefContext } from '@/lib/copilot/brief'
+import { buildFinancialContext } from '@/lib/copilot/financial/context'
 import { briefSystemBlock } from '@/lib/copilot/briefContextText'
 import type { Timeframe } from '@/lib/copilot/ai'
 
@@ -60,19 +61,30 @@ export async function POST(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
 
-  const { messages, briefTimeframe } = (await req.json()) as { messages: MsgIn[]; briefTimeframe?: string }
+  const { messages, briefTimeframe, financial } = (await req.json()) as {
+    messages: MsgIn[]
+    briefTimeframe?: string
+    financial?: { periodo?: string; riferimento?: string }
+  }
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: 'messages obbligatorio' }, { status: 400 })
   }
 
   const system = buildCopilotPrompt(user)
 
-  // Se la chat è aperta sotto un brief attivo, ricostruiamo il context deterministico
-  // (nessun costo AI: sono query) e lo iniettiamo come SECONDO blocco system cacheable.
-  // Così i chiarimenti sul brief si rispondono dai numeri già visti, senza giri di
-  // tool-use → meno token. Il blocco è stabile per timeframe → cache-hit sui follow-up.
+  // Contesto iniettato come SECONDO blocco system cacheable (nessun costo AI: sono query):
+  //  · briefTimeframe → i numeri del brief che l'utente sta guardando (chat sul brief);
+  //  · financial → i numeri della schermata Contabilità (chat aperta da "Approfondisci").
+  // Così i chiarimenti si rispondono dai numeri già visti, senza giri di tool-use.
   let briefBlock: string | null = null
-  if (briefTimeframe && TIMEFRAMES.includes(briefTimeframe as Timeframe)) {
+  if (financial?.periodo) {
+    try {
+      const { context } = await buildFinancialContext(user.id, financial.periodo, financial.riferimento)
+      briefBlock = briefSystemBlock(context)
+    } catch (e) {
+      console.error('[COPILOT] context contabilità per chat non disponibile:', e)
+    }
+  } else if (briefTimeframe && TIMEFRAMES.includes(briefTimeframe as Timeframe)) {
     try {
       const ctx = await buildBriefContext(user.id, briefTimeframe as Timeframe)
       briefBlock = briefSystemBlock(ctx)

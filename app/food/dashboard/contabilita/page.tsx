@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { getCache, setCache } from '@/lib/pageCache'
 import { IconSettings, IconCash, IconRefresh, IconReceipt } from '@/app/components/icons'
+import AiInsightCard from './AiInsightCard'
 
 // ── Tipi allineati a /api/contabilita/summary ────────────────────────────────
 interface Conto {
@@ -167,6 +168,9 @@ export default function ContabilitaPage() {
 
       {c && (
         <>
+          {/* Ponte AI (F4): verdetto in parole semplici sul periodo mostrato */}
+          <AiInsightCard periodo={periodo} riferimento={riferimento} />
+
           {/* Cosa è stato messo da parte */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <MiniCard

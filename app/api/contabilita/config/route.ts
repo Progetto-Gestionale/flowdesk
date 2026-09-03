@@ -16,6 +16,7 @@ export async function GET() {
     regimeFiscale: 'ordinario',
     coefficienteRedditivita: 0.40,
     aliquotaImpostaForfettario: 0.15,
+    fonteOreLabor: 'turni',
   })
 }
 
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
     regimeFiscale: body.regimeFiscale === 'forfettario' ? 'forfettario' : 'ordinario',
     coefficienteRedditivita: clampPct(body.coefficienteRedditivita, 0.40),
     aliquotaImpostaForfettario: clampPct(body.aliquotaImpostaForfettario, 0.15),
+    fonteOreLabor: body.fonteOreLabor === 'timbrature' ? 'timbrature' : 'turni',
   }
 
   const cfg = await prisma.contabilitaConfig.upsert({

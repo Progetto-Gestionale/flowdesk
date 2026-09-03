@@ -45,11 +45,19 @@ export interface AllowedAction {
   // Suggerimento dei parametri che l'AI deve riempire. Nome -> descrizione.
   params?: Record<string, string>
   // Come il frontend esegue l'azione: 'link' = navigazione; le altre = scrittura
-  // con conferma. Assente = trattata come 'link'.
-  kind?: 'link' | 'sposta_in_cima'
+  // con conferma (human-in-the-loop). Assente = trattata come 'link'.
+  kind?: 'link' | 'sposta_in_cima' | 'cambia_prezzo' | 'imposta_disponibilita' | 'imposta_aliquota'
   // Payload FIDATO per l'esecuzione, riempito dal NOSTRO codice (non dall'AI):
-  // l'AI sceglie solo l'id, i parametri veri arrivano da qui.
-  target?: { href?: string; piattoId?: string; piattoNome?: string }
+  // l'AI sceglie solo l'id, i parametri veri (piatto, prezzo suggerito…) arrivano da qui.
+  target?: {
+    href?: string
+    piattoId?: string
+    piattoNome?: string
+    prezzoAttuale?: number // prezzo corrente (lordo), per mostrare "da X a Y"
+    prezzoSuggerito?: number // prezzo proposto dal codice per rientrare nel margine medio
+    aliquota?: number // per imposta_aliquota
+    disponibile?: boolean // per imposta_disponibilita
+  }
 }
 
 // Input deterministico del narratore. Prodotto interamente dal tuo codice.

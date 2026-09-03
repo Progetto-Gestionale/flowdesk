@@ -23,6 +23,9 @@ interface Turno {
   oraFine: string
   ruolo: string | null
   note: string | null
+  tipoTariffa?: string
+  maggiorazione?: number
+  forfaitImporto?: number | null
   dipendente: { id: string; nome: string; ruolo: string | null }
 }
 
@@ -175,7 +178,7 @@ export default function StaffPage() {
 
   // Modifica turno
   const [editTurno, setEditTurno] = useState<Turno | null>(null)
-  const [editForm, setEditForm] = useState({ oraInizio: '09:00', oraFine: '17:00', ruolo: '', note: '' })
+  const [editForm, setEditForm] = useState({ oraInizio: '09:00', oraFine: '17:00', ruolo: '', note: '', tipoTariffa: 'ordinario', maggiorazione: 1, forfaitImporto: '' })
   const [savingEdit, setSavingEdit] = useState(false)
 
   // Fabbisogno (caricato dalle impostazioni, usato come base per la settimana)
@@ -418,7 +421,12 @@ export default function StaffPage() {
   }
 
   function apriEditTurno(t: Turno) {
-    setEditForm({ oraInizio: t.oraInizio, oraFine: t.oraFine, ruolo: t.ruolo ?? '', note: t.note ?? '' })
+    setEditForm({
+      oraInizio: t.oraInizio, oraFine: t.oraFine, ruolo: t.ruolo ?? '', note: t.note ?? '',
+      tipoTariffa: t.tipoTariffa ?? 'ordinario',
+      maggiorazione: t.maggiorazione ?? 1,
+      forfaitImporto: t.forfaitImporto != null ? String(t.forfaitImporto) : '',
+    })
     setEditTurno(t)
   }
 
@@ -1623,6 +1631,39 @@ export default function StaffPage() {
                 <input type="text" value={editForm.note} placeholder="Note opzionali"
                   onChange={e => setEditForm(f => ({ ...f, note: e.target.value }))}
                   className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+              </div>
+
+              {/* Maggiorazione/forfait del turno (Contabilità). La PAGA sta in Costi & Personale. */}
+              <div>
+                <label className="text-xs font-semibold text-ink-navy/50 uppercase tracking-wide">Maggiorazione del turno</label>
+                <p className="text-[11px] text-ink-navy/40 mb-1">La paga oraria si imposta una volta in <span className="font-medium">Contabilità → Costi &amp; Personale</span>. Qui scegli solo com&apos;è tariffato questo turno.</p>
+                <select value={editForm.tipoTariffa}
+                  onChange={e => {
+                    const tipo = e.target.value
+                    const sugg: Record<string, number> = { ordinario: 1, straordinario: 1.15, festivo_evento: 1.3, forfait: 1 }
+                    setEditForm(f => ({ ...f, tipoTariffa: tipo, maggiorazione: sugg[tipo] ?? 1 }))
+                  }}
+                  className="mt-1 w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy bg-white focus:outline-none focus:ring-2 focus:ring-electric-blue/30">
+                  <option value="ordinario">Ordinario</option>
+                  <option value="straordinario">Straordinario</option>
+                  <option value="festivo_evento">Festivo / Evento</option>
+                  <option value="forfait">Forfait (importo fisso)</option>
+                </select>
+                {editForm.tipoTariffa === 'forfait' ? (
+                  <div className="mt-2">
+                    <input type="number" inputMode="decimal" min={0} value={editForm.forfaitImporto} placeholder="Netto concordato € (es. 100)"
+                      onChange={e => setEditForm(f => ({ ...f, forfaitImporto: e.target.value }))}
+                      className="w-full border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+                    <p className="text-[11px] text-ink-navy/40 mt-1">Quanto dai in mano per il turno (netto): la contabilità aggiunge il moltiplicatore costi azienda, come per la paga oraria. Ignora ore e maggiorazione.</p>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input type="number" step="0.05" min={0.1} max={5} value={editForm.maggiorazione}
+                      onChange={e => setEditForm(f => ({ ...f, maggiorazione: Number(e.target.value) }))}
+                      className="w-24 border border-ink-navy/15 rounded-xl px-3 py-2 text-sm text-ink-navy focus:outline-none focus:ring-2 focus:ring-electric-blue/30" />
+                    <span className="text-xs text-ink-navy/50">× &nbsp;(= {Math.round((editForm.maggiorazione - 1) * 100)}% {editForm.maggiorazione >= 1 ? 'in più' : 'in meno'}). Metti il valore che vuoi.</span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-5">

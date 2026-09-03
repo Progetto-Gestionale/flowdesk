@@ -160,8 +160,29 @@ function buildMenuMetrics(dishes: DishAgg[]): { metrics: Metric[]; azioni: Allow
     })
   }
 
-  // Campione nascosto: poco venduto E margine sopra la media di almeno GAP punti.
   const azioni: AllowedAction[] = []
+
+  // AZIONE REALE (Fase 2): la "palla al piede" (vende molto, margine sotto la media) è la
+  // candidata naturale a un ritocco di prezzo. Il CODICE calcola il prezzo suggerito per
+  // riportarla al margine medio del locale; il titolare conferma/modifica prima di applicare
+  // (l'AI sceglie solo se proporla, i numeri arrivano da qui → niente prezzi inventati).
+  if (palla && palla.piattoId && palla.qty > 0) {
+    const costoUnit = palla.cost / palla.qty
+    const prezzoAttuale = palla.costedRevenue / palla.qty // prezzo medio venduto (lordo)
+    const m = margineMedio / 100
+    const grezzo = m < 0.95 ? costoUnit / (1 - m) : prezzoAttuale
+    const prezzoSuggerito = Math.max(prezzoAttuale, Math.ceil(grezzo * 2) / 2) // arrotonda a 0,50
+    if (prezzoSuggerito - prezzoAttuale >= 0.2) {
+      azioni.push({
+        id: `cambia_prezzo_${palla.piattoId}`,
+        kind: 'cambia_prezzo',
+        target: { piattoId: palla.piattoId, piattoNome: palla.nome, prezzoAttuale: round2(prezzoAttuale), prezzoSuggerito: round2(prezzoSuggerito) },
+        description: `Alza il prezzo di "${palla.nome}" da ${round2(prezzoAttuale)}€ verso ~${round2(prezzoSuggerito)}€: vende molto ma ha margine sotto la media del locale.`,
+      })
+    }
+  }
+
+  // Campione nascosto: poco venduto E margine sopra la media di almeno GAP punti.
   const campione = withCost
     .filter((d) => d.qty < median && d.marginPct >= margineMedio + GAP)
     .sort((a, b) => b.marginPct - a.marginPct)[0]

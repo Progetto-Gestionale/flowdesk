@@ -188,25 +188,58 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
   async function eseguiAzione(a: ProposedAction) {
     const def = context?.allowedActions.find((x) => x.id === a.id)
     if (!def) return
-    if (def.kind !== 'sposta_in_cima') {
+
+    // 'link' (o assente): semplice navigazione, nessuna scrittura.
+    if (!def.kind || def.kind === 'link') {
       if (def.target?.href) router.push(def.target.href)
       return
     }
-    const piattoId = def.target?.piattoId
+
+    // Azioni di SCRITTURA: conferma esplicita, poi POST alla rotta dedicata.
     const nome = def.target?.piattoNome ?? 'questo piatto'
+    const piattoId = def.target?.piattoId
     if (!piattoId) return
-    if (!window.confirm(`Mettere "${nome}" in cima al suo menu? Cambia solo l'ordine, non prezzo o disponibilità.`)) return
+    let endpoint: string
+    let body: Record<string, unknown>
+
+    if (def.kind === 'sposta_in_cima') {
+      if (!window.confirm(`Mettere "${nome}" in cima al suo menu? Cambia solo l'ordine, non prezzo o disponibilità.`)) return
+      endpoint = '/api/copilot/azioni/sposta-in-cima'
+      body = { piattoId }
+    } else if (def.kind === 'cambia_prezzo') {
+      // Prezzo modificabile prima di applicare: l'AI propone, il titolare decide la cifra.
+      const suggerito = def.target?.prezzoSuggerito ?? def.target?.prezzoAttuale ?? 0
+      const attuale = def.target?.prezzoAttuale
+      const input = window.prompt(
+        `Nuovo prezzo per "${nome}"${attuale != null ? ` (attuale ${attuale}€)` : ''}. Puoi modificarlo prima di confermare:`,
+        String(suggerito),
+      )
+      if (input == null) return
+      const nuovoPrezzo = Number(input.replace(',', '.'))
+      if (!Number.isFinite(nuovoPrezzo) || nuovoPrezzo <= 0) {
+        setAzioniEsito((e) => ({ ...e, [a.id]: { ok: false, msg: 'Prezzo non valido.' } }))
+        return
+      }
+      endpoint = '/api/copilot/azioni/cambia-prezzo'
+      body = { piattoId, nuovoPrezzo }
+    } else {
+      return
+    }
+
     setAzioneInCorso(a.id)
     try {
-      const res = await fetch('/api/copilot/azioni/sposta-in-cima', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ piattoId }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Azione non riuscita.')
-      setAzioniEsito((e) => ({ ...e, [a.id]: { ok: true, msg: `Fatto: "${data.nome}" è ora in cima al menu.` } }))
+      const msg = def.kind === 'cambia_prezzo'
+        ? `Fatto: "${data.nome}" ora costa ${data.prezzoNuovo}€ (era ${data.prezzoVecchio}€).`
+        : `Fatto: "${data.nome}" è ora in cima al menu.`
+      setAzioniEsito((e) => ({ ...e, [a.id]: { ok: true, msg } }))
     } catch (err) {
       setAzioniEsito((e) => ({ ...e, [a.id]: { ok: false, msg: err instanceof Error ? err.message : 'Errore, riprova.' } }))
     } finally {
@@ -341,7 +374,7 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
                   const def = context.allowedActions.find((x) => x.id === a.id)
                   const esito = azioniEsito[a.id]
                   const inCorso = azioneInCorso === a.id
-                  const scrive = def?.kind === 'sposta_in_cima'
+                  const scrive = def?.kind === 'sposta_in_cima' || def?.kind === 'cambia_prezzo'
                   return (
                     <div key={i} className="flex flex-col gap-1">
                       <button
