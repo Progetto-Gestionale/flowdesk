@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/getAuthUser'
 import { prisma } from '@/lib/prisma'
 import { buildFinancialContext } from '@/lib/copilot/financial/context'
+import { buildStaffContext } from '@/lib/copilot/staff/context'
 import { generateBrief } from '@/lib/copilot/ai'
 import { registraSpesaBrief, meseCorrente, USD_TO_EUR } from '@/lib/copilot/spesa'
 import type { Brief, BriefContext } from '@/lib/copilot/ai'
@@ -18,24 +19,48 @@ import type { Brief, BriefContext } from '@/lib/copilot/ai'
 // Tetto di spesa AI mensile per locale (EUR). Oltre, le card servono testo deterministico.
 const BUDGET_EUR = Number(process.env.COPILOT_BUDGET_EUR ?? '15')
 
-const SCOPES = ['contabilita']
+const SCOPES = ['contabilita', 'personale']
 const PERIODI = ['oggi', 'settimana', 'mese', 'anno']
 
 // Verdetto deterministico (senza AI): per il caso vuoto e per il budget esaurito. Onesto
 // e utile lo stesso — usa il semaforo e le metriche già calcolate.
-function briefDeterministico(context: BriefContext, label: string): Brief {
+function briefDeterministico(context: BriefContext, label: string, scope: string): Brief {
   const status = context.statusHint ?? 'yellow'
   const metrics = context.sections[0]?.metrics ?? []
   const m = (k: string) => metrics.find((x) => x.key === k)
-  const cassaPct = m('cassa_pct')?.value
-  const cassaResta = m('cassa_resta')?.value
-  const statoLabel = status === 'green' ? 'in salute' : status === 'red' ? 'in sofferenza' : 'da tenere d’occhio'
-  const headline = cassaPct != null
-    ? `${label}: cassa ${statoLabel}, ti resta il ${cassaPct}% degli incassi.`
-    : `${label}: nessun incasso in questo periodo.`
-  const why = cassaResta != null
-    ? [{ title: 'Cassa che resta', detail: `Restano circa ${cassaResta}€ dopo personale, materie prime e costi fissi. È al lordo di tasse e saldo IVA: non è utile netto.`, evidence: ['cassa_resta'] }]
-    : []
+
+  let headline: string
+  let why: Brief['why'] = []
+
+  if (scope === 'personale') {
+    const oggi = m('organico_oggi')
+    if (oggi) {
+      // Advisor di oggi (pre-servizio): il verdetto è già pronto nella metrica.
+      headline = `${label}: ${oggi.value}${oggi.deltaLabel ? ` — ${oggi.deltaLabel}` : ''}.`
+      why = oggi.deltaLabel ? [{ title: 'Organico di oggi', detail: String(oggi.deltaLabel), evidence: ['organico_oggi'] }] : []
+    } else {
+      const coperti = m('coperti_totali')?.value
+      const cpo = m('coperti_per_ora')
+      const statoLabel = status === 'green' ? 'in equilibrio coi coperti' : status === 'red' ? 'tirato: pochi rispetto ai coperti' : 'da tenere d’occhio'
+      headline = coperti != null && Number(coperti) > 0
+        ? `${label}: organico ${statoLabel} (${coperti} coperti serviti).`
+        : `${label}: nessun coperto servito in questo periodo.`
+      if (cpo?.value != null && Number(coperti) > 0) {
+        why = [{ title: 'Coperti per ora-lavoro', detail: `${cpo.value} coperti per ora di personale${cpo.deltaLabel ? ` — ${cpo.deltaLabel}` : ''}.`, evidence: ['coperti_per_ora'] }]
+      }
+    }
+  } else {
+    const cassaPct = m('cassa_pct')?.value
+    const cassaResta = m('cassa_resta')?.value
+    const statoLabel = status === 'green' ? 'in salute' : status === 'red' ? 'in sofferenza' : 'da tenere d’occhio'
+    headline = cassaPct != null
+      ? `${label}: cassa ${statoLabel}, ti resta il ${cassaPct}% degli incassi.`
+      : `${label}: nessun incasso in questo periodo.`
+    why = cassaResta != null
+      ? [{ title: 'Cassa che resta', detail: `Restano circa ${cassaResta}€ dopo personale, materie prime e costi fissi. È al lordo di tasse e saldo IVA: non è utile netto.`, evidence: ['cassa_resta'] }]
+      : []
+  }
+
   return {
     status,
     headline,
@@ -68,8 +93,11 @@ export async function GET(req: Request) {
   // periodi passati. Per il periodo in corso la card genera in automatico (auto=1).
   const genera = searchParams.get('genera') === '1'
 
-  // Numeri (sempre dal codice) + hash per la cache.
-  const { context, hash, label, riferimentoKey, vuoto, corrente } = await buildFinancialContext(user.id, periodo, riferimento)
+  // Numeri (sempre dal codice) + hash per la cache. Lo scope sceglie il motore dati;
+  // il resto del flusso (cache, budget, narratore, fallback) è identico.
+  const { context, hash, label, riferimentoKey, vuoto, corrente } = scope === 'personale'
+    ? await buildStaffContext(user.id, periodo, riferimento)
+    : await buildFinancialContext(user.id, periodo, riferimento)
 
   // 1. Cache per hash: stessi numeri dell'ultima volta → nessuna chiamata AI.
   const cached = await prisma.copilotInsight.findUnique({
@@ -88,7 +116,7 @@ export async function GET(req: Request) {
 
   // 3. Niente venduto o budget esaurito → verdetto deterministico (niente AI).
   if (vuoto || (await spesaMeseEur(user.id)) >= BUDGET_EUR) {
-    const brief = briefDeterministico(context, label)
+    const brief = briefDeterministico(context, label, scope)
     await salvaInsight(user.id, scope, periodo, riferimentoKey, hash, brief)
     return NextResponse.json({ brief, label, cached: false, budget: !vuoto })
   }
@@ -102,7 +130,7 @@ export async function GET(req: Request) {
   } catch (e: unknown) {
     // Se l'AI fallisce, non lasciamo la pagina senza verdetto: fallback deterministico.
     console.error('[COPILOT] insight AI fallita:', e instanceof Error ? e.message : String(e))
-    const brief = briefDeterministico(context, label)
+    const brief = briefDeterministico(context, label, scope)
     return NextResponse.json({ brief, label, cached: false, fallback: true })
   }
 }
