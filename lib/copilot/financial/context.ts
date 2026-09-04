@@ -83,17 +83,16 @@ export async function buildFinancialContext(
     { key: 'cassa_resta', label: 'Cassa che resta (stima)', value: round2(cassa.cassaResta), unit: 'EUR', deltaLabel: 'dopo personale, materie prime e costi fissi — al lordo di tasse e saldo IVA' },
     { key: 'incassi', label: 'Incassi del periodo', value: round2(cassa.incassi), unit: 'EUR' },
     { key: 'food_cost_pct', label: 'Materie prime sugli incassi', value: cassa.incassi > 0 ? round2((cassa.materiePrime / cassa.incassi) * 100) : 0, unit: '%' },
-    { key: 'labor_pct', label: 'Personale sugli incassi', value: cassa.incassi > 0 ? round2((cassa.personale / cassa.incassi) * 100) : 0, unit: '%' },
     { key: 'quota_costi_fissi', label: 'Costi fissi del periodo', value: round2(cassa.costiFissi), unit: 'EUR' },
   ]
 
-  // Allerte "lacune di dati" che gonfiano la cassa che resta: personale non impostato o
-  // troppo alto (→ apri_staff), costi fissi non registrati (→ apri_costi).
+  // PERSONALE: UNA sola metrica (niente doppione "sugli incassi" + "sopra soglia").
+  // Se non è tracciato → la cassa è gonfiata; altrimenti l'incidenza, annotata se oltre soglia.
   const laborPct = cassa.incassi > 0 ? (cassa.personale / cassa.incassi) * 100 : 0
   if (cassa.incassi > 0 && laborPct <= 0) {
     metrics.push({ key: 'labor_non_tracciato', label: 'Costo del personale non impostato', value: 'paghe/turni non conteggiati', deltaLabel: 'senza personale la cassa che resta è sovrastimata' })
-  } else if (laborPct >= 40) {
-    metrics.push({ key: 'labor_alto', label: 'Personale sopra soglia', value: round2(laborPct), unit: '%', deltaLabel: 'oltre ~40% degli incassi: i turni pesano molto sulla cassa' })
+  } else {
+    metrics.push({ key: 'labor_pct', label: 'Personale sugli incassi', value: round2(laborPct), unit: '%', deltaLabel: laborPct >= 40 ? 'oltre ~40% degli incassi: i turni pesano molto sulla cassa' : undefined })
   }
   // Costi fissi = quote MENSILI: segnalarli "non registrati" su oggi/settimana è rumore.
   const orizzonteLungoCF = periodo === 'mese' || periodo === 'anno'

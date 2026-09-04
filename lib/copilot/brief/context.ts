@@ -279,13 +279,11 @@ async function buildEconomicSection(
       deltaLabel: 'dopo personale, materie prime e costi fissi — al lordo di tasse e saldo IVA',
     },
     { key: 'food_cost_pct', label: 'Materie prime sugli incassi', value: foodPct, unit: '%' },
-    { key: 'labor_pct', label: 'Personale sugli incassi', value: laborPct, unit: '%' },
   ]
 
-  // ── Allerta PERSONALE (per l'azione "apri_staff") ──
-  // Due lacune opposte, entrambe importanti per la salute reale:
-  //  · labor non tracciato (laborPct = 0 con incasso) → la cassa è gonfiata, mancano le paghe.
-  //  · labor troppo alto (oltre soglia) → il personale erode la cassa, turni da rivedere.
+  // ── PERSONALE: UNA sola metrica (niente doppione "sugli incassi" + "sopra soglia").
+  //  · se non è tracciato (laborPct = 0 con incasso) → la cassa è gonfiata, mancano le paghe.
+  //  · altrimenti mostriamo l'incidenza, annotata quando è oltre soglia.
   if (laborPct <= 0) {
     metrics.push({
       key: 'labor_non_tracciato',
@@ -293,13 +291,13 @@ async function buildEconomicSection(
       value: 'paghe/turni non conteggiati',
       deltaLabel: 'senza costo del personale la cassa che resta è sovrastimata',
     })
-  } else if (laborPct >= 40) {
+  } else {
     metrics.push({
-      key: 'labor_alto',
-      label: 'Personale sopra soglia',
+      key: 'labor_pct',
+      label: 'Personale sugli incassi',
       value: laborPct,
       unit: '%',
-      deltaLabel: 'oltre ~40% degli incassi: i turni pesano molto sulla cassa',
+      deltaLabel: laborPct >= 40 ? 'oltre ~40% degli incassi: i turni pesano molto sulla cassa' : undefined,
     })
   }
 
@@ -367,15 +365,14 @@ async function buildOrganicoSection(
     { key: 'organico_coperti', label: 'Coperti serviti', value: attr.totaleCoperti, unit: 'coperti' },
     {
       key: 'organico_coperti_per_ora',
-      label: 'Coperti per ora-lavoro',
+      label: 'Coperti serviti per ora di personale',
       value: attr.copertiPerOraLocale,
-      deltaLabel: baseline.copertiPerOraGlobale > 0 ? `tipico ~${baseline.copertiPerOraGlobale}/ora` : undefined,
+      deltaLabel: baseline.copertiPerOraGlobale > 0 ? `tipico del locale ~${baseline.copertiPerOraGlobale}/ora` : undefined,
     },
   ]
-  const top = attr.perDipendente[0]
-  if (top && top.copertiServiti > 0) {
-    metrics.push({ key: 'organico_top', label: 'Ha servito più coperti', value: top.nome, deltaLabel: `${top.copertiServiti} coperti` })
-  }
+  // Niente "chi ha servito più coperti": l'assoluto dipende dalle ore lavorate e i coperti
+  // sono divisi tra i presenti (carico attribuito, non merito). Sta nella tabella Analytics
+  // e nello strumento AI, con le ore accanto per contestualizzarlo.
 
   // Solo nel brief giornaliero: verdetto sulla giornata (sotto/sopra organico) vs tipico.
   if (timeframe === 'daily' && giornoYmd) {

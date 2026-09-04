@@ -1755,9 +1755,9 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
               <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
-                    <h3 className="font-bold text-ink-navy">Chi ha servito i coperti</h3>
+                    <h3 className="font-bold text-ink-navy">Quota coperti per persona</h3>
                     <p className="text-ink-navy/50 text-sm mt-0.5">
-                      Ogni tavolo servito viene diviso tra chi era in servizio in quel momento. Così vedi quanti coperti ha gestito ciascuno e a che ritmo.
+                      Non sono i coperti che ciascuno ha servito da solo: ogni tavolo viene diviso <b className="text-ink-navy/60">in parti uguali</b> tra chi era in servizio in quel momento (se erano in due, ~metà coperti a testa). È la <b className="text-ink-navy/60">quota di carico</b> di ognuno, utile per vedere come si distribuisce il lavoro.
                     </p>
                   </div>
                   <span className="text-[11px] font-medium text-ink-navy/40 bg-mist rounded-full px-2.5 py-1">
@@ -1796,8 +1796,8 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                         <div className="flex-1 h-6 bg-mist rounded-lg overflow-hidden">
                           <div className="h-full bg-electric-blue/70 rounded-lg" style={{ width: `${Math.round((d.copertiServiti / max) * 100)}%` }} />
                         </div>
-                        <div className="w-36 shrink-0 text-right text-xs text-ink-navy/60">
-                          <b className="text-ink-navy">{d.copertiServiti}</b> coperti in {oreLabel(d.oreLavorate)} · {d.copertiPerOra}/ora
+                        <div className="w-40 shrink-0 text-right text-xs text-ink-navy/60">
+                          quota <b className="text-ink-navy">~{d.copertiServiti}</b> coperti · {oreLabel(d.oreLavorate)} · {d.copertiPerOra}/ora
                         </div>
                       </div>
                     )

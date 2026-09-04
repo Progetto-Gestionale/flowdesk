@@ -88,14 +88,15 @@ export async function buildStaffContext(
   const metrics: Metric[] = [
     { key: 'coperti_totali', label: 'Coperti serviti nel periodo', value: attr.totaleCoperti, unit: 'coperti' },
     { key: 'ore_uomo', label: 'Ore-uomo di personale', value: attr.totaleOreLavorate, unit: 'ore', deltaLabel: fonteLabel },
-    { key: 'coperti_per_ora', label: 'Coperti per ora-lavoro', value: attr.copertiPerOraLocale, deltaLabel: rapportoSano > 0 ? `${valutazioneLabel} · tipico ~${rapportoSano}/ora` : valutazioneLabel },
+    // "Coperti per ora-lavoro" = coperti serviti diviso le ore di TUTTO il personale
+    // presente (sala + cucina). È un ritmo di carico, non una performance individuale.
+    { key: 'coperti_per_ora', label: 'Coperti serviti per ora di personale', value: attr.copertiPerOraLocale, deltaLabel: rapportoSano > 0 ? `${valutazioneLabel} · tipico del locale ~${rapportoSano}/ora` : valutazioneLabel },
   ]
 
-  // Dipendente più carico del periodo (per dare un nome al dato).
-  const top = attr.perDipendente[0]
-  if (top && top.copertiServiti > 0) {
-    metrics.push({ key: 'dip_piu_carico', label: 'Ha servito più coperti', value: top.nome, deltaLabel: `${top.copertiServiti} coperti · ${top.copertiPerOra}/ora` })
-  }
+  // NB: NON mettiamo "chi ha servito più coperti" nel brief: l'assoluto dipende dalle ore
+  // lavorate (chi fa più ore ne serve di più) e i coperti sono divisi tra i presenti →
+  // è carico attribuito, non merito. Il dato per dipendente (con le ore accanto) vive
+  // nella tabella Analytics e nello strumento AI, dove è contestualizzato.
 
   // Coperti serviti senza nessun presente (buco di timbrature/turni): il dato è
   // incompleto, va segnalato onestamente così l'AI non lo ignora.
@@ -103,21 +104,11 @@ export async function buildStaffContext(
     metrics.push({ key: 'coperti_scoperti', label: 'Coperti senza personale tracciato', value: attr.copertiNonAttribuiti, unit: 'coperti', deltaLabel: attr.fonte === 'cartellino' ? 'sessioni servite senza timbrature: timbri mancanti' : 'sessioni senza turni pianificati corrispondenti' })
   }
 
-  // Giorni della settimana più/meno tesi dallo storico (il cuore del suggerimento:
-  // "alcuni giorni troppo/pochi dipendenti"). Solo giorni con storico sufficiente.
+  // Pattern settimanale COMPLETO in un'unica metrica: dà all'AI il quadro RELATIVO del
+  // locale (i suoi giorni tra loro), così ragiona sulle discrepanze del caso specifico e
+  // non su una soglia assoluta. Sostituisce i vecchi "giorno più teso/scarico" (ridondanti).
   const conStorico = baseline.perGiorno.filter((g) => g.giorni >= 2 && g.copertiPerOra > 0)
   if (conStorico.length >= 2 && rapportoSano > 0) {
-    const teso = [...conStorico].sort((a, b) => b.copertiPerOra - a.copertiPerOra)[0]
-    const scarico = [...conStorico].sort((a, b) => a.copertiPerOra - b.copertiPerOra)[0]
-    if (teso.copertiPerOra >= rapportoSano * 1.2) {
-      metrics.push({ key: 'giorno_piu_teso', label: 'Giorno più sotto pressione (storico)', value: teso.label, deltaLabel: `~${teso.copertiMediani} coperti con ${teso.oreStaffMediane}h di personale (${teso.copertiPerOra}/ora)` })
-    }
-    if (scarico.copertiPerOra <= rapportoSano * 0.8 && scarico.label !== teso.label) {
-      metrics.push({ key: 'giorno_piu_scarico', label: 'Giorno con più margine di personale (storico)', value: scarico.label, deltaLabel: `~${scarico.copertiMediani} coperti con ${scarico.oreStaffMediane}h di personale (${scarico.copertiPerOra}/ora)` })
-    }
-
-    // Pattern settimanale COMPLETO: dà all'AI il quadro relativo del locale (i suoi
-    // giorni tra loro), così può fare analisi RELATIVA e non solo assoluta vs 0.3.
     const GIORNI_ORD = [1, 2, 3, 4, 5, 6, 0] // Lun→Dom
     const pattern = GIORNI_ORD
       .map((d) => baseline.perGiorno[d])
@@ -125,22 +116,7 @@ export async function buildStaffContext(
       .map((g) => `${g.label} ${g.copertiPerOra}/h (~${g.copertiMediani} cop, ${g.oreStaffMediane}h)`)
       .join(' · ')
     if (pattern) {
-      metrics.push({ key: 'pattern_settimanale', label: 'Coperti/ora tipici per giorno (storico del locale)', value: pattern, deltaLabel: `media del locale ~${rapportoSano}/ora` })
-    }
-  }
-
-  // Per il periodo "oggi": valutazione diretta della giornata odierna rispetto al tipico.
-  if (periodo === 'oggi') {
-    const dow = p.inizio.getDay()
-    const v = valutaGiornata(baseline, dow, attr.totaleOreLavorate)
-    if (v.verdetto !== 'nd') {
-      metrics.push({
-        key: 'valutazione_oggi',
-        label: 'Organico di oggi vs tipico',
-        value: v.verdetto === 'sotto' ? 'sotto organico' : v.verdetto === 'sopra' ? 'sopra organico' : 'in linea',
-        deltaLabel: `oggi ${v.oreStaff}h · consigliate ~${v.oreConsigliate}h per ~${v.copertiAttesi} coperti tipici del ${v.label}`,
-      })
-      if (v.verdetto === 'sotto' && statusHint === 'green') statusHint = 'yellow'
+      metrics.push({ key: 'pattern_settimanale', label: 'Coperti per ora per giorno (storico del locale)', value: pattern, deltaLabel: `media del locale ~${rapportoSano}/ora` })
     }
   }
 
@@ -223,10 +199,6 @@ async function buildOggi(
   })
   if (attr.totaleCoperti > 0) {
     metrics.push({ key: 'coperti_finora', label: 'Coperti serviti finora oggi', value: attr.totaleCoperti, unit: 'coperti', deltaLabel: `${oreFinora}h di presenza finora` })
-    const top = attr.perDipendente[0]
-    if (top && top.copertiServiti > 0) {
-      metrics.push({ key: 'dip_piu_carico', label: 'Ha servito più coperti finora', value: top.nome, deltaLabel: `${top.copertiServiti} coperti` })
-    }
   }
 
   const periodProgress = calcolaAvanzamento(p.inizio, p.fine)
