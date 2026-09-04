@@ -95,12 +95,17 @@ export async function buildFinancialContext(
   } else if (laborPct >= 40) {
     metrics.push({ key: 'labor_alto', label: 'Personale sopra soglia', value: round2(laborPct), unit: '%', deltaLabel: 'oltre ~40% degli incassi: i turni pesano molto sulla cassa' })
   }
-  if (cassa.incassi > 0 && cassa.costiFissi <= 0) {
+  // Costi fissi = quote MENSILI: segnalarli "non registrati" su oggi/settimana è rumore.
+  const orizzonteLungoCF = periodo === 'mese' || periodo === 'anno'
+  if (orizzonteLungoCF && cassa.incassi > 0 && cassa.costiFissi <= 0) {
     metrics.push({ key: 'costi_fissi_mancanti', label: 'Costi fissi non registrati', value: 'affitto/utenze/servizi assenti', deltaLabel: 'senza costi fissi la cassa che resta è sovrastimata' })
   }
 
-  // Acquisti: se ci sono bolle, confronto comprato vs consumato; se no, lo suggeriamo.
-  if (r.acquisti.numero > 0) {
+  // Acquisti: confronto comprato vs consumato SOLO su mese/anno. Il magazzino si compra
+  // per più giorni, quindi su oggi/settimana il confronto è per definizione sballato
+  // (compri oggi, consumi nei giorni dopo): lo mostriamo solo su orizzonti lunghi.
+  const orizzonteLungo = periodo === 'mese' || periodo === 'anno'
+  if (orizzonteLungo && r.acquisti.numero > 0) {
     metrics.push({
       key: 'merci_comprate_vs_consumate',
       label: 'Merci comprate − consumate',
@@ -108,7 +113,7 @@ export async function buildFinancialContext(
       unit: 'EUR',
       deltaLabel: `acquisti ${round2(r.acquisti.nettoMerci)}€ vs materie prime consumate ${round2(cassa.materiePrime)}€`,
     })
-  } else if (cassa.materiePrime > 0) {
+  } else if (orizzonteLungo && cassa.materiePrime > 0) {
     metrics.push({ key: 'bolle_mancanti', label: 'Bolle fornitori non inserite', value: 'spesa reale fornitori non tracciata', deltaLabel: 'inserendo le bolle vedi se stai comprando più di quanto consumi' })
   }
 

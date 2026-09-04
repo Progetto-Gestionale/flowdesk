@@ -115,6 +115,18 @@ export async function buildStaffContext(
     if (scarico.copertiPerOra <= rapportoSano * 0.8 && scarico.label !== teso.label) {
       metrics.push({ key: 'giorno_piu_scarico', label: 'Giorno con più margine di personale (storico)', value: scarico.label, deltaLabel: `~${scarico.copertiMediani} coperti con ${scarico.oreStaffMediane}h di personale (${scarico.copertiPerOra}/ora)` })
     }
+
+    // Pattern settimanale COMPLETO: dà all'AI il quadro relativo del locale (i suoi
+    // giorni tra loro), così può fare analisi RELATIVA e non solo assoluta vs 0.3.
+    const GIORNI_ORD = [1, 2, 3, 4, 5, 6, 0] // Lun→Dom
+    const pattern = GIORNI_ORD
+      .map((d) => baseline.perGiorno[d])
+      .filter((g) => g.giorni >= 2 && g.copertiPerOra > 0)
+      .map((g) => `${g.label} ${g.copertiPerOra}/h (~${g.copertiMediani} cop, ${g.oreStaffMediane}h)`)
+      .join(' · ')
+    if (pattern) {
+      metrics.push({ key: 'pattern_settimanale', label: 'Coperti/ora tipici per giorno (storico del locale)', value: pattern, deltaLabel: `media del locale ~${rapportoSano}/ora` })
+    }
   }
 
   // Per il periodo "oggi": valutazione diretta della giornata odierna rispetto al tipico.

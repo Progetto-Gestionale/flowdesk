@@ -94,7 +94,7 @@ const CELL_THEME = {
 
 // Cache navigazione (stale-while-revalidate): al ritorno mostra subito l'ultimo dato noto.
 const ORDINI_CACHE_KEY = 'food:ordini'
-type OrdiniCache = { ordini: Ordine[]; tavoli: TavoloDb[]; appuntamenti: AppuntamentoOrdine[]; blockAsporto: boolean; blockDelivery: boolean }
+type OrdiniCache = { ordini: Ordine[]; tavoli: TavoloDb[]; appuntamenti: AppuntamentoOrdine[] }
 
 export default function OrdiniPage() {
   const [ordini, setOrdini] = useState<Ordine[]>([])
@@ -113,9 +113,6 @@ export default function OrdiniPage() {
     setRepartoAttivo(r)
     try { localStorage.setItem('food:ordini-reparto', r) } catch {}
   }
-  const [blockAsporto, setBlockAsporto] = useState(false)
-  const [blockDelivery, setBlockDelivery] = useState(false)
-  const [savingBlocco, setSavingBlocco] = useState(false)
   // Acknowledgment del pulse "nuovo ordine" PER REPARTO (segnaVisto / nuovoDaNotare): definiti più
   // sotto, dove sono noti i reparti (repartoDiRiga, repartoAttivo). Se la cucina nota l'ordine, il
   // pulse resta acceso sulla parte del bar finché non lo nota anche lui.
@@ -124,25 +121,6 @@ export default function OrdiniPage() {
     const res = await fetch('/api/ordini?oggi=1&futuri=1', { credentials: 'include' })
     const data = await res.json().catch(() => ({}))
     setOrdini(data.ordini ?? [])
-  }
-
-  async function fetchBlocchi() {
-    const res = await fetch('/api/impostazioni/blocchi', { credentials: 'include' })
-    const data = await res.json().catch(() => ({}))
-    setBlockAsporto(data.blockAsporto ?? false)
-    setBlockDelivery(data.blockDelivery ?? false)
-  }
-
-  async function toggleBlocco(campo: 'blockAsporto' | 'blockDelivery', valore: boolean) {
-    setSavingBlocco(true)
-    if (campo === 'blockAsporto') setBlockAsporto(valore)
-    else setBlockDelivery(valore)
-    await fetch('/api/impostazioni/blocchi', {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [campo]: valore }),
-    })
-    setSavingBlocco(false)
   }
 
   async function fetchTavoli() {
@@ -175,11 +153,9 @@ export default function OrdiniPage() {
       setOrdini(cached.ordini)
       setTavoli(cached.tavoli)
       setAppuntamenti(cached.appuntamenti)
-      setBlockAsporto(cached.blockAsporto)
-      setBlockDelivery(cached.blockDelivery)
       setLoading(false)
     }
-    Promise.all([fetchOrdini(), fetchTavoli(), fetchAppuntamenti(), fetchBlocchi()]).finally(() => setLoading(false))
+    Promise.all([fetchOrdini(), fetchTavoli(), fetchAppuntamenti()]).finally(() => setLoading(false))
     const interval = setInterval(() => { fetchOrdini(); fetchAppuntamenti() }, 15000)
     return () => clearInterval(interval)
   }, [])
@@ -187,8 +163,8 @@ export default function OrdiniPage() {
   // Write-through: tiene la cache allineata all'ultimo stato mostrato (incluse le modifiche ottimistiche).
   useEffect(() => {
     if (loading) return
-    setCache<OrdiniCache>(ORDINI_CACHE_KEY, { ordini, tavoli, appuntamenti, blockAsporto, blockDelivery })
-  }, [loading, ordini, tavoli, appuntamenti, blockAsporto, blockDelivery])
+    setCache<OrdiniCache>(ORDINI_CACHE_KEY, { ordini, tavoli, appuntamenti })
+  }, [loading, ordini, tavoli, appuntamenti])
 
   // La cucina segna l'ordine come "pronto".
   // - delivery: diventa 'pronto', poi il fattorino lo segnerà 'consegnato' (auto-chiusura conto).
@@ -737,31 +713,6 @@ export default function OrdiniPage() {
           )}
         </div>
       )}
-
-      {/* Switch blocco asporto/delivery */}
-      <div className="bg-white border border-ink-navy/10 rounded-2xl px-4 py-3 flex flex-wrap gap-4 items-center shadow-sm">
-        <p className="text-sm font-semibold text-ink-navy flex-1 min-w-max">Disponibilità ordini online</p>
-        <div className="flex gap-4">
-          {([
-            { campo: 'blockAsporto' as const, label: 'Asporto' },
-            { campo: 'blockDelivery' as const, label: 'Delivery' },
-          ]).map(({ campo, label }) => {
-            const bloccato = campo === 'blockAsporto' ? blockAsporto : blockDelivery
-            return (
-              <div key={campo} className="flex items-center gap-2 select-none">
-                <span className={`text-sm font-medium ${bloccato ? 'text-red-500' : 'text-ink-navy/60'}`}>{label}</span>
-                <button type="button" disabled={savingBlocco} onClick={() => toggleBlocco(campo, !bloccato)}
-                  className={`relative w-10 h-5 rounded-full transition-colors focus:outline-none disabled:opacity-50 ${bloccato ? 'bg-red-400' : 'bg-green-400'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform block ${bloccato ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-                <span className={`text-xs font-semibold ${bloccato ? 'text-red-500' : 'text-green-600'}`}>
-                  {bloccato ? 'Sospeso' : 'Attivo'}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      </div>
 
       {vuoto ? (
         <div className="bg-white rounded-2xl border border-ink-navy/10 p-20 text-center shadow-sm">

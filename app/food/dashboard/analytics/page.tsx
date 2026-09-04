@@ -1692,7 +1692,9 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
           {/* Suggerimento AI sull'organico (stesso canale della Contabilità: unicum, non banner a sé) */}
           {meseSel && (() => {
             const [y, mo] = meseSel.split('-').map(Number)
-            const rif = new Date(y, mo - 1, 1)
+            // Metà mese a mezzogiorno: così la conversione in UTC (toISOString) non
+            // scivola al mese precedente sul server (bug agosto→luglio col giorno 1).
+            const rif = new Date(y, mo - 1, 15, 12, 0, 0)
             const now = new Date()
             const corrente = y === now.getFullYear() && mo === now.getMonth() + 1
             return <AiInsightCard key={`ins-${meseSel}`} scope="personale" periodo="mese" riferimento={rif} label={`${MESI_LABEL[String(mo).padStart(2, '0')]} ${y}`} corrente={corrente} />
@@ -1753,9 +1755,9 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
               <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
-                    <h3 className="font-bold text-ink-navy">Coperti serviti per dipendente</h3>
+                    <h3 className="font-bold text-ink-navy">Chi ha servito i coperti</h3>
                     <p className="text-ink-navy/50 text-sm mt-0.5">
-                      I coperti di ogni tavolo servito, divisi tra chi era presente in quella fascia oraria.
+                      Ogni tavolo servito viene diviso tra chi era in servizio in quel momento. Così vedi quanti coperti ha gestito ciascuno e a che ritmo.
                     </p>
                   </div>
                   <span className="text-[11px] font-medium text-ink-navy/40 bg-mist rounded-full px-2.5 py-1">
@@ -1765,17 +1767,22 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
-                    { val: copertiData.attribuzione.totaleCoperti, label: 'coperti serviti' },
-                    { val: oreLabel(copertiData.attribuzione.totaleOreLavorate), label: 'ore-uomo' },
-                    { val: copertiData.attribuzione.copertiPerOraLocale, label: 'coperti / ora' },
-                    { val: copertiData.attribuzione.sessioni, label: 'tavoli serviti' },
+                    { val: copertiData.attribuzione.totaleCoperti, label: 'coperti serviti', hint: 'in tutto il mese' },
+                    { val: copertiData.attribuzione.sessioni, label: 'tavoli serviti', hint: 'sessioni chiuse' },
+                    { val: oreLabel(copertiData.attribuzione.totaleOreLavorate), label: 'ore di lavoro', hint: 'somma del personale' },
+                    { val: copertiData.attribuzione.copertiPerOraLocale, label: 'coperti / ora', hint: 'ritmo medio' },
                   ].map(k => (
                     <div key={k.label} className="text-center rounded-xl py-2.5 bg-electric-blue/10">
                       <p className="text-lg font-bold text-electric-blue">{k.val}</p>
                       <p className="text-[10px] font-medium text-electric-blue">{k.label}</p>
+                      <p className="text-[9px] text-electric-blue/60 mt-0.5">{k.hint}</p>
                     </div>
                   ))}
                 </div>
+
+                <p className="text-[11px] text-ink-navy/40 bg-mist/60 rounded-lg px-3 py-2">
+                  <b className="text-ink-navy/55">Coperti / ora</b> = quanti coperti gestisce in media ogni ora di personale in servizio. Più è alto, più il personale è stato sotto pressione; più è basso, più c&apos;era margine.
+                </p>
 
                 <div className="space-y-2">
                   {copertiData.attribuzione.perDipendente.filter(d => d.copertiServiti > 0).map(d => {
@@ -1789,8 +1796,8 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                         <div className="flex-1 h-6 bg-mist rounded-lg overflow-hidden">
                           <div className="h-full bg-electric-blue/70 rounded-lg" style={{ width: `${Math.round((d.copertiServiti / max) * 100)}%` }} />
                         </div>
-                        <div className="w-32 shrink-0 text-right text-xs text-ink-navy/60">
-                          <b className="text-ink-navy">{d.copertiServiti}</b> coperti · {oreLabel(d.oreLavorate)} · {d.copertiPerOra}/h
+                        <div className="w-36 shrink-0 text-right text-xs text-ink-navy/60">
+                          <b className="text-ink-navy">{d.copertiServiti}</b> coperti in {oreLabel(d.oreLavorate)} · {d.copertiPerOra}/ora
                         </div>
                       </div>
                     )
@@ -1805,13 +1812,13 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                 )}
               </div>
 
-              {/* Baseline: organico tipico per giorno della settimana (lo storico) */}
+              {/* Baseline: i giorni della settimana a confronto (lo storico del locale) */}
               {copertiData.baseline.perGiorno.some(g => g.giorni >= 2) && (
                 <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
                   <div>
-                    <h3 className="font-bold text-ink-navy">Organico tipico per giorno</h3>
+                    <h3 className="font-bold text-ink-navy">I tuoi giorni a confronto</h3>
                     <p className="text-ink-navy/50 text-sm mt-0.5">
-                      Coperti e ore-uomo tipici di ogni giorno (mediana ultime {copertiData.baseline.settimane} settimane). Rapporto sano ~{copertiData.baseline.copertiPerOraGlobale} coperti/ora.
+                      Quanti coperti servi di solito ogni giorno e con quanto personale (media delle ultime {copertiData.baseline.settimane} settimane). Il colore confronta il ritmo del giorno con la tua media (~{copertiData.baseline.copertiPerOraGlobale} coperti/ora).
                     </p>
                   </div>
                   <div className="space-y-1.5">
@@ -1826,15 +1833,20 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
                           <div key={g.dow} className="flex items-center gap-3 text-sm">
                             <span className="w-10 shrink-0 font-semibold text-ink-navy/70">{g.label}</span>
                             <span className="flex-1 text-ink-navy/50">
-                              ~{g.copertiMediani} coperti · {oreLabel(g.oreStaffMediane)} personale
+                              ~{g.copertiMediani} coperti serviti con {oreLabel(g.oreStaffMediane)} di personale
                             </span>
                             <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${teso ? 'bg-rose-50 text-rose-600' : scarico ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                              {g.copertiPerOra}/h {teso ? '· sotto organico' : scarico ? '· margine' : '· ok'}
+                              {g.copertiPerOra}/ora · {teso ? 'più sotto pressione' : scarico ? 'più margine' : 'in equilibrio'}
                             </span>
                           </div>
                         )
                       })}
                   </div>
+                  <p className="text-[11px] text-ink-navy/40 pt-1 flex flex-wrap gap-x-3 gap-y-1">
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-rose-400 align-middle mr-1" />più sotto pressione: valuta più personale</span>
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-400 align-middle mr-1" />in equilibrio</span>
+                    <span><span className="inline-block w-2 h-2 rounded-full bg-amber-400 align-middle mr-1" />più margine: forse troppo personale</span>
+                  </p>
                 </div>
               )}
             </div>
