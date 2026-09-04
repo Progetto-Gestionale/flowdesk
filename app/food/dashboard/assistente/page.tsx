@@ -80,6 +80,19 @@ export default function CopilotaPage() {
       return
     }
 
+    // Deep-link da "Approfondisci" sulla card Organico: chat fresca in modalità libera
+    // (l'assistente usa lo strumento coperti_per_dipendente per rispondere sui dati veri).
+    if (sp.get('scope') === 'personale' && sp.get('periodo')) {
+      const periodo = sp.get('periodo') as string
+      setLibera(true)
+      try { localStorage.removeItem(STORAGE_KEY) } catch {}
+      window.history.replaceState({}, '', '/food/dashboard/assistente')
+      idratato.current = true
+      const q: Record<string, string> = { oggi: 'di oggi', settimana: 'di questa settimana', mese: 'di questo mese', anno: "di quest'anno" }
+      invia(`Analizza l'organico ${q[periodo] ?? 'del periodo'}: quanti coperti ha servito ogni dipendente e se sto mettendo troppo o troppo poco personale rispetto ai coperti.`)
+      return
+    }
+
     setMessages(caricaChat())
     idratato.current = true
     // eslint-disable-next-line react-hooks/exhaustive-deps

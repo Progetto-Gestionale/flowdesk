@@ -6,6 +6,7 @@ import { getCache, setCache } from '@/lib/pageCache'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
 import { IconUsers, IconTrash, IconPencil } from '@/app/components/icons'
+import AiInsightCard from '@/app/food/dashboard/contabilita/AiInsightCard'
 
 interface Dipendente {
   id: string
@@ -596,6 +597,10 @@ export default function StaffPage() {
       {/* ── TAB TURNI ── */}
       {tab === 'turni' && (
         <div className="space-y-4">
+          {/* Advisor organico di oggi (stesso canale AI della Contabilità): "per oggi
+              hai messo abbastanza personale rispetto ai coperti che fai di solito?" */}
+          <AiInsightCard scope="personale" periodo="oggi" riferimento={new Date()} label="Oggi" corrente />
+
           {/* Barra controlli */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Toggle settimana/mese */}

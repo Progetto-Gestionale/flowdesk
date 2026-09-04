@@ -29,9 +29,11 @@ const ACTION_HREF: Record<string, string> = {
   apri_costi: '/food/dashboard/contabilita/costi',
   apri_staff: '/food/dashboard/staff',
   apri_impostazioni: '/food/dashboard/contabilita/impostazioni',
+  apri_analitica_personale: '/food/dashboard/analytics',
+  apri_analytics: '/food/dashboard/analytics',
 }
 
-export default function AiInsightCard({ periodo, riferimento, label, corrente }: { periodo: string; riferimento: Date; label?: string; corrente: boolean }) {
+export default function AiInsightCard({ periodo, riferimento, label, corrente, scope = 'contabilita' }: { periodo: string; riferimento: Date; label?: string; corrente: boolean; scope?: string }) {
   const [brief, setBrief] = useState<Brief | null>(null)
   const [loading, setLoading] = useState(true)
   // Periodo passato senza verdetto salvato: mostriamo il tasto "Genera" invece di
@@ -44,7 +46,7 @@ export default function AiInsightCard({ periodo, riferimento, label, corrente }:
     let vivo = true
     setLoading(true)
     setGenerabile(false)
-    const url = `/api/copilot/insight?scope=contabilita&periodo=${periodo}&riferimento=${riferimento.toISOString()}${forza ? '&genera=1' : ''}`
+    const url = `/api/copilot/insight?scope=${scope}&periodo=${periodo}&riferimento=${riferimento.toISOString()}${forza ? '&genera=1' : ''}`
     fetch(url, { credentials: 'include' })
       .then((r) => r.json())
       .then((d) => {
@@ -65,7 +67,7 @@ export default function AiInsightCard({ periodo, riferimento, label, corrente }:
   }, [])
 
   // Link all'assistente col contesto (schermata + periodo) già caricato: "Approfondisci".
-  const approfondisci = `/food/dashboard/assistente?scope=contabilita&periodo=${periodo}&riferimento=${riferimento.toISOString()}`
+  const approfondisci = `/food/dashboard/assistente?scope=${scope}&periodo=${periodo}&riferimento=${riferimento.toISOString()}`
 
   const a = ACCENTO[brief?.status ?? 'yellow']
 

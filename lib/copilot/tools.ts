@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { attribuzioneCoperti } from './staff/attribuzione'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Strumenti dell'Assistente AI — SOLA LETTURA.
@@ -73,6 +74,19 @@ export const copilotTools = [
     name: 'presenze_timbrature',
     description:
       'Presenze e RITARDI del personale in un intervallo, calcolati dalle timbrature confrontate con i turni programmati. Per dipendente: giorni di presenza, minuti di ritardo totali, giorni in ritardo. Usalo per "chi è il più ritardatario", "chi arriva tardi".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        dal: { type: 'string', description: 'Data inizio inclusa, YYYY-MM-DD' },
+        al: { type: 'string', description: 'Data fine inclusa, YYYY-MM-DD' },
+      },
+      required: ['dal', 'al'],
+    },
+  },
+  {
+    name: 'coperti_per_dipendente',
+    description:
+      'Coperti SERVITI da ciascun dipendente in un intervallo. Attribuisce i coperti di ogni tavolo (sessione chiusa, finestra oraria reale) al personale presente in quella fascia — dalle timbrature, o dai turni pianificati se non ci sono timbri — dividendoli in parti uguali tra i presenti. Per dipendente: coperti serviti, ore lavorate, coperti per ora. Restituisce anche il totale e il rapporto coperti/ora del locale. Usalo per "quanti coperti ha servito X", "chi ha servito più coperti", "quanti coperti a testa", "sto mettendo abbastanza personale rispetto ai coperti".',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -250,6 +264,29 @@ async function presenzeTimbrature(userId: string, dal: string, al: string) {
   }
 }
 
+// Coperti serviti per dipendente: stesso motore della insight card "Organico"
+// (attribuzione dei coperti al personale presente). Numeri esatti, non stime.
+async function copertiPerDipendente(userId: string, dal: string, al: string) {
+  const { from, to } = intervallo(dal, al)
+  const attr = await attribuzioneCoperti(userId, from, to)
+  return {
+    periodo: `dal ${dal} al ${al}`,
+    fonte_presenza: attr.fonte === 'cartellino' ? 'timbrature' : 'turni pianificati',
+    coperti_totali: attr.totaleCoperti,
+    ore_uomo_totali: attr.totaleOreLavorate,
+    coperti_per_ora_locale: attr.copertiPerOraLocale,
+    coperti_non_attribuiti: attr.copertiNonAttribuiti || undefined,
+    dipendenti: attr.perDipendente.map((d) => ({
+      nome: d.nome,
+      ruolo: d.ruolo || undefined,
+      coperti_serviti: d.copertiServiti,
+      ore_lavorate: d.oreLavorate,
+      coperti_per_ora: d.copertiPerOra,
+    })),
+    nota: attr.totaleCoperti === 0 ? 'Nessun coperto servito (nessun tavolo chiuso) nel periodo.' : undefined,
+  }
+}
+
 // ── Dispatcher: esegue lo strumento richiesto. Sempre scoped su userId. ───────
 export async function eseguiCopilotTool(name: string, input: Record<string, unknown>, userId: string): Promise<unknown> {
   try {
@@ -266,6 +303,9 @@ export async function eseguiCopilotTool(name: string, input: Record<string, unkn
     }
     if (name === 'presenze_timbrature') {
       return await presenzeTimbrature(userId, String(input.dal), String(input.al))
+    }
+    if (name === 'coperti_per_dipendente') {
+      return await copertiPerDipendente(userId, String(input.dal), String(input.al))
     }
     return { errore: `Strumento sconosciuto: ${name}` }
   } catch (e) {

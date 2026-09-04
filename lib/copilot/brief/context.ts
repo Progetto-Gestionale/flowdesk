@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
 import { vistaCassa, semaforoCassa, type StatoSemaforoCassa } from '@/lib/contabilita/cassa'
+import { attribuzioneCoperti } from '@/lib/copilot/staff/attribuzione'
+import { baselineOrganico, valutaGiornata } from '@/lib/copilot/staff/baseline'
 import type { AllowedAction, BriefContext, ContextSection, HealthStatus, Metric, Timeframe } from '@/lib/copilot/ai'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -337,6 +339,55 @@ async function buildEconomicSection(
   }
 }
 
+// ── Organico: coperti serviti vs personale presente ─────────────────────────
+// Incrocia i coperti (tavoli chiusi) con la presenza del personale (timbrature o
+// turni) per lo stesso periodo. Nel brief del mattino risponde alla domanda "ieri
+// avevo il personale giusto per i coperti che ho fatto?". `giornoYmd` (solo daily)
+// serve a valutare la giornata rispetto al tipico di quel giorno della settimana.
+async function buildOrganicoSection(
+  userId: string,
+  from: Date,
+  to: Date,
+  timeframe: Timeframe,
+  giornoYmd?: string,
+): Promise<ContextSection | null> {
+  const [attr, baseline] = await Promise.all([
+    attribuzioneCoperti(userId, from, to),
+    baselineOrganico(userId),
+  ])
+  if (attr.totaleCoperti <= 0 || attr.totaleOreLavorate <= 0) return null
+
+  const metrics: Metric[] = [
+    { key: 'organico_coperti', label: 'Coperti serviti', value: attr.totaleCoperti, unit: 'coperti' },
+    {
+      key: 'organico_coperti_per_ora',
+      label: 'Coperti per ora-lavoro',
+      value: attr.copertiPerOraLocale,
+      deltaLabel: baseline.copertiPerOraGlobale > 0 ? `tipico ~${baseline.copertiPerOraGlobale}/ora` : undefined,
+    },
+  ]
+  const top = attr.perDipendente[0]
+  if (top && top.copertiServiti > 0) {
+    metrics.push({ key: 'organico_top', label: 'Ha servito più coperti', value: top.nome, deltaLabel: `${top.copertiServiti} coperti` })
+  }
+
+  // Solo nel brief giornaliero: verdetto sulla giornata (sotto/sopra organico) vs tipico.
+  if (timeframe === 'daily' && giornoYmd) {
+    const dow = new Date(giornoYmd + 'T12:00:00').getDay()
+    const v = valutaGiornata(baseline, dow, attr.totaleOreLavorate)
+    if (v.verdetto !== 'nd' && v.verdetto !== 'ok') {
+      metrics.push({
+        key: 'organico_verdetto',
+        label: v.verdetto === 'sotto' ? 'Personale sotto il tipico' : 'Personale sopra il tipico',
+        value: v.verdetto === 'sotto' ? 'meno personale del solito' : 'più personale del solito',
+        deltaLabel: `${v.oreStaff}h presenti · consigliate ~${v.oreConsigliate}h per ~${v.copertiAttesi} coperti tipici del ${v.label}`,
+      })
+    }
+  }
+
+  return { key: 'organico', title: 'Organico e coperti', metrics }
+}
+
 // Azioni consentite per questi brief. In Fase A (sola lettura) sono deep-link a
 // sezioni REALI del gestionale: il frontend le trasforma in pulsanti che portano
 // lì. In Fase 2 alcune diventeranno azioni di scrittura (con conferma).
@@ -507,6 +558,16 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
         { key: 'coperti_prenotati_7gg', label: 'Coperti già prenotati', value: copertiPren, unit: 'coperti' },
       ],
     })
+  }
+
+  // ── Organico e coperti (ieri/periodo: personale giusto per i coperti fatti?) ──
+  // In try/catch: un problema qui non deve far saltare il brief.
+  try {
+    const { from, to } = intervallo(curFrom, curTo)
+    const organico = await buildOrganicoSection(userId, from, to, timeframe, timeframe === 'daily' ? curFrom : undefined)
+    if (organico) sections.push(organico)
+  } catch (e) {
+    console.error('[BRIEF] sezione organico non disponibile:', e)
   }
 
   // ── Menu engineering (serve volume: solo settimanale/mensile) ──

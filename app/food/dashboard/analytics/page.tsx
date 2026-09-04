@@ -3,6 +3,15 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getCache, setCache } from '@/lib/pageCache'
 import { Skeleton } from '@/app/components/Skeleton'
+import AiInsightCard from '@/app/food/dashboard/contabilita/AiInsightCard'
+
+// Coperti serviti per dipendente + baseline organico (tab Personale).
+interface CopertiDip { id: string; nome: string; ruolo: string | null; copertiServiti: number; oreLavorate: number; copertiPerOra: number }
+interface BaselineGiorno { dow: number; label: string; giorni: number; copertiMediani: number; oreStaffMediane: number; copertiPerOra: number }
+interface CopertiData {
+  attribuzione: { perDipendente: CopertiDip[]; totaleCoperti: number; copertiNonAttribuiti: number; totaleOreLavorate: number; copertiPerOraLocale: number; fonte: 'cartellino' | 'turni'; sessioni: number }
+  baseline: { perGiorno: BaselineGiorno[]; copertiPerOraGlobale: number; settimane: number; fonte: 'cartellino' | 'turni' }
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -415,6 +424,8 @@ export default function AnalyticsPage() {
   const [meseSel, setMeseSel] = useState<string>('')
   const [loadingStaff, setLoadingStaff] = useState(false)
   const [fonteStaff, setFonteStaff] = useState<'turni' | 'cartellino'>('turni')
+  const [copertiData, setCopertiData] = useState<CopertiData | null>(null)
+  const [loadingCoperti, setLoadingCoperti] = useState(false)
   const [preventivi, setPreventivi] = useState<Preventivo[]>([])
   const [loadingOrdini, setLoadingOrdini] = useState(false)
 
@@ -643,6 +654,17 @@ export default function AnalyticsPage() {
       .then(r => r.json())
       .then(d => { setStaff(d.staff ?? []); setLoadingStaff(false) })
   }, [tabAnalytics]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Coperti serviti per dipendente + baseline organico: carica quando sei nella tab
+  // Personale e cambia il mese. Stesso motore della insight card → numeri coerenti.
+  useEffect(() => {
+    if (tabAnalytics !== 'personale' || !meseSel) return
+    setLoadingCoperti(true)
+    fetch(`/api/analytics/staff/coperti?mese=${meseSel}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { setCopertiData(d.attribuzione ? d : null); setLoadingCoperti(false) })
+      .catch(() => setLoadingCoperti(false))
+  }, [tabAnalytics, meseSel])
 
   useEffect(() => {
     if (tabAnalytics !== 'ordini' || preventivi.length > 0) return
@@ -1667,6 +1689,15 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
             </p>
           </div>
 
+          {/* Suggerimento AI sull'organico (stesso canale della Contabilità: unicum, non banner a sé) */}
+          {meseSel && (() => {
+            const [y, mo] = meseSel.split('-').map(Number)
+            const rif = new Date(y, mo - 1, 1)
+            const now = new Date()
+            const corrente = y === now.getFullYear() && mo === now.getMonth() + 1
+            return <AiInsightCard key={`ins-${meseSel}`} scope="personale" periodo="mese" riferimento={rif} label={`${MESI_LABEL[String(mo).padStart(2, '0')]} ${y}`} corrente={corrente} />
+          })()}
+
           {loadingStaff ? (
             <div className="text-ink-navy/35 text-sm py-8 text-center">Caricamento...</div>
           ) : staff.length === 0 ? (
@@ -1713,6 +1744,105 @@ td.eur{color:#16a34a;font-weight:600}td.cap{text-transform:capitalize}tr:nth-chi
               ))}
             </div>
           )}
+
+          {/* ── COPERTI SERVITI PER DIPENDENTE + BASELINE ORGANICO ── */}
+          {loadingCoperti ? (
+            <div className="text-ink-navy/35 text-sm py-8 text-center">Caricamento coperti...</div>
+          ) : copertiData && copertiData.attribuzione.totaleCoperti > 0 ? (
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <h3 className="font-bold text-ink-navy">Coperti serviti per dipendente</h3>
+                    <p className="text-ink-navy/50 text-sm mt-0.5">
+                      I coperti di ogni tavolo servito, divisi tra chi era presente in quella fascia oraria.
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-medium text-ink-navy/40 bg-mist rounded-full px-2.5 py-1">
+                    presenze da {copertiData.attribuzione.fonte === 'cartellino' ? 'timbro QR' : 'turni'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { val: copertiData.attribuzione.totaleCoperti, label: 'coperti serviti' },
+                    { val: oreLabel(copertiData.attribuzione.totaleOreLavorate), label: 'ore-uomo' },
+                    { val: copertiData.attribuzione.copertiPerOraLocale, label: 'coperti / ora' },
+                    { val: copertiData.attribuzione.sessioni, label: 'tavoli serviti' },
+                  ].map(k => (
+                    <div key={k.label} className="text-center rounded-xl py-2.5 bg-electric-blue/10">
+                      <p className="text-lg font-bold text-electric-blue">{k.val}</p>
+                      <p className="text-[10px] font-medium text-electric-blue">{k.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  {copertiData.attribuzione.perDipendente.filter(d => d.copertiServiti > 0).map(d => {
+                    const max = Math.max(...copertiData.attribuzione.perDipendente.map(x => x.copertiServiti), 1)
+                    return (
+                      <div key={d.id} className="flex items-center gap-3">
+                        <div className="w-28 shrink-0 min-w-0">
+                          <p className="text-sm font-medium text-ink-navy truncate">{d.nome}</p>
+                          {d.ruolo && <p className="text-[10px] text-ink-navy/35 truncate">{d.ruolo}</p>}
+                        </div>
+                        <div className="flex-1 h-6 bg-mist rounded-lg overflow-hidden">
+                          <div className="h-full bg-electric-blue/70 rounded-lg" style={{ width: `${Math.round((d.copertiServiti / max) * 100)}%` }} />
+                        </div>
+                        <div className="w-32 shrink-0 text-right text-xs text-ink-navy/60">
+                          <b className="text-ink-navy">{d.copertiServiti}</b> coperti · {oreLabel(d.oreLavorate)} · {d.copertiPerOra}/h
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {copertiData.attribuzione.copertiNonAttribuiti > 0 && (
+                  <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {copertiData.attribuzione.copertiNonAttribuiti} coperti serviti senza personale tracciato
+                    {copertiData.attribuzione.fonte === 'cartellino' ? ' (timbrature mancanti in quelle fasce)' : ' (nessun turno pianificato in quelle fasce)'}: il dato per dipendente è leggermente sottostimato.
+                  </p>
+                )}
+              </div>
+
+              {/* Baseline: organico tipico per giorno della settimana (lo storico) */}
+              {copertiData.baseline.perGiorno.some(g => g.giorni >= 2) && (
+                <div className="bg-white rounded-2xl border border-ink-navy/10 shadow-sm p-5 space-y-3">
+                  <div>
+                    <h3 className="font-bold text-ink-navy">Organico tipico per giorno</h3>
+                    <p className="text-ink-navy/50 text-sm mt-0.5">
+                      Coperti e ore-uomo tipici di ogni giorno (mediana ultime {copertiData.baseline.settimane} settimane). Rapporto sano ~{copertiData.baseline.copertiPerOraGlobale} coperti/ora.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    {copertiData.baseline.perGiorno
+                      .filter(g => g.giorni >= 2)
+                      .sort((a, b) => ((a.dow + 6) % 7) - ((b.dow + 6) % 7))
+                      .map(g => {
+                        const rapp = copertiData.baseline.copertiPerOraGlobale
+                        const teso = rapp > 0 && g.copertiPerOra >= rapp * 1.2
+                        const scarico = rapp > 0 && g.copertiPerOra <= rapp * 0.8
+                        return (
+                          <div key={g.dow} className="flex items-center gap-3 text-sm">
+                            <span className="w-10 shrink-0 font-semibold text-ink-navy/70">{g.label}</span>
+                            <span className="flex-1 text-ink-navy/50">
+                              ~{g.copertiMediani} coperti · {oreLabel(g.oreStaffMediane)} personale
+                            </span>
+                            <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${teso ? 'bg-rose-50 text-rose-600' : scarico ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                              {g.copertiPerOra}/h {teso ? '· sotto organico' : scarico ? '· margine' : '· ok'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : copertiData ? (
+            <div className="bg-white rounded-2xl border border-ink-navy/10 p-8 text-center shadow-sm">
+              <p className="text-ink-navy/35 text-sm">Nessun coperto servito in questo mese: qui vedrai i coperti per dipendente appena chiudi qualche tavolo.</p>
+            </div>
+          ) : null}
         </div>
       )}
 
