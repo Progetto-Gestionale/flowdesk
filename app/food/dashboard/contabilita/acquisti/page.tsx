@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { IconTrash, IconCamera, IconFile } from '@/app/components/icons'
+import { IconTrash, IconCamera, IconFile, IconUpload } from '@/app/components/icons'
 import { MiniCalendario } from '@/app/components/MiniCalendario'
 
 // Aliquote IVA acquisti nella ristorazione (frazione salvata sul DB).
@@ -81,6 +81,7 @@ export default function AcquistiPage() {
   // Bolla espansa nell'elenco (clic sulla riga per vedere il dettaglio).
   const [apertaId, setApertaId] = useState<string | null>(null)
   const fotoRef = useRef<HTMLInputElement>(null)
+  const fotoLibRef = useRef<HTMLInputElement>(null)
   const xmlRef = useRef<HTMLInputElement>(null)
 
   const carica = useCallback(() => {
@@ -150,7 +151,7 @@ export default function AcquistiPage() {
       if (!r.ok) { setErrore(d.error ?? 'Lettura foto non riuscita'); return }
       applicaEstratto(d.estratto as Estratto)
     } catch { setErrore('Errore nella lettura della foto') }
-    finally { setImports(''); if (fotoRef.current) fotoRef.current.value = '' }
+    finally { setImports(''); if (fotoRef.current) fotoRef.current.value = ''; if (fotoLibRef.current) fotoLibRef.current.value = '' }
   }
 
   async function onXml(file: File) {
@@ -181,11 +182,19 @@ export default function AcquistiPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-base font-semibold text-ink-navy">Aggiungi una bolla</h2>
           <div className="flex items-center gap-2">
+            {/* Scatta: apre direttamente la fotocamera (capture). */}
             <input ref={fotoRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onFoto(f) }} />
             <button onClick={() => fotoRef.current?.click()} disabled={imports !== ''}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-ink-navy/15 text-ink-navy/70 hover:border-electric-blue hover:text-electric-blue disabled:opacity-40 transition-colors">
-              <span className="w-4 h-4"><IconCamera /></span>{imports === 'foto' ? 'Leggo…' : 'Foto bolla'}
+              <span className="w-4 h-4"><IconCamera /></span>{imports === 'foto' ? 'Leggo…' : 'Scatta foto'}
+            </button>
+            {/* Carica: sceglie una foto già presente nel dispositivo (niente capture). */}
+            <input ref={fotoLibRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onFoto(f) }} />
+            <button onClick={() => fotoLibRef.current?.click()} disabled={imports !== ''}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-ink-navy/15 text-ink-navy/70 hover:border-electric-blue hover:text-electric-blue disabled:opacity-40 transition-colors">
+              <span className="w-4 h-4"><IconUpload /></span>Carica foto
             </button>
             <input ref={xmlRef} type="file" accept=".xml,text/xml,application/xml" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onXml(f) }} />
@@ -276,7 +285,7 @@ export default function AcquistiPage() {
         {/* Riepilogo live della bolla */}
         <div className="flex items-center justify-between flex-wrap gap-3 bg-mist rounded-xl px-4 py-3">
           <div className="text-sm text-ink-navy/60">
-            Netto <b className="text-ink-navy">{eur(nettoNuovo)}</b> · IVA a credito <b className="text-emerald-600">{eur(ivaNuovo)}</b> · Totale <b className="text-ink-navy">{eur(nettoNuovo + ivaNuovo)}</b>
+            Spesa netta <b className="text-ink-navy">{eur(nettoNuovo)}</b> · Totale pagato <b className="text-ink-navy">{eur(nettoNuovo + ivaNuovo)}</b>
           </div>
           <div className="flex items-center gap-3">
             {errore && <span className="text-xs text-rose-600">{errore}</span>}
@@ -315,7 +324,7 @@ export default function AcquistiPage() {
               </>
             )}
           </div>
-          <span className="text-sm text-ink-navy/50">Credito IVA <b className="text-emerald-600">{eur(totali.iva)}</b> · su {eur(totali.netto)} netto</span>
+          <span className="text-sm text-ink-navy/50">Spesa fornitori <b className="text-ink-navy">{eur(totali.netto)}</b> netto</span>
         </div>
         <div className="space-y-1">
           {fatture.map(f => {
@@ -340,7 +349,7 @@ export default function AcquistiPage() {
                   </button>
                   <div className="text-right">
                     <p className="text-sm tabular-nums text-ink-navy">{eur(f.netto)} <span className="text-ink-navy/40 text-xs">netto</span></p>
-                    <p className="text-[11px] text-emerald-600 tabular-nums">+ {eur(f.iva)} IVA a credito</p>
+                    <p className="text-[11px] text-ink-navy/40 tabular-nums">totale {eur(f.lordo)}</p>
                   </div>
                   <button onClick={() => elimina(f.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500 shrink-0" aria-label="Elimina"><IconTrash /></button>
                 </div>
