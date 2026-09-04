@@ -53,10 +53,3 @@ export function quotaGiornaliera(costi: CostoFissoLike[]): number {
 export function quotaPeriodo(costi: CostoFissoLike[], giorni: number): number {
   return quotaGiornaliera(costi) * giorni
 }
-
-// IVA a credito sui costi fissi del mese (utenze, servizi, canoni…). Non più mostrata nella
-// vista di cassa (l'IVA a debito/credito si compensa in grosso modo), resta solo per calcoli
-// interni. Usa il NETTO normalizzato al mese.
-export function ivaCreditoMensile(costi: CostoFissoLike[]): number {
-  return costi.reduce((tot, c) => tot + nettoMensile(c) * c.aliquota, 0)
-}

@@ -14,7 +14,14 @@
 // Funzioni pure: ricevono i componenti già calcolati da riepilogoContabile (che resta il
 // motore dati) e li ricompongono nella vista di cassa. Nessun numero nuovo inventato qui.
 
-import type { ContoEconomico } from './spendibile'
+// Componenti grezzi del periodo da cui si costruisce la vista di cassa. Prodotti da
+// riepilogoContabile leggendo ordini, turni e costi — nessuna IVA, nessun margine.
+export interface ContoEconomico {
+  fatturatoLordo: number // incassi lordi del periodo
+  foodCostVenduto: number // food cost delle materie prime nei piatti venduti
+  laborCost: number // costo reale del personale (paga × moltiplicatore)
+  quotaCostiFissi: number // quota LORDA del periodo di costi fissi + una tantum
+}
 
 export interface VistaCassa {
   incassi: number // quello che entra in cassa nel periodo (lordo, come lo vede il titolare)

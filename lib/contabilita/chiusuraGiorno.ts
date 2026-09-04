@@ -1,31 +1,28 @@
 // Aggregazione contabile su un intervallo di date. Legge i dati operativi già presenti
-// (Ordine/RigaOrdine, Turno, CostoFisso, ContabilitaConfig) e li trasforma nel conto
-// economico gestionale. È il motore dietro /api/contabilita/summary e il cron serale.
+// (Ordine/RigaOrdine, Turno, Timbratura, CostoFisso, CostoUnaTantum) e ne ricava i
+// componenti grezzi della vista di CASSA: incassi lordi, food cost venduto, labor cost,
+// quota lorda dei costi fissi. Niente IVA, niente margini: la vista di cassa (e il semaforo)
+// vivono in lib/contabilita/cassa.ts. È il motore dietro /api/contabilita/summary, l'export
+// e il Ponte AI.
 
 import { prisma } from '@/lib/prisma'
-import { scorpora, risolviAliquotaVendita } from './iva'
 import { costoOrarioReale, costoTurno, oreTraOrari, oreDaTimbrature, tariffaAllaData, MOLTIPLICATORE_DEFAULT, type TariffaStorica } from './labor'
-import { quotaPeriodo, ivaCreditoMensile, importoMensile, lordoCosto } from './costiFissi'
-import { calcolaContoEconomico, statoSemaforo, type ContoEconomico, type StatoSemaforo } from './spendibile'
+import { quotaPeriodo, importoMensile, lordoCosto } from './costiFissi'
+import type { ContoEconomico } from './cassa'
 import { WHERE_CONTO_CHIUSO } from '@/lib/ordini/contoChiuso'
-
-export interface RigaIvaAliquota { aliquota: number; imponibile: number; iva: number }
 
 export interface RiepilogoContabile {
   conto: ContoEconomico
-  semaforo: StatoSemaforo
   giorni: number
+  // Incassi LORDI del periodo per reparto/canale (il nome `netto` è storico: ora è lordo).
   perReparto: { reparto: string; netto: number }[]
   perCanale: { canale: string; netto: number }[]
   perCategoriaCosto: { categoria: string; importo: number }[]
   coperti: number
   ordini: number
-  // F3 · acquisti da bolle fornitori del periodo (netto). Alimentano l'IVA a credito reale
-  // e il confronto "comprato vs consumato"; NON entrano nell'EBITDA (che usa il food cost venduto).
-  acquisti: { nettoMerci: number; nettoTotale: number; ivaCredito: number; numero: number }
-  // Castelletto IVA per aliquota (per l'export/registro del commercialista).
-  ivaVenditePerAliquota: RigaIvaAliquota[]
-  ivaAcquistiPerAliquota: RigaIvaAliquota[]
+  // Acquisti da bolle fornitori del periodo (netto): alimentano il confronto "comprato vs
+  // consumato". NON entrano nella cassa (che usa il food cost venduto dei piatti).
+  acquisti: { nettoMerci: number; nettoTotale: number; numero: number }
 }
 
 // Numero di giorni "trascorsi" dell'intervallo (per spalmare i costi fissi in modo equo):
@@ -63,7 +60,7 @@ export async function riepilogoContabile(
   fine: Date,
 ): Promise<RiepilogoContabile> {
   const [config, ordini, turni, costiFissi, storicoPaga, fatture, timbrature, costiUnaTantum] = await Promise.all([
-    prisma.contabilitaConfig.findUnique({ where: { userId } }),
+    prisma.contabilitaConfig.findUnique({ where: { userId }, select: { fonteOreLabor: true } }),
     prisma.ordine.findMany({
       // Solo conti CHIUSI: finché il conto non è chiuso i suoi dati non entrano in contabilità.
       where: { userId, createdAt: { gte: inizio, lt: fine }, ...WHERE_CONTO_CHIUSO },
@@ -75,13 +72,7 @@ export async function riepilogoContabile(
             prezzo: true,
             quantita: true,
             foodCost: true,
-            aliquotaVendita: true,
-            piatto: {
-              select: {
-                aliquotaVendita: true,
-                categoria: { select: { aliquotaVendita: true, reparto: true } },
-              },
-            },
+            piatto: { select: { categoria: { select: { reparto: true } } } },
           },
         },
       },
@@ -106,7 +97,7 @@ export async function riepilogoContabile(
     }),
     prisma.fattura.findMany({
       where: { userId, data: { gte: inizio, lt: fine } },
-      select: { categoria: true, righe: { select: { imponibile: true, aliquota: true } } },
+      select: { categoria: true, righe: { select: { imponibile: true } } },
     }),
     // Timbrature del periodo: servono solo se la fonte ore è "timbrature" (usate sotto).
     prisma.timbratura.findMany({
@@ -128,68 +119,34 @@ export async function riepilogoContabile(
     storicoPerDip.set(s.dipendenteId, arr)
   }
 
-  const defaultLocale = config?.aliquotaVenditaDefault ?? 0.1
-  const percAccantonamento = config?.percentualeAccantonamentoImposte ?? 0.15
-  // In regime forfettario non c'è IVA: non si applica in rivalsa sulle vendite e non si
-  // detrae sugli acquisti. Quindi niente scorporo (l'incasso è tutto imponibile) e niente
-  // IVA a credito sui costi fissi. Nel regime ordinario tutto resta come prima.
-  const forfettario = config?.regimeFiscale === 'forfettario'
-
-  // ── Vendite: scorporo IVA riga per riga + split reparto/canale ──────────────
+  // ── Vendite: incassi LORDI + food cost + split reparto/canale (tutto lordo) ──────
   let fatturatoLordo = 0
-  let ivaDebito = 0
   let foodCostVenduto = 0
   let coperti = 0
   const perRepartoMap = new Map<string, number>()
   const perCanaleMap = new Map<string, number>()
-  // Castelletto IVA vendite per aliquota → { imponibile, iva } (registro/commercialista).
-  const ivaVenditeMap = new Map<number, { imponibile: number; iva: number }>()
 
   for (const o of ordini) {
     coperti += o.coperti ?? 0
     const canale = o.tipo || 'tavolo'
     for (const r of o.righe) {
       const lordoRiga = r.prezzo * r.quantita
-      const aliquota = risolviAliquotaVendita({
-        rigaAliquota: r.aliquotaVendita,
-        piattoAliquota: r.piatto?.aliquotaVendita,
-        categoriaAliquota: r.piatto?.categoria?.aliquotaVendita,
-        defaultLocale,
-      })
-      const { imponibile, iva } = forfettario ? { imponibile: lordoRiga, iva: 0 } : scorpora(lordoRiga, aliquota)
       fatturatoLordo += lordoRiga
-      ivaDebito += iva
       foodCostVenduto += (r.foodCost ?? 0) * r.quantita
-
       const reparto = r.piatto?.categoria?.reparto || 'Cucina'
-      perRepartoMap.set(reparto, (perRepartoMap.get(reparto) ?? 0) + imponibile)
-      perCanaleMap.set(canale, (perCanaleMap.get(canale) ?? 0) + imponibile)
-
-      const bucket = ivaVenditeMap.get(aliquota) ?? { imponibile: 0, iva: 0 }
-      bucket.imponibile += imponibile
-      bucket.iva += iva
-      ivaVenditeMap.set(aliquota, bucket)
+      perRepartoMap.set(reparto, (perRepartoMap.get(reparto) ?? 0) + lordoRiga)
+      perCanaleMap.set(canale, (perCanaleMap.get(canale) ?? 0) + lordoRiga)
     }
   }
 
-  // ── Acquisti da bolle fornitori: IVA a credito reale + castelletto + totale merci ──
-  // In forfettario l'IVA sugli acquisti non si detrae → credito 0 (ma i totali netti restano
-  // per il confronto "comprato vs consumato"). Gli acquisti NON entrano nell'EBITDA.
-  let ivaCreditoAcquisti = 0
+  // ── Acquisti da bolle fornitori: totale netto e totale merci (comprato vs consumato) ──
   let acquistiNettoTotale = 0
   let acquistiNettoMerci = 0
-  const ivaAcquistiMap = new Map<number, { imponibile: number; iva: number }>()
   for (const f of fatture) {
     const merce = f.categoria === 'merci' || f.categoria === 'bevande'
     for (const r of f.righe) {
-      const ivaRiga = forfettario ? 0 : r.imponibile * r.aliquota
-      ivaCreditoAcquisti += ivaRiga
       acquistiNettoTotale += r.imponibile
       if (merce) acquistiNettoMerci += r.imponibile
-      const bucket = ivaAcquistiMap.get(r.aliquota) ?? { imponibile: 0, iva: 0 }
-      bucket.imponibile += r.imponibile
-      bucket.iva += ivaRiga
-      ivaAcquistiMap.set(r.aliquota, bucket)
     }
   }
 
@@ -205,8 +162,6 @@ export async function riepilogoContabile(
   const usaTimbrature = config?.fonteOreLabor === 'timbrature'
   const giornoRoma = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
 
-  // Ore reali per (dipendente, giorno) dai timbri, e ore pianificate non-forfait per lo
-  // stesso raggruppamento (denominatore della ridistribuzione). Calcolati solo se servono.
   const oreRealiPerDipGiorno = new Map<string, number>()
   const orePianNonForfaitPerDipGiorno = new Map<string, number>()
   if (usaTimbrature) {
@@ -251,83 +206,40 @@ export async function riepilogoContabile(
     laborCost += costoTurno(t, oraria, oreReali, moltEff)
   }
 
-  // ── Costi fissi: quota del periodo + IVA a credito proporzionale ────────────
+  // ── Costi fissi: quota LORDA del periodo (quello che esce davvero dal conto) ──
   const giorni = giorniTrascorsi(inizio, fine)
   const quotaCostiFissi = quotaPeriodo(costiFissi, giorni)
-  const ivaCreditoFissi = forfettario ? 0 : (ivaCreditoMensile(costiFissi) / 30) * giorni
 
   const perCategoriaCostoMap = new Map<string, number>()
   for (const c of costiFissi) {
-    // LORDO normalizzato al periodo mostrato (quello che esce davvero dal conto).
-    const mensile = importoMensile(c)
+    const mensile = importoMensile(c) // LORDO normalizzato al mese
     perCategoriaCostoMap.set(c.categoria, (perCategoriaCostoMap.get(c.categoria) ?? 0) + (mensile / 30) * giorni)
   }
 
-  // ── Costi una tantum: quota netta spalmata sui giorni del periodo + IVA a credito ──
-  // Entrano nei costi di struttura del periodo (come i fissi, ma solo nei giorni coperti).
+  // ── Costi una tantum: quota LORDA spalmata sui giorni del periodo ──
   let quotaUnaTantumTot = 0
-  let ivaCreditoUnaTantum = 0
   for (const c of costiUnaTantum) {
-    const qNetto = quotaUnaTantum(c, inizio, fine)
-    if (qNetto <= 0) continue
-    const qLordo = lordoCosto(qNetto, c.aliquota) // vista di cassa: quota LORDA del periodo
+    const qLordo = lordoCosto(quotaUnaTantum(c, inizio, fine), c.aliquota)
+    if (qLordo <= 0) continue
     quotaUnaTantumTot += qLordo
-    if (!forfettario) ivaCreditoUnaTantum += qNetto * c.aliquota
     perCategoriaCostoMap.set(c.categoria, (perCategoriaCostoMap.get(c.categoria) ?? 0) + qLordo)
   }
 
-  const conto = calcolaContoEconomico({
+  const conto: ContoEconomico = {
     fatturatoLordo,
-    ivaDebito,
-    ivaCredito: ivaCreditoFissi + ivaCreditoAcquisti + ivaCreditoUnaTantum, // fissi + bolle (F3) + una tantum
     foodCostVenduto,
     laborCost,
     quotaCostiFissi: quotaCostiFissi + quotaUnaTantumTot, // fissi (rateo) + una tantum (giorni coperti)
-    percentualeAccantonamentoImposte: percAccantonamento,
-    // Regime: forfettario tassa i ricavi × coefficiente; ordinario stima sull'EBITDA.
-    regimeFiscale: forfettario ? 'forfettario' : 'ordinario',
-    coefficienteRedditivita: config?.coefficienteRedditivita ?? 0.40,
-    aliquotaImpostaForfettario: config?.aliquotaImpostaForfettario ?? 0.15,
-  })
-
-  const perAliquota = (m: Map<number, { imponibile: number; iva: number }>): RigaIvaAliquota[] =>
-    [...m.entries()].map(([aliquota, v]) => ({ aliquota, imponibile: v.imponibile, iva: v.iva })).sort((a, b) => a.aliquota - b.aliquota)
+  }
 
   return {
     conto,
-    semaforo: statoSemaforo(conto.marginePct),
     giorni,
     coperti,
     ordini: ordini.length,
     perReparto: [...perRepartoMap.entries()].map(([reparto, netto]) => ({ reparto, netto })).sort((a, b) => b.netto - a.netto),
     perCanale: [...perCanaleMap.entries()].map(([canale, netto]) => ({ canale, netto })).sort((a, b) => b.netto - a.netto),
     perCategoriaCosto: [...perCategoriaCostoMap.entries()].map(([categoria, importo]) => ({ categoria, importo })).sort((a, b) => b.importo - a.importo),
-    acquisti: { nettoMerci: acquistiNettoMerci, nettoTotale: acquistiNettoTotale, ivaCredito: ivaCreditoAcquisti, numero: fatture.length },
-    ivaVenditePerAliquota: perAliquota(ivaVenditeMap),
-    ivaAcquistiPerAliquota: perAliquota(ivaAcquistiMap),
+    acquisti: { nettoMerci: acquistiNettoMerci, nettoTotale: acquistiNettoTotale, numero: fatture.length },
   }
-}
-
-// Chiude un singolo giorno (fuso Europe/Rome) e salva lo snapshot in ChiusuraGiorno.
-// Idempotente: upsert su (userId, data). Chiamata dal cron serale.
-export async function chiudiGiorno(userId: string, giornoInizio: Date): Promise<void> {
-  const giornoFine = new Date(giornoInizio.getTime() + 86_400_000)
-  const r = await riepilogoContabile(userId, giornoInizio, giornoFine)
-  const c = r.conto
-  await prisma.chiusuraGiorno.upsert({
-    where: { userId_data: { userId, data: giornoInizio } },
-    update: {
-      fatturatoLordo: c.fatturatoLordo, ivaDebito: c.ivaDebito, fatturatoNetto: c.fatturatoNetto,
-      foodCostVenduto: c.foodCostVenduto, laborCost: c.laborCost, quotaCostiFissi: c.quotaCostiFissi,
-      ivaCredito: c.ivaCredito, ivaNetta: c.ivaNetta, accantonamentoImposte: c.accantonamentoImposte,
-      utileStimato: c.utileStimato, spendibile: c.spendibile.livello4,
-    },
-    create: {
-      userId, data: giornoInizio,
-      fatturatoLordo: c.fatturatoLordo, ivaDebito: c.ivaDebito, fatturatoNetto: c.fatturatoNetto,
-      foodCostVenduto: c.foodCostVenduto, laborCost: c.laborCost, quotaCostiFissi: c.quotaCostiFissi,
-      ivaCredito: c.ivaCredito, ivaNetta: c.ivaNetta, accantonamentoImposte: c.accantonamentoImposte,
-      utileStimato: c.utileStimato, spendibile: c.spendibile.livello4,
-    },
-  })
 }

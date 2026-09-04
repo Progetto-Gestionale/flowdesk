@@ -123,10 +123,14 @@ export async function buildDatiReport(userId: string, riferimento?: string | nul
       importoMensile: round2(mensile), quotaPeriodo: round2((mensile / 30) * giorni),
     })
   }
+  const giornoIt = (d: Date) => d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: '2-digit' })
   for (const c of costiUnaTantum) {
     const q = lordoCosto(quotaUnaTantum(c, p.inizio, p.fine), c.aliquota)
     if (q <= 0) continue
-    costi.push({ voce: c.voce, categoria: c.categoria, periodicita: 'una tantum', importoMensile: round2(lordoCosto(c.importoNetto, c.aliquota)), quotaPeriodo: round2(q) })
+    // Per le una tantum "Importo" è il TOTALE spalmato sull'intervallo; il range chiarisce
+    // che NON cade tutto in questo mese (la parte del mese è in "Quota periodo").
+    const range = `${giornoIt(c.dataInizio)} – ${giornoIt(c.dataFine)}`
+    costi.push({ voce: c.voce, categoria: c.categoria, periodicita: `una tantum · ${range}`, importoMensile: round2(lordoCosto(c.importoNetto, c.aliquota)), quotaPeriodo: round2(q) })
   }
   costi.sort((a, b) => b.quotaPeriodo - a.quotaPeriodo)
 
@@ -278,8 +282,8 @@ export async function generaReportContabile(dati: DatiReport): Promise<ArrayBuff
   // ── Dettaglio costi ──
   const dc = wb.addWorksheet('Dettaglio costi', { properties: { tabColor: { argb: NAVY } } })
   dc.columns = [{ width: 30 }, { width: 18 }, { width: 14 }, { width: 16 }, { width: 16 }]
-  titolo(dc, 'Dettaglio costi del periodo', 'Costi fissi (importo mensile e quota del periodo) e costi una tantum.')
-  headerRow(dc, ['Voce', 'Categoria', 'Periodicità', 'Importo mensile', 'Quota periodo'])
+  titolo(dc, 'Dettaglio costi del periodo', 'Fissi: importo per periodicità. Una tantum: importo TOTALE, spalmato sui giorni del loro intervallo.')
+  headerRow(dc, ['Voce', 'Categoria', 'Periodicità / intervallo', 'Importo', 'Quota di questo mese'])
   if (dati.costi.length === 0) {
     dc.addRow(['Nessun costo registrato nel periodo', '', '', '', '']).font = { italic: true, color: { argb: GREY } }
   }
@@ -291,6 +295,9 @@ export async function generaReportContabile(dati: DatiReport): Promise<ArrayBuff
   if (dati.costi.length > 0) {
     const dct = dc.addRow(['TOTALE quota del periodo', '', '', '', round2(tQuota)]); dct.getCell(5).numFmt = EUR; totaleRow(dct)
   }
+  dc.addRow([])
+  dc.addRow(['«Quota di questo mese» = la parte di costo che pesa su questo mese ed entra nella cassa.']).font = { italic: true, size: 9, color: { argb: GREY } }
+  dc.addRow(['Per le una tantum è solo la frazione dei giorni ricadenti nel mese: il resto pesa sugli altri mesi dell’intervallo.']).font = { italic: true, size: 9, color: { argb: GREY } }
   dc.views = [{ state: 'frozen', ySplit: 4 }]
 
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer

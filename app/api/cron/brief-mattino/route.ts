@@ -1,20 +1,15 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { chiudiGiorno } from '@/lib/contabilita/chiusuraGiorno'
 import { generateRestaurantBrief } from '@/lib/copilot/brief'
 import { salvaBrief } from '@/lib/copilot/brief/persist'
 import { registraSpesaBrief } from '@/lib/copilot/spesa'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cron del MATTINO (Fase proattività). Due passi, per ogni locale Food:
-//   1. chiudiGiorno(IERI) → congela lo snapshot contabile del giorno chiuso
-//      (ChiusuraGiorno). Economico, nessuna AI: lo facciamo per TUTTI i locali,
-//      così lo storico contabile si popola anche nei giorni di chiusura (i costi
-//      fissi corrono comunque).
-//   2. Solo per i locali che IERI hanno venduto: genera il brief giornaliero e lo
-//      SALVA (BriefSalvato). Così il titolare, aprendo l'app, lo trova già pronto
-//      ("recap di ieri + prenotazioni di oggi") invece di generarlo a mano. Il
-//      brief usa Haiku (economico) e la spesa finisce nel contatore del mese.
+// Cron del MATTINO (Fase proattività). Per ogni locale Food che IERI ha venduto:
+// genera il brief giornaliero e lo SALVA (BriefSalvato). Così il titolare, aprendo
+// l'app, lo trova già pronto ("recap di ieri + prenotazioni di oggi") invece di
+// generarlo a mano. Il brief usa Haiku (economico) e la spesa finisce nel contatore
+// del mese; i numeri li calcola sempre riepilogoContabile live.
 //
 // In vercel.json è schedulato alle 04:00 UTC = 06:00 (ora legale) / 05:00 (solare)
 // italiana: i cron Vercel sono in UTC e non seguono l'ora legale, quindi d'inverno
@@ -43,19 +38,7 @@ export async function GET(req: Request) {
   const ieri = ieriMezzanotteUTC()
   const oggi = new Date(ieri.getTime() + 86_400_000)
 
-  // ── Passo 1: chiusura contabile di ieri per tutti i locali Food ──
-  const foodUsers = await prisma.user.findMany({ where: { verticale: 'food' }, select: { id: true } })
-  let chiusure = 0
-  for (const u of foodUsers) {
-    try {
-      await chiudiGiorno(u.id, ieri)
-      chiusure++
-    } catch (e) {
-      console.error('[CRON brief-mattino] chiusura fallita per', u.id, e)
-    }
-  }
-
-  // ── Passo 2: brief solo per i locali che ieri hanno avuto ordini ──
+  // Brief solo per i locali Food che ieri hanno avuto ordini.
   const attivi = await prisma.ordine.findMany({
     where: { createdAt: { gte: ieri, lt: oggi }, user: { verticale: 'food' } },
     select: { userId: true },
@@ -79,8 +62,6 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     giorno: ieri.toISOString().slice(0, 10),
-    chiusureContabili: chiusure,
-    localiFood: foodUsers.length,
     briefGenerati: generati,
     briefFalliti: errori,
     eseguitoAlle: new Date().toISOString(),

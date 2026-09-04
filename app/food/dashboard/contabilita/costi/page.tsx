@@ -18,9 +18,11 @@ interface Dip {
 }
 
 const CATEGORIE = [
-  ['affitto', 'Affitto'], ['utenze', 'Utenze'], ['servizi', 'Servizi'], ['personale_extra', 'Personale extra'],
-  ['marketing', 'Marketing'], ['leasing', 'Leasing'], ['assicurazioni', 'Assicurazioni'], ['manutenzioni', 'Manutenzioni'], ['altro', 'Altro'],
+  ['affitto', 'Affitto'], ['utenze', 'Utenze'], ['servizi', 'Servizi'], ['personale_extra', 'Personale extra'], ['altro', 'Altro'],
 ]
+// Etichetta di categoria con fallback: alcune categorie (marketing, leasing…) non sono più
+// selezionabili ma potrebbero esistere su costi salvati in passato → mostriamo la chiave.
+const catLabel = (c: string) => CATEGORIE.find(x => x[0] === c)?.[1] ?? c
 const PERIODI = [['mensile', '/mese'], ['trimestrale', '/trim.'], ['annuale', '/anno']]
 
 // Lordo effettivo di un costo salvato: i costi inseriti da oggi salvano già il lordo con
@@ -119,7 +121,7 @@ export default function CostiPage() {
             <div key={c.id} className="flex items-center gap-3 py-2 border-b border-ink-navy/5 last:border-0">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink-navy truncate">{c.voce}</p>
-                <p className="text-xs text-ink-navy/40">{CATEGORIE.find(x => x[0] === c.categoria)?.[1]}</p>
+                <p className="text-xs text-ink-navy/40">{catLabel(c.categoria)}</p>
               </div>
               <span className="text-sm tabular-nums text-ink-navy">{eur(lordoCosto(c.importoNetto, c.aliquota))}<span className="text-ink-navy/40 text-xs">{PERIODI.find(p => p[0] === c.periodicita)?.[1]}</span></span>
               <button onClick={() => eliminaCosto(c.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500" aria-label="Elimina"><IconTrash /></button>
@@ -162,7 +164,7 @@ export default function CostiPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink-navy truncate">{c.voce}</p>
                 <p className="text-xs text-ink-navy/40">
-                  {periodoLabel(c.dataInizio, c.dataFine)} · {CATEGORIE.find(x => x[0] === c.categoria)?.[1]}
+                  {periodoLabel(c.dataInizio, c.dataFine)} · {catLabel(c.categoria)}
                 </p>
               </div>
               <span className="text-sm tabular-nums text-ink-navy">{eur(lordoCosto(c.importoNetto, c.aliquota))}</span>
