@@ -22,11 +22,13 @@ Guarda l'immagine della fattura e restituisci SOLO un JSON con questa forma esat
   "numero": string | null,           // numero documento
   "data": string | null,             // data documento in formato "YYYY-MM-DD"
   "categoria": "merci" | "bevande" | "servizi" | "altro",
-  "righe": [ { "imponibile": number, "aliquota": number } ]  // dal riepilogo IVA: imponibile NETTO per aliquota (aliquota come frazione: 0.04, 0.1, 0.22, 0 esente)
+  "righe": [ { "imponibile": number, "aliquota": number } ],  // dal riepilogo IVA: imponibile NETTO per aliquota (aliquota come frazione: 0.04, 0.1, 0.22, 0 esente)
+  "dettaglio": [ { "descrizione": string, "quantita": number | null, "unita": string | null, "prezzoTotale": number | null } ]  // le SINGOLE righe prodotto della fattura (una per articolo)
 }
 Regole ferree:
-- Usa il riquadro "Riepilogo IVA"/"Castelletto" se presente: una riga per ogni aliquota.
+- Usa il riquadro "Riepilogo IVA"/"Castelletto" se presente: una riga per ogni aliquota in "righe".
 - imponibile = importo SENZA IVA. aliquota come frazione (10% → 0.1).
+- "dettaglio": elenca i singoli articoli/prodotti nel corpo della fattura (descrizione, quantità, unità di misura, prezzo totale della riga). Se il corpo non è leggibile, restituisci "dettaglio": [].
 - Non inventare: se un valore non è leggibile con certezza, mettilo a null (o ometti la riga).
 - "categoria": "bevande" se è un fornitore di vini/bibite, "merci" per cibo, "servizi" per utenze/servizi, altrimenti "altro".
 Rispondi con IL SOLO JSON, senza testo attorno.`
@@ -55,7 +57,7 @@ export async function POST(req: Request) {
   try {
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 800,
+      max_tokens: 1500,
       messages: [{
         role: 'user',
         content: [
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
 
     const testo = res.content.filter((b) => b.type === 'text').map((b) => (b.type === 'text' ? b.text : '')).join('')
     const raw = parseJson(testo) as null | {
-      fornitore?: unknown; numero?: unknown; data?: unknown; categoria?: unknown; righe?: unknown
+      fornitore?: unknown; numero?: unknown; data?: unknown; categoria?: unknown; righe?: unknown; dettaglio?: unknown
     }
     if (!raw) return NextResponse.json({ error: 'Non sono riuscito a leggere la fattura. Riprova con una foto più nitida.' }, { status: 422 })
 
@@ -85,6 +87,20 @@ export async function POST(req: Request) {
     const cat = ['merci', 'bevande', 'servizi', 'altro'].includes(String(raw.categoria)) ? String(raw.categoria) : 'merci'
     const data = typeof raw.data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.data) ? raw.data : null
 
+    // Dettaglio righe prodotto (best-effort): serve solo alla vista dettaglio, non ai conti.
+    const dettaglio = Array.isArray(raw.dettaglio)
+      ? raw.dettaglio
+          .map((d: { descrizione?: unknown; quantita?: unknown; unita?: unknown; prezzoTotale?: unknown }) => ({
+            descrizione: typeof d.descrizione === 'string' ? d.descrizione.slice(0, 200) : '',
+            quantita: Number.isFinite(Number(d.quantita)) ? Number(d.quantita) : null,
+            unita: typeof d.unita === 'string' ? d.unita.slice(0, 12) : null,
+            prezzoTotale: Number.isFinite(Number(d.prezzoTotale)) ? Math.round(Number(d.prezzoTotale) * 100) / 100 : null,
+            aliquota: null as number | null,
+          }))
+          .filter((d) => d.descrizione)
+          .slice(0, 100)
+      : []
+
     return NextResponse.json({
       estratto: {
         fornitore: typeof raw.fornitore === 'string' ? raw.fornitore : null,
@@ -92,6 +108,8 @@ export async function POST(req: Request) {
         data,
         categoria: cat,
         righe,
+        origine: 'foto',
+        dettaglio,
       },
     })
   } catch (e: unknown) {

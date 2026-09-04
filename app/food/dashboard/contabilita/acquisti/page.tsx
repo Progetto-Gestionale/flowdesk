@@ -24,12 +24,22 @@ const eur = (n: number) => (n ?? 0).toLocaleString('it-IT', { style: 'currency',
 const oggiISO = () => new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD locale
 
 interface RigaOut { imponibile: number; aliquota: number }
+interface LineaDettaglio { descrizione: string; quantita: number | null; unita: string | null; prezzoTotale: number | null; aliquota: number | null }
 interface Fattura {
-  id: string; fornitore: string | null; numero: string | null; data: string
-  categoria: string; note: string | null; netto: number; iva: number; lordo: number
-  righe: RigaOut[]
+  id: string; fornitore: string | null; partitaIvaFornitore: string | null; numero: string | null; data: string
+  categoria: string; note: string | null; origine: string; netto: number; iva: number; lordo: number
+  righe: RigaOut[]; dettaglio: LineaDettaglio[]
 }
 interface Totali { netto: number; iva: number; numero: number }
+
+// Etichetta dell'aliquota per la vista dettaglio.
+const aliqLabel = (a: number) => (a === 0 ? 'esente' : `${Math.round(a * 100)}%`)
+// Badge dell'origine della bolla.
+const ORIGINE_BADGE: Record<string, { label: string; cls: string }> = {
+  foto: { label: '📷 da foto', cls: 'bg-violet-50 text-violet-700 border-violet-200' },
+  xml: { label: '📄 da XML', cls: 'bg-sky-50 text-sky-700 border-sky-200' },
+  manuale: { label: 'manuale', cls: 'bg-ink-navy/5 text-ink-navy/50 border-ink-navy/10' },
+}
 
 const CAT_LABEL: Record<string, string> = Object.fromEntries(CATEGORIE.map(([v, l]) => [v, l]))
 
@@ -65,6 +75,11 @@ export default function AcquistiPage() {
   // OCR foto / import XML: precompilano il form, non salvano (il titolare conferma).
   const [imports, setImports] = useState<'' | 'foto' | 'xml'>('')
   const [precompilato, setPrecompilato] = useState(false)
+  // Origine + dettaglio riga-per-riga della bolla in compilazione (da foto/XML).
+  const [origineNuova, setOrigineNuova] = useState<'manuale' | 'foto' | 'xml'>('manuale')
+  const [dettaglioNuovo, setDettaglioNuovo] = useState<LineaDettaglio[]>([])
+  // Bolla espansa nell'elenco (clic sulla riga per vedere il dettaglio).
+  const [apertaId, setApertaId] = useState<string | null>(null)
   const fotoRef = useRef<HTMLInputElement>(null)
   const xmlRef = useRef<HTMLInputElement>(null)
 
@@ -89,13 +104,14 @@ export default function AcquistiPage() {
     setSalvando(true)
     const res = await fetch('/api/contabilita/fatture', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fornitore, partitaIvaFornitore, numero, data, categoria, righe: righeAnteprima }),
+      body: JSON.stringify({ fornitore, partitaIvaFornitore, numero, data, categoria, righe: righeAnteprima, origine: origineNuova, dettaglio: dettaglioNuovo }),
     })
     setSalvando(false)
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErrore(d.error ?? 'Errore nel salvataggio'); return }
     // Salta al mese della bolla appena salvata, così la vedi subito nell'elenco.
     const meseBolla = primoDelMese(new Date(data))
     setFornitore(''); setPartitaIvaFornitore(''); setNumero(''); setData(oggiISO()); setCategoria('merci'); setImponibili({}); setPrecompilato(false)
+    setOrigineNuova('manuale'); setDettaglioNuovo([])
     if (meseBolla.getTime() !== rifMese.getTime()) setRifMese(meseBolla) // il cambio mese ricarica da solo
     else carica()
   }
@@ -106,7 +122,7 @@ export default function AcquistiPage() {
   }
 
   // Precompila il form da un estratto (OCR o XML). Non salva: il titolare controlla e conferma.
-  interface Estratto { fornitore: string | null; numero: string | null; data: string | null; categoria: string; righe: RigaOut[] }
+  interface Estratto { fornitore: string | null; numero: string | null; data: string | null; categoria: string; righe: RigaOut[]; origine?: 'foto' | 'xml'; dettaglio?: LineaDettaglio[] }
   function applicaEstratto(est: Estratto) {
     if (est.fornitore) setFornitore(est.fornitore)
     if (est.numero) setNumero(est.numero)
@@ -115,6 +131,8 @@ export default function AcquistiPage() {
     const imp: Record<string, string> = {}
     for (const r of est.righe) imp[String(r.aliquota)] = String(r.imponibile)
     setImponibili(imp)
+    setOrigineNuova(est.origine ?? 'manuale')
+    setDettaglioNuovo(Array.isArray(est.dettaglio) ? est.dettaglio : [])
     setPrecompilato(true)
   }
 
@@ -155,7 +173,7 @@ export default function AcquistiPage() {
       <div>
         <Link href="/food/dashboard/contabilita" className="text-xs text-ink-navy/50 hover:text-ink-navy">← Contabilità</Link>
         <h1 className="text-xl font-bold text-ink-navy mt-1">Acquisti / Bolle fornitori</h1>
-        <p className="text-sm text-ink-navy/50">Le fatture dei fornitori servono a recuperare l&apos;<b>IVA a credito</b> reale. Ogni euro di IVA qui è un euro in meno da versare allo Stato.</p>
+        <p className="text-sm text-ink-navy/50">Registra quanto spendi dai fornitori: serve a confrontare <b>comprato vs consumato</b> e a tenere sotto controllo le materie prime. Foto o XML: compilo io, tu controlli.</p>
       </div>
 
       {/* Nuova bolla */}
@@ -279,28 +297,117 @@ export default function AcquistiPage() {
           </div>
           <span className="text-sm text-ink-navy/50">Credito IVA <b className="text-emerald-600">{eur(totali.iva)}</b> · su {eur(totali.netto)} netto</span>
         </div>
-        <div className="space-y-2">
-          {fatture.map(f => (
-            <div key={f.id} className="flex items-center gap-3 py-2 border-b border-ink-navy/5 last:border-0">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-ink-navy truncate">{f.fornitore || 'Fornitore n.d.'}</p>
-                <p className="text-xs text-ink-navy/40">
-                  {new Date(f.data).toLocaleDateString('it-IT')} · {CAT_LABEL[f.categoria] ?? f.categoria}
-                  {f.numero ? ` · n. ${f.numero}` : ''}
-                </p>
+        <div className="space-y-1">
+          {fatture.map(f => {
+            const aperta = apertaId === f.id
+            const badge = ORIGINE_BADGE[f.origine] ?? ORIGINE_BADGE.manuale
+            return (
+              <div key={f.id} className="border-b border-ink-navy/5 last:border-0">
+                {/* Riga cliccabile: apre/chiude il dettaglio della bolla. */}
+                <div className="flex items-center gap-3 py-2">
+                  <button onClick={() => setApertaId(aperta ? null : f.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                    <span className={`text-ink-navy/30 text-xs transition-transform ${aperta ? 'rotate-90' : ''}`}>▶</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-ink-navy truncate">{f.fornitore || 'Fornitore n.d.'}</span>
+                        <span className={`shrink-0 text-[10px] font-medium border rounded-full px-1.5 py-0.5 ${badge.cls}`}>{badge.label}</span>
+                      </span>
+                      <span className="block text-xs text-ink-navy/40">
+                        {new Date(f.data).toLocaleDateString('it-IT')} · {CAT_LABEL[f.categoria] ?? f.categoria}
+                        {f.numero ? ` · n. ${f.numero}` : ''}
+                      </span>
+                    </span>
+                  </button>
+                  <div className="text-right">
+                    <p className="text-sm tabular-nums text-ink-navy">{eur(f.netto)} <span className="text-ink-navy/40 text-xs">netto</span></p>
+                    <p className="text-[11px] text-emerald-600 tabular-nums">+ {eur(f.iva)} IVA a credito</p>
+                  </div>
+                  <button onClick={() => elimina(f.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500 shrink-0" aria-label="Elimina"><IconTrash /></button>
+                </div>
+
+                {/* Dettaglio espanso */}
+                {aperta && (
+                  <div className="pb-3 pl-6 pr-1 space-y-3">
+                    {/* Anagrafica */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs">
+                      <Dato label="Fornitore" valore={f.fornitore || '—'} />
+                      <Dato label="P.IVA" valore={f.partitaIvaFornitore || '—'} />
+                      <Dato label="N° documento" valore={f.numero || '—'} />
+                      <Dato label="Data" valore={new Date(f.data).toLocaleDateString('it-IT')} />
+                    </div>
+
+                    {/* Castelletto IVA (quello che entra in contabilità) */}
+                    <div>
+                      <p className="text-[11px] font-mono uppercase tracking-wide text-ink-navy/35 mb-1">Riepilogo IVA</p>
+                      <div className="rounded-lg border border-ink-navy/10 overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead className="bg-mist/60 text-ink-navy/50">
+                            <tr><th className="text-left font-medium px-3 py-1.5">Aliquota</th><th className="text-right font-medium px-3 py-1.5">Imponibile</th><th className="text-right font-medium px-3 py-1.5">IVA</th><th className="text-right font-medium px-3 py-1.5">Totale</th></tr>
+                          </thead>
+                          <tbody>
+                            {f.righe.map((r, i) => (
+                              <tr key={i} className="border-t border-ink-navy/5">
+                                <td className="px-3 py-1.5 text-ink-navy/70">{aliqLabel(r.aliquota)}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-ink-navy">{eur(r.imponibile)}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-emerald-600">{eur(r.imponibile * r.aliquota)}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-ink-navy">{eur(r.imponibile * (1 + r.aliquota))}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Dettaglio righe prodotto (da foto/XML) */}
+                    {f.dettaglio && f.dettaglio.length > 0 ? (
+                      <div>
+                        <p className="text-[11px] font-mono uppercase tracking-wide text-ink-navy/35 mb-1">Articoli ({f.dettaglio.length})</p>
+                        <div className="rounded-lg border border-ink-navy/10 overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead className="bg-mist/60 text-ink-navy/50">
+                              <tr><th className="text-left font-medium px-3 py-1.5">Descrizione</th><th className="text-right font-medium px-3 py-1.5">Q.tà</th><th className="text-right font-medium px-3 py-1.5">Importo</th></tr>
+                            </thead>
+                            <tbody>
+                              {f.dettaglio.map((d, i) => (
+                                <tr key={i} className="border-t border-ink-navy/5">
+                                  <td className="px-3 py-1.5 text-ink-navy/70">{d.descrizione}{d.aliquota != null ? <span className="text-ink-navy/30"> · IVA {aliqLabel(d.aliquota)}</span> : ''}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums text-ink-navy/60 whitespace-nowrap">{d.quantita != null ? `${d.quantita}${d.unita ? ' ' + d.unita : ''}` : '—'}</td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums text-ink-navy">{d.prezzoTotale != null ? eur(d.prezzoTotale) : '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-ink-navy/35">
+                        {f.origine === 'manuale'
+                          ? 'Bolla inserita a mano: nessun dettaglio riga-per-riga. Il totale per aliquota è qui sopra.'
+                          : 'Nessun dettaglio articoli disponibile per questa bolla.'}
+                      </p>
+                    )}
+
+                    {f.note && <p className="text-xs text-ink-navy/50"><span className="text-ink-navy/35">Note:</span> {f.note}</p>}
+                  </div>
+                )}
               </div>
-              <div className="text-right">
-                <p className="text-sm tabular-nums text-ink-navy">{eur(f.netto)} <span className="text-ink-navy/40 text-xs">netto</span></p>
-                <p className="text-[11px] text-emerald-600 tabular-nums">+ {eur(f.iva)} IVA a credito</p>
-              </div>
-              <button onClick={() => elimina(f.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500 shrink-0" aria-label="Elimina"><IconTrash /></button>
-            </div>
-          ))}
+            )
+          })}
           {fatture.length === 0 && (
             <p className="text-sm text-ink-navy/40 py-2">Nessuna bolla in questo mese. Inseriscile qui per recuperare l&apos;IVA a credito sugli acquisti.</p>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// Coppia etichetta/valore per la vista dettaglio della bolla.
+function Dato({ label, valore }: { label: string; valore: string }) {
+  return (
+    <div>
+      <p className="text-ink-navy/35">{label}</p>
+      <p className="text-ink-navy/80 font-medium truncate">{valore}</p>
     </div>
   )
 }

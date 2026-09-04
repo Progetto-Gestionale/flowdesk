@@ -23,21 +23,9 @@ const CATEGORIE = [
 ]
 const PERIODI = [['mensile', '/mese'], ['trimestrale', '/trim.'], ['annuale', '/anno']]
 
-// Aliquote IVA selezionabili per un costo fisso (frazione salvata sul DB).
-const ALIQUOTE_COSTO = [
-  ['0', 'Esente (0%)'], ['0.04', '4%'], ['0.1', '10%'], ['0.22', '22%'],
-] as const
-
-// IVA suggerita in base alla categoria (impostazione di partenza, sempre modificabile).
-// La quasi totalità dei costi di struttura ha IVA ordinaria 22%; l'eccezione classica sono
-// le assicurazioni, esenti IVA (art. 10). L'affitto spesso è esente ma può avere IVA al 22%
-// (locazione commerciale con opzione): lasciamo 22% e sarà il titolare a metterlo esente se serve.
-const IVA_SUGGERITA: Record<string, number> = {
-  assicurazioni: 0,
-  affitto: 0.22, utenze: 0.22, servizi: 0.22, personale_extra: 0.22,
-  marketing: 0.22, leasing: 0.22, manutenzioni: 0.22, altro: 0.22,
-}
-const labelIva = (a: number) => (a === 0 ? 'esente' : `IVA ${Math.round(a * 100)}%`)
+// Lordo effettivo di un costo salvato: i costi inseriti da oggi salvano già il lordo con
+// aliquota 0, quelli vecchi sono netti + aliquota reale. La formula vale per entrambi.
+const lordoCosto = (importoNetto: number, aliquota: number) => importoNetto * (1 + aliquota)
 const eur = (n: number) => (n ?? 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
 const oggiISO = () => new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD locale
 const giornoBreve = (iso: string) => new Date(iso).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
@@ -50,12 +38,12 @@ export default function CostiPage() {
   const [totaleMensile, setTotaleMensile] = useState(0)
   const [dip, setDip] = useState<Dip[]>([])
   // `lordo` = quello che il ristoratore paga davvero (IVA inclusa: la bolletta dice "TOTALE").
-  // L'imponibile netto per il conto economico lo scorporiamo noi in fase di salvataggio.
-  const [nuovo, setNuovo] = useState({ voce: '', lordo: '', categoria: 'utenze', aliquota: 0.22, periodicita: 'mensile' })
+  // Lo salviamo così com'è (aliquota 0): nella vista di cassa conta quello che esce dal conto.
+  const [nuovo, setNuovo] = useState({ voce: '', lordo: '', categoria: 'utenze', periodicita: 'mensile' })
 
   // Costi una tantum (spot): importo TOTALE su un intervallo di date, spalmato dal conto economico.
   const [costiUT, setCostiUT] = useState<CostoUnaTantum[]>([])
-  const [nuovoUT, setNuovoUT] = useState({ voce: '', lordo: '', categoria: 'personale_extra', aliquota: 0.22, dataInizio: oggiISO(), dataFine: '' })
+  const [nuovoUT, setNuovoUT] = useState({ voce: '', lordo: '', categoria: 'personale_extra', dataInizio: oggiISO(), dataFine: '' })
 
   const caricaCosti = useCallback(() => {
     fetch('/api/contabilita/costi-fissi', { credentials: 'include' })
@@ -74,13 +62,12 @@ export default function CostiPage() {
 
   async function aggiungiCosto() {
     if (!nuovo.voce.trim() || !nuovo.lordo) return
-    // Scorporo: imponibile = lordo / (1 + aliquota). Esente (0%) → lordo = netto.
-    const importoNetto = Number(nuovo.lordo) / (1 + nuovo.aliquota)
+    // Salviamo il LORDO com'è digitato (aliquota 0): è quello che esce davvero dal conto.
     await fetch('/api/contabilita/costi-fissi', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voce: nuovo.voce, categoria: nuovo.categoria, aliquota: nuovo.aliquota, periodicita: nuovo.periodicita, importoNetto }),
+      body: JSON.stringify({ voce: nuovo.voce, categoria: nuovo.categoria, aliquota: 0, periodicita: nuovo.periodicita, importoNetto: Number(nuovo.lordo) }),
     })
-    setNuovo({ voce: '', lordo: '', categoria: 'utenze', aliquota: 0.22, periodicita: 'mensile' })
+    setNuovo({ voce: '', lordo: '', categoria: 'utenze', periodicita: 'mensile' })
     caricaCosti()
   }
   async function eliminaCosto(id: string) {
@@ -90,16 +77,15 @@ export default function CostiPage() {
 
   async function aggiungiUT() {
     if (!nuovoUT.voce.trim() || !nuovoUT.lordo || !nuovoUT.dataInizio) return
-    // Scorporo: imponibile = lordo / (1 + aliquota). dataFine vuota → singolo giorno.
-    const importoNetto = Number(nuovoUT.lordo) / (1 + nuovoUT.aliquota)
+    // Salviamo il LORDO totale com'è (aliquota 0). dataFine vuota → singolo giorno.
     await fetch('/api/contabilita/costi-una-tantum', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        voce: nuovoUT.voce, categoria: nuovoUT.categoria, aliquota: nuovoUT.aliquota, importoNetto,
+        voce: nuovoUT.voce, categoria: nuovoUT.categoria, aliquota: 0, importoNetto: Number(nuovoUT.lordo),
         dataInizio: nuovoUT.dataInizio, dataFine: nuovoUT.dataFine || nuovoUT.dataInizio,
       }),
     })
-    setNuovoUT({ voce: '', lordo: '', categoria: 'personale_extra', aliquota: 0.22, dataInizio: oggiISO(), dataFine: '' })
+    setNuovoUT({ voce: '', lordo: '', categoria: 'personale_extra', dataInizio: oggiISO(), dataFine: '' })
     caricaUT()
   }
   async function eliminaUT(id: string) {
@@ -125,7 +111,7 @@ export default function CostiPage() {
       <div className="bg-white rounded-2xl border border-ink-navy/10 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-ink-navy">Costi fissi</h2>
-          <span className="text-sm text-ink-navy/50">Totale netto <b className="text-ink-navy">{eur(totaleMensile)}</b>/mese</span>
+          <span className="text-sm text-ink-navy/50">Totale <b className="text-ink-navy">{eur(totaleMensile)}</b>/mese</span>
         </div>
 
         <div className="space-y-2 mb-4">
@@ -133,9 +119,9 @@ export default function CostiPage() {
             <div key={c.id} className="flex items-center gap-3 py-2 border-b border-ink-navy/5 last:border-0">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink-navy truncate">{c.voce}</p>
-                <p className="text-xs text-ink-navy/40">{CATEGORIE.find(x => x[0] === c.categoria)?.[1]} · {labelIva(c.aliquota)}</p>
+                <p className="text-xs text-ink-navy/40">{CATEGORIE.find(x => x[0] === c.categoria)?.[1]}</p>
               </div>
-              <span className="text-sm tabular-nums text-ink-navy">{eur(c.importoNetto)}<span className="text-ink-navy/40 text-xs">{PERIODI.find(p => p[0] === c.periodicita)?.[1]}</span></span>
+              <span className="text-sm tabular-nums text-ink-navy">{eur(lordoCosto(c.importoNetto, c.aliquota))}<span className="text-ink-navy/40 text-xs">{PERIODI.find(p => p[0] === c.periodicita)?.[1]}</span></span>
               <button onClick={() => eliminaCosto(c.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500" aria-label="Elimina"><IconTrash /></button>
             </div>
           ))}
@@ -145,19 +131,13 @@ export default function CostiPage() {
         {/* Nuovo costo */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-mist rounded-xl p-3">
           <input value={nuovo.voce} onChange={e => setNuovo({ ...nuovo, voce: e.target.value })} placeholder="Voce (es. Affitto)"
-            className="sm:col-span-3 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
-          {/* Al cambio categoria proponiamo l'IVA tipica di quel costo (modificabile). */}
-          <select value={nuovo.categoria} onChange={e => setNuovo({ ...nuovo, categoria: e.target.value, aliquota: IVA_SUGGERITA[e.target.value] ?? 0.22 })}
+            className="sm:col-span-4 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
+          <select value={nuovo.categoria} onChange={e => setNuovo({ ...nuovo, categoria: e.target.value })}
             className="sm:col-span-3 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
             {CATEGORIE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          <input value={nuovo.lordo} onChange={e => setNuovo({ ...nuovo, lordo: e.target.value })} type="number" placeholder="€ pagato (IVA incl.)" inputMode="decimal"
-            className="sm:col-span-2 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
-          <select value={String(nuovo.aliquota)} onChange={e => setNuovo({ ...nuovo, aliquota: Number(e.target.value) })}
-            title="IVA di questo costo"
-            className="sm:col-span-2 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
-            {ALIQUOTE_COSTO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          <input value={nuovo.lordo} onChange={e => setNuovo({ ...nuovo, lordo: e.target.value })} type="number" placeholder="€ quanto paghi" inputMode="decimal"
+            className="sm:col-span-3 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
           <select value={nuovo.periodicita} onChange={e => setNuovo({ ...nuovo, periodicita: e.target.value })}
             className="sm:col-span-1 px-1 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
             {PERIODI.map(([v, l]) => <option key={v} value={v}>{l.replace('/', '')}</option>)}
@@ -165,13 +145,7 @@ export default function CostiPage() {
           <button onClick={aggiungiCosto} className="sm:col-span-1 bg-electric-blue text-white rounded-lg py-2 flex items-center justify-center" aria-label="Aggiungi"><span className="w-4 h-4"><IconArrowRight /></span></button>
         </div>
         <p className="text-xs text-ink-navy/35 mt-2">
-          Scrivi <b>quanto paghi davvero</b> (IVA inclusa, come sulla bolletta): scorporiamo noi netto e IVA.
-          Scegli l&apos;aliquota giusta e metti <b>Esente</b> per assicurazioni, affitti senza IVA e simili.
-          {Number(nuovo.lordo) > 0 && (
-            <span className="block mt-1 text-ink-navy/55">
-              = {eur(Number(nuovo.lordo) / (1 + nuovo.aliquota))} netto + {eur(Number(nuovo.lordo) - Number(nuovo.lordo) / (1 + nuovo.aliquota))} IVA
-            </span>
-          )}
+          Scrivi <b>quanto paghi davvero</b> (il totale della bolletta/fattura, IVA inclusa) e ogni quanto. Il conto lo spalma da solo, ogni giorno.
         </p>
       </div>
 
@@ -188,10 +162,10 @@ export default function CostiPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink-navy truncate">{c.voce}</p>
                 <p className="text-xs text-ink-navy/40">
-                  {periodoLabel(c.dataInizio, c.dataFine)} · {CATEGORIE.find(x => x[0] === c.categoria)?.[1]} · {labelIva(c.aliquota)}
+                  {periodoLabel(c.dataInizio, c.dataFine)} · {CATEGORIE.find(x => x[0] === c.categoria)?.[1]}
                 </p>
               </div>
-              <span className="text-sm tabular-nums text-ink-navy">{eur(c.importoNetto)}<span className="text-ink-navy/40 text-xs"> netto</span></span>
+              <span className="text-sm tabular-nums text-ink-navy">{eur(lordoCosto(c.importoNetto, c.aliquota))}</span>
               <button onClick={() => eliminaUT(c.id)} className="w-4 h-4 text-ink-navy/30 hover:text-rose-500" aria-label="Elimina"><IconTrash /></button>
             </div>
           ))}
@@ -202,17 +176,12 @@ export default function CostiPage() {
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-mist rounded-xl p-3">
           <input value={nuovoUT.voce} onChange={e => setNuovoUT({ ...nuovoUT, voce: e.target.value })} placeholder="Voce (es. Cameriere extra)"
             className="sm:col-span-3 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
-          <select value={nuovoUT.categoria} onChange={e => setNuovoUT({ ...nuovoUT, categoria: e.target.value, aliquota: IVA_SUGGERITA[e.target.value] ?? 0.22 })}
-            className="sm:col-span-2 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
+          <select value={nuovoUT.categoria} onChange={e => setNuovoUT({ ...nuovoUT, categoria: e.target.value })}
+            className="sm:col-span-3 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
             {CATEGORIE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          <input value={nuovoUT.lordo} onChange={e => setNuovoUT({ ...nuovoUT, lordo: e.target.value })} type="number" placeholder="€ totale (IVA incl.)" inputMode="decimal"
+          <input value={nuovoUT.lordo} onChange={e => setNuovoUT({ ...nuovoUT, lordo: e.target.value })} type="number" placeholder="€ totale" inputMode="decimal"
             className="sm:col-span-2 px-3 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
-          <select value={String(nuovoUT.aliquota)} onChange={e => setNuovoUT({ ...nuovoUT, aliquota: Number(e.target.value) })}
-            title="IVA di questo costo"
-            className="sm:col-span-1 px-1 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white">
-            {ALIQUOTE_COSTO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
           <input value={nuovoUT.dataInizio} onChange={e => setNuovoUT({ ...nuovoUT, dataInizio: e.target.value })} type="date" title="Dal giorno"
             className="sm:col-span-2 px-2 py-2 text-sm rounded-lg border border-ink-navy/10 bg-white" />
           <input value={nuovoUT.dataFine} onChange={e => setNuovoUT({ ...nuovoUT, dataFine: e.target.value })} type="date" title="Al giorno (vuoto = singolo giorno)" min={nuovoUT.dataInizio}
@@ -220,14 +189,14 @@ export default function CostiPage() {
           <button onClick={aggiungiUT} className="sm:col-span-1 bg-electric-blue text-white rounded-lg py-2 flex items-center justify-center" aria-label="Aggiungi"><span className="w-4 h-4"><IconArrowRight /></span></button>
         </div>
         <p className="text-xs text-ink-navy/35 mt-2">
-          Scrivi l&apos;importo <b>totale</b> (IVA inclusa) e le date <b>dal / al</b> (lascia «al» vuoto per un solo giorno): spalmiamo la spesa in modo uniforme sui giorni indicati.
+          Scrivi l&apos;importo <b>totale</b> (quello che paghi, IVA inclusa) e le date <b>dal / al</b> (lascia «al» vuoto per un solo giorno): spalmiamo la spesa in modo uniforme sui giorni indicati.
           {Number(nuovoUT.lordo) > 0 && (() => {
             const inizio = nuovoUT.dataInizio, fine = nuovoUT.dataFine || nuovoUT.dataInizio
             const gg = inizio && fine ? Math.max(1, Math.round((new Date(fine).getTime() - new Date(inizio).getTime()) / 86_400_000) + 1) : 1
-            const netto = Number(nuovoUT.lordo) / (1 + nuovoUT.aliquota)
+            const totale = Number(nuovoUT.lordo)
             return (
               <span className="block mt-1 text-ink-navy/55">
-                = {eur(netto)} netto su {gg} {gg === 1 ? 'giorno' : 'giorni'} ({eur(netto / gg)}/giorno)
+                = {eur(totale)} su {gg} {gg === 1 ? 'giorno' : 'giorni'} ({eur(totale / gg)}/giorno)
               </span>
             )
           })()}

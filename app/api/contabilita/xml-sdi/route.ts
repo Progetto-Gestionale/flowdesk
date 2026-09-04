@@ -71,7 +71,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Non ho trovato il riepilogo IVA nell’XML. Inseriscila a mano.' }, { status: 422 })
   }
 
+  // Dettaglio riga-per-riga (DettaglioLinee): descrizione prodotto, quantità, prezzo. Non
+  // entra nella contabilità (che usa il castelletto sopra) ma alimenta la vista dettaglio.
+  const dettaglio: { descrizione: string; quantita: number | null; unita: string | null; prezzoTotale: number | null; aliquota: number | null }[] = []
+  for (const l of tag(xml, 'DettaglioLinee')) {
+    const descrizione = first(l, 'Descrizione')
+    if (!descrizione) continue
+    const q = first(l, 'Quantita')
+    const pt = first(l, 'PrezzoTotale')
+    const al = first(l, 'AliquotaIVA')
+    dettaglio.push({
+      descrizione: descrizione.slice(0, 200),
+      quantita: q != null && Number.isFinite(Number(q)) ? Number(q) : null,
+      unita: first(l, 'UnitaMisura'),
+      prezzoTotale: pt != null && Number.isFinite(Number(pt)) ? Math.round(Number(pt) * 100) / 100 : null,
+      aliquota: al != null ? normAliquota(al) : null,
+    })
+  }
+
   return NextResponse.json({
-    estratto: { fornitore, numero, data, categoria: 'merci', righe },
+    estratto: { fornitore, numero, data, categoria: 'merci', righe, origine: 'xml', dettaglio },
   })
 }
