@@ -27,14 +27,14 @@ function briefDeterministico(context: BriefContext, label: string): Brief {
   const status = context.statusHint ?? 'yellow'
   const metrics = context.sections[0]?.metrics ?? []
   const m = (k: string) => metrics.find((x) => x.key === k)
-  const margine = m('margine_netto')?.value
-  const utile = m('utile_stimato')?.value
-  const statoLabel = status === 'green' ? 'in salute' : status === 'red' ? 'in criticità' : 'da tenere d’occhio'
-  const headline = margine != null
-    ? `${label}: locale ${statoLabel}, margine netto ${margine}%.`
-    : `${label}: nessun venduto in questo periodo.`
-  const why = utile != null
-    ? [{ title: 'Soldi realmente tuoi', detail: `Utile netto stimato di ${utile}€ dopo IVA, food cost, personale, costi fissi e tasse.`, evidence: ['utile_stimato'] }]
+  const cassaPct = m('cassa_pct')?.value
+  const cassaResta = m('cassa_resta')?.value
+  const statoLabel = status === 'green' ? 'in salute' : status === 'red' ? 'in sofferenza' : 'da tenere d’occhio'
+  const headline = cassaPct != null
+    ? `${label}: cassa ${statoLabel}, ti resta il ${cassaPct}% degli incassi.`
+    : `${label}: nessun incasso in questo periodo.`
+  const why = cassaResta != null
+    ? [{ title: 'Cassa che resta', detail: `Restano circa ${cassaResta}€ dopo personale, materie prime e costi fissi. È al lordo di tasse e saldo IVA: non è utile netto.`, evidence: ['cassa_resta'] }]
     : []
   return {
     status,

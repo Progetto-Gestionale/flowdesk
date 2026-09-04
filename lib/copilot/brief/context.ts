@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
-import type { StatoSemaforo } from '@/lib/contabilita/spendibile'
+import { vistaCassa, semaforoCassa, type StatoSemaforoCassa } from '@/lib/contabilita/cassa'
 import type { AllowedAction, BriefContext, ContextSection, HealthStatus, Metric, Timeframe } from '@/lib/copilot/ai'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,22 +229,22 @@ function buildMenuMetrics(dishes: DishAgg[]): { metrics: Metric[]; azioni: Allow
   return { metrics, azioni }
 }
 
-// ── Salute economica (il PONTE con la Contabilità) ───────────────────────────
-// Riusa lo stesso motore della pagina Contabilità (riepilogoContabile): margine
-// netto reale, utile "soldi realmente tuoi", incidenza food cost e personale sul
-// venduto. Il semaforo è DETERMINISTICO (soglie sul margine netto) → pilota lo
-// status del brief, non l'AI. Così il brief non parla più solo di incasso lordo,
-// ma di quanto il locale guadagna davvero. Serve la contabilità configurata: se
-// non c'è venduto nel periodo, la sezione si omette (niente rumore).
-const SEMAFORO_TO_STATUS: Record<StatoSemaforo, HealthStatus> = {
+// ── Cassa del locale (il PONTE con la Contabilità) ───────────────────────────
+// Riusa lo stesso motore della pagina Contabilità (riepilogoContabile), ma nella
+// nuova vista di CASSA: quanto entra, i costi principali (personale, materie prime,
+// costi fissi), quanto resta. Il semaforo è DETERMINISTICO (soglie sulla % di cassa
+// che resta) → pilota lo status del brief, non l'AI. Così il brief non parla più solo
+// di incasso, ma di quanto resta davvero in cassa. La "cassa che resta" è al lordo di
+// tasse e saldo IVA: non è utile netto. Se non c'è incasso nel periodo, si omette.
+const SEMAFORO_TO_STATUS: Record<StatoSemaforoCassa, HealthStatus> = {
   verde: 'green',
   giallo: 'yellow',
   rosso: 'red',
 }
-const SEMAFORO_LABEL: Record<StatoSemaforo, string> = {
-  verde: 'in salute',
-  giallo: 'attenzione',
-  rosso: 'criticità',
+const SEMAFORO_LABEL: Record<StatoSemaforoCassa, string> = {
+  verde: 'cassa in salute',
+  giallo: 'cassa da tenere d’occhio',
+  rosso: 'cassa in sofferenza',
 }
 
 async function buildEconomicSection(
@@ -253,50 +253,42 @@ async function buildEconomicSection(
   to: Date,
 ): Promise<{ section: ContextSection; statusHint: HealthStatus } | null> {
   const r = await riepilogoContabile(userId, from, to)
-  const c = r.conto
-  if (c.fatturatoNetto <= 0) return null
+  const cassa = vistaCassa(r.conto)
+  if (cassa.incassi <= 0) return null
 
-  const foodPct = round2((c.foodCostVenduto / c.fatturatoNetto) * 100)
-  const laborPct = round2((c.laborCost / c.fatturatoNetto) * 100)
+  const semaforo = semaforoCassa(cassa.cassaPct)
+  const foodPct = round2((cassa.materiePrime / cassa.incassi) * 100)
+  const laborPct = round2((cassa.personale / cassa.incassi) * 100)
 
   const metrics: Metric[] = [
     {
-      key: 'margine_netto',
-      label: 'Margine netto',
-      value: round2(c.marginePct * 100),
+      key: 'cassa_pct',
+      label: 'Cassa che resta sugli incassi',
+      value: round2(cassa.cassaPct * 100),
       unit: '%',
-      deltaLabel: SEMAFORO_LABEL[r.semaforo],
+      deltaLabel: SEMAFORO_LABEL[semaforo],
     },
     {
-      key: 'utile_stimato',
-      label: 'Soldi realmente tuoi',
-      value: round2(c.utileStimato),
+      key: 'cassa_resta',
+      label: 'Cassa che resta (stima)',
+      value: round2(cassa.cassaResta),
       unit: 'EUR',
-      deltaLabel: 'utile netto stimato (dopo IVA, food, personale, fissi, tasse)',
+      deltaLabel: 'dopo personale, materie prime e costi fissi — al lordo di tasse e saldo IVA',
     },
-    { key: 'food_cost_pct', label: 'Food cost sul venduto', value: foodPct, unit: '%' },
-    { key: 'labor_pct', label: 'Personale sul venduto', value: laborPct, unit: '%' },
-    // IVA: un CREDITO è a favore del locale (non si versa, compensa il futuro); un DEBITO
-    // va messo da parte per l'F24. Etichetta e segno già "masticati" per il narratore.
-    {
-      key: 'iva_netta',
-      label: c.ivaNetta < 0 ? 'Credito IVA' : 'IVA da versare',
-      value: round2(Math.abs(c.ivaNetta)),
-      unit: 'EUR',
-      deltaLabel: c.ivaNetta < 0 ? 'a tuo favore, compensa le imposte future' : "da mettere da parte per l'F24",
-    },
+    { key: 'food_cost_pct', label: 'Materie prime sugli incassi', value: foodPct, unit: '%' },
+    { key: 'labor_pct', label: 'Personale sugli incassi', value: laborPct, unit: '%' },
   ]
 
   // ── Allerta PERSONALE (per l'azione "apri_staff") ──
   // Due lacune opposte, entrambe importanti per la salute reale:
-  //  · labor non tracciato (laborPct = 0 con venduto) → l'utile è gonfiato, mancano le paghe.
-  //  · labor troppo alto (oltre soglia) → il personale erode il margine, turni da rivedere.
+  //  · labor non tracciato (laborPct = 0 con incasso) → la cassa è gonfiata, mancano le paghe.
+  //  · labor troppo alto (oltre soglia) → il personale erode la cassa, turni da rivedere.
   if (laborPct <= 0) {
     metrics.push({
       key: 'labor_non_tracciato',
       label: 'Costo del personale non impostato',
       value: 'paghe/turni non conteggiati',
-      deltaLabel: 'senza costo del personale il margine netto è sovrastimato',
+      deltaLabel: 'senza costo del personale la cassa che resta è sovrastimata',
     })
   } else if (laborPct >= 40) {
     metrics.push({
@@ -304,44 +296,44 @@ async function buildEconomicSection(
       label: 'Personale sopra soglia',
       value: laborPct,
       unit: '%',
-      deltaLabel: 'oltre ~40% del venduto: i turni pesano molto sul margine',
+      deltaLabel: 'oltre ~40% degli incassi: i turni pesano molto sulla cassa',
     })
   }
 
   // ── Allerta COSTI FISSI (per l'azione "apri_costi") ──
-  // Nessun costo fisso imputato al periodo pur avendo venduto → affitto/utenze/servizi
-  // probabilmente non registrati: il margine netto e i "soldi realmente tuoi" sono gonfiati.
-  if (c.quotaCostiFissi <= 0) {
+  // Nessun costo fisso imputato al periodo pur avendo incassato → affitto/utenze/servizi
+  // probabilmente non registrati: la cassa che resta è gonfiata.
+  if (cassa.costiFissi <= 0) {
     metrics.push({
       key: 'costi_fissi_mancanti',
       label: 'Costi fissi non registrati',
       value: 'affitto/utenze/servizi assenti',
-      deltaLabel: 'senza costi fissi il margine netto è sovrastimato',
+      deltaLabel: 'senza costi fissi la cassa che resta è sovrastimata',
     })
   }
 
   // Acquisti (bolle F3): se ci sono, confronto comprato vs consumato; se mancano del tutto
-  // ma c'è food cost, il credito IVA sulle merci non è tracciato → l'AI può suggerire di inserirle.
+  // ma c'è food cost, la spesa reale dai fornitori non è tracciata → suggerire di inserirle.
   if (r.acquisti.numero > 0) {
     metrics.push({
       key: 'merci_comprate_vs_consumate',
       label: 'Merci: comprate − consumate',
-      value: round2(r.acquisti.nettoMerci - c.foodCostVenduto),
+      value: round2(r.acquisti.nettoMerci - cassa.materiePrime),
       unit: 'EUR',
-      deltaLabel: `acquisti ${round2(r.acquisti.nettoMerci)}€ vs food cost venduto ${round2(c.foodCostVenduto)}€ (netto)`,
+      deltaLabel: `acquisti ${round2(r.acquisti.nettoMerci)}€ vs materie prime consumate ${round2(cassa.materiePrime)}€`,
     })
-  } else if (c.foodCostVenduto > 0) {
+  } else if (cassa.materiePrime > 0) {
     metrics.push({
       key: 'bolle_mancanti',
       label: 'Bolle fornitori non inserite',
-      value: 'credito IVA merci non conteggiato',
-      deltaLabel: 'inserendo le bolle l’IVA a credito reale sarà più alta',
+      value: 'spesa reale fornitori non tracciata',
+      deltaLabel: 'inserendo le bolle vedi se stai comprando più di quanto consumi',
     })
   }
 
   return {
-    section: { key: 'economia', title: 'Salute economica', metrics },
-    statusHint: SEMAFORO_TO_STATUS[r.semaforo],
+    section: { key: 'economia', title: 'Cassa del locale', metrics },
+    statusHint: SEMAFORO_TO_STATUS[semaforo],
   }
 }
 
@@ -353,13 +345,13 @@ const AZIONI: AllowedAction[] = [
     id: 'apri_contabilita',
     kind: 'link',
     target: { href: '/food/dashboard/contabilita' },
-    description: 'Apri la Contabilità per vedere il conto economico completo (margine netto, IVA, costi, utile).',
+    description: 'Apri la Contabilità per vedere la cassa del locale (incassi, costi principali, quanto resta).',
   },
   {
     id: 'apri_acquisti',
     kind: 'link',
     target: { href: '/food/dashboard/contabilita/acquisti' },
-    description: 'Apri Acquisti/Bolle per registrare le fatture dei fornitori e recuperare l’IVA a credito reale.',
+    description: 'Apri Acquisti/Bolle per registrare quanto spendi dai fornitori e confrontarlo col consumato.',
   },
   {
     id: 'apri_menu',

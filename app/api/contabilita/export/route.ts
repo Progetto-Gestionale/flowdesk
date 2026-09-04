@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { buildDatiReport, generaReportContabile } from '@/lib/contabilita/export'
 
 // Report XLSX MENSILE per il commercialista. Owner-only. Il report copre sempre il MESE che
-// contiene `riferimento` (default: mese corrente): è l'unità naturale della liquidazione IVA.
+// contiene `riferimento` (default: mese corrente): l'unità naturale per corrispettivi e costi.
 export async function GET(req: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
