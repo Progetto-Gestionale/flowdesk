@@ -253,6 +253,7 @@ async function buildEconomicSection(
   userId: string,
   from: Date,
   to: Date,
+  timeframe: Timeframe,
 ): Promise<{ section: ContextSection; statusHint: HealthStatus } | null> {
   const r = await riepilogoContabile(userId, from, to)
   const cassa = vistaCassa(r.conto)
@@ -302,10 +303,10 @@ async function buildEconomicSection(
     })
   }
 
-  // ── Allerta COSTI FISSI (per l'azione "apri_costi") ──
-  // Nessun costo fisso imputato al periodo pur avendo incassato → affitto/utenze/servizi
-  // probabilmente non registrati: la cassa che resta è gonfiata.
-  if (cassa.costiFissi <= 0) {
+  // ── Allerta COSTI FISSI (per l'azione "apri_costi") ── SOLO su periodi lunghi.
+  // I costi fissi sono quote MENSILI: su un singolo giorno/settimana "non registrati" è
+  // rumore fuorviante. Ha senso segnalarlo solo sul brief mensile.
+  if (timeframe === 'monthly' && cassa.costiFissi <= 0) {
     metrics.push({
       key: 'costi_fissi_mancanti',
       label: 'Costi fissi non registrati',
@@ -314,23 +315,28 @@ async function buildEconomicSection(
     })
   }
 
-  // Acquisti (bolle F3): se ci sono, confronto comprato vs consumato; se mancano del tutto
-  // ma c'è food cost, la spesa reale dai fornitori non è tracciata → suggerire di inserirle.
-  if (r.acquisti.numero > 0) {
-    metrics.push({
-      key: 'merci_comprate_vs_consumate',
-      label: 'Merci: comprate − consumate',
-      value: round2(r.acquisti.nettoMerci - cassa.materiePrime),
-      unit: 'EUR',
-      deltaLabel: `acquisti ${round2(r.acquisti.nettoMerci)}€ vs materie prime consumate ${round2(cassa.materiePrime)}€`,
-    })
-  } else if (cassa.materiePrime > 0) {
-    metrics.push({
-      key: 'bolle_mancanti',
-      label: 'Bolle fornitori non inserite',
-      value: 'spesa reale fornitori non tracciata',
-      deltaLabel: 'inserendo le bolle vedi se stai comprando più di quanto consumi',
-    })
+  // ── Acquisti (bolle F3) ── SOLO sul brief MENSILE.
+  // Il magazzino si compra per più giorni: confrontare "comprato − consumato" su un
+  // giorno (o una settimana) è sbagliato per definizione (oggi compri, consumi nei
+  // giorni dopo). Ha senso solo su un orizzonte lungo, dove acquisti e consumi si
+  // avvicinano. Sotto il mese, niente confronto magazzino.
+  if (timeframe === 'monthly') {
+    if (r.acquisti.numero > 0) {
+      metrics.push({
+        key: 'merci_comprate_vs_consumate',
+        label: 'Merci: comprate − consumate (nel mese)',
+        value: round2(r.acquisti.nettoMerci - cassa.materiePrime),
+        unit: 'EUR',
+        deltaLabel: `acquisti ${round2(r.acquisti.nettoMerci)}€ vs materie prime consumate ${round2(cassa.materiePrime)}€`,
+      })
+    } else if (cassa.materiePrime > 0) {
+      metrics.push({
+        key: 'bolle_mancanti',
+        label: 'Bolle fornitori non inserite',
+        value: 'spesa reale fornitori non tracciata',
+        deltaLabel: 'inserendo le bolle vedi se nel mese compri più di quanto consumi',
+      })
+    }
   }
 
   return {
@@ -518,7 +524,7 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
   let statusHint: HealthStatus | undefined
   try {
     const { from, to } = intervallo(curFrom, curTo)
-    const eco = await buildEconomicSection(userId, from, to)
+    const eco = await buildEconomicSection(userId, from, to, timeframe)
     if (eco) {
       sections.push(eco.section)
       statusHint = eco.statusHint

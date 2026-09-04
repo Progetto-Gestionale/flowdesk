@@ -65,6 +65,23 @@ export default function AsportoDeliveryPage() {
   // Vista: board ordini vs "Richieste in entrata" (ordini asporto/delivery online in attesa di conferma).
   const [vista, setVista] = useState<'ordini' | 'richieste'>('ordini')
   const [richieste, setRichieste] = useState<Richiesta[]>([])
+  // Disponibilità ordini online (blocco asporto/delivery): il toggle vive qui, la sua
+  // pagina naturale, non più su Ordini. Persistito su /api/impostazioni/blocchi.
+  const [blockAsporto, setBlockAsporto] = useState(false)
+  const [blockDelivery, setBlockDelivery] = useState(false)
+  const [savingBlocco, setSavingBlocco] = useState(false)
+
+  async function toggleBlocco(campo: 'blockAsporto' | 'blockDelivery', valore: boolean) {
+    setSavingBlocco(true)
+    if (campo === 'blockAsporto') setBlockAsporto(valore)
+    else setBlockDelivery(valore)
+    await fetch('/api/impostazioni/blocchi', {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [campo]: valore }),
+    })
+    setSavingBlocco(false)
+  }
 
   const fetchRichieste = useCallback(async () => {
     const res = await fetch('/api/preventivi', { credentials: 'include' })
@@ -89,6 +106,9 @@ export default function AsportoDeliveryPage() {
     if (cached) { setOrdini(cached); setLoading(false) }
     fetchOrdini().finally(() => setLoading(false)) // revalidate in background
     fetchRichieste()
+    fetch('/api/impostazioni/blocchi', { credentials: 'include' })
+      .then(r => r.json()).then(d => { setBlockAsporto(d.blockAsporto ?? false); setBlockDelivery(d.blockDelivery ?? false) })
+      .catch(() => {})
     const iv = setInterval(() => { fetchOrdini(); fetchRichieste() }, 15000)
     return () => clearInterval(iv)
   }, [fetchOrdini, fetchRichieste])
@@ -312,6 +332,21 @@ export default function AsportoDeliveryPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {vista === 'ordini' && (() => {
+            // Toggle disponibilità online del canale attualmente selezionato (asporto/delivery).
+            const campo = tipoSel === 'asporto' ? 'blockAsporto' : 'blockDelivery'
+            const bloccato = tipoSel === 'asporto' ? blockAsporto : blockDelivery
+            return (
+              <div className="flex items-center gap-2 select-none bg-white border border-ink-navy/10 rounded-lg px-3 py-1.5 shadow-sm" title={`Attiva/sospendi gli ordini ${t.badge.toLowerCase()} dal menu online`}>
+                <span className="text-xs font-medium text-ink-navy/50">{t.badge} online</span>
+                <button type="button" disabled={savingBlocco} onClick={() => toggleBlocco(campo, !bloccato)}
+                  className={`relative w-10 h-5 rounded-full transition-colors focus:outline-none disabled:opacity-50 ${bloccato ? 'bg-red-400' : 'bg-green-400'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform block ${bloccato ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+                <span className={`text-xs font-semibold ${bloccato ? 'text-red-500' : 'text-green-600'}`}>{bloccato ? 'Sospeso' : 'Attivo'}</span>
+              </div>
+            )
+          })()}
           {vista === 'ordini' && (
             <button onClick={() => setShowNuovo(true)}
               className="text-sm text-white font-semibold bg-electric-blue px-4 py-1.5 rounded-lg hover:bg-electric-blue/90 transition-colors">
