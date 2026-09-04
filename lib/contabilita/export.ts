@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma'
 import { calcolaPeriodo } from './periodo'
 import { riepilogoContabile } from './chiusuraGiorno'
 import { vistaCassa, type VistaCassa } from './cassa'
+import { importoMensile, lordoCosto } from './costiFissi'
 import { WHERE_CONTO_CHIUSO } from '@/lib/ordini/contoChiuso'
 
 const EUR = '#,##0.00 "€"'
@@ -116,16 +117,16 @@ export async function buildDatiReport(userId: string, riferimento?: string | nul
   const giorni = giorniTrascorsi(p.inizio, p.fine)
   const costi: RigaCosto[] = []
   for (const c of costiFissi) {
-    const mensile = c.periodicita === 'annuale' ? c.importoNetto / 12 : c.periodicita === 'trimestrale' ? c.importoNetto / 3 : c.importoNetto
+    const mensile = importoMensile(c) // LORDO normalizzato al mese
     costi.push({
       voce: c.voce, categoria: c.categoria, periodicita: c.periodicita,
       importoMensile: round2(mensile), quotaPeriodo: round2((mensile / 30) * giorni),
     })
   }
   for (const c of costiUnaTantum) {
-    const q = quotaUnaTantum(c, p.inizio, p.fine)
+    const q = lordoCosto(quotaUnaTantum(c, p.inizio, p.fine), c.aliquota)
     if (q <= 0) continue
-    costi.push({ voce: c.voce, categoria: c.categoria, periodicita: 'una tantum', importoMensile: round2(c.importoNetto), quotaPeriodo: round2(q) })
+    costi.push({ voce: c.voce, categoria: c.categoria, periodicita: 'una tantum', importoMensile: round2(lordoCosto(c.importoNetto, c.aliquota)), quotaPeriodo: round2(q) })
   }
   costi.sort((a, b) => b.quotaPeriodo - a.quotaPeriodo)
 

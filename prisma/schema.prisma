@@ -745,6 +745,12 @@ model Fattura {
   data      DateTime // data documento (competenza IVA)
   categoria String        @default("merci") // "merci"|"bevande"|"servizi"|"altro"
   note      String?
+  // Come è stata inserita: a mano, da foto (OCR) o da XML SdI. Serve a mostrare un badge
+  // e a capire quando c'è dettaglio riga-per-riga disponibile.
+  origine   String        @default("manuale") // "manuale" | "foto" | "xml"
+  // Dettaglio riga-per-riga (descrizioni prodotti) quando disponibile da XML/OCR — solo per
+  // la vista dettaglio, NON per la contabilità (che usa il castelletto IVA in `righe`).
+  dettaglioLinee String?  // JSON: [{descrizione, quantita?, unita?, prezzoTotale, aliquota}]
   createdAt DateTime      @default(now())
   user      User          @relation(fields: [userId], references: [id])
   righe     FatturaRiga[]

@@ -18,14 +18,19 @@ export async function GET(req: Request) {
   const fatture = await prisma.fattura.findMany({
     where: { userId: user.id, data: { gte: p.inizio, lt: p.fine } },
     orderBy: { data: 'desc' },
-    select: { id: true, fornitore: true, partitaIvaFornitore: true, numero: true, data: true, categoria: true, note: true, righe: { select: { imponibile: true, aliquota: true } } },
+    select: { id: true, fornitore: true, partitaIvaFornitore: true, numero: true, data: true, categoria: true, note: true, origine: true, dettaglioLinee: true, righe: { select: { imponibile: true, aliquota: true } } },
   })
 
-  // Ogni fattura con i suoi totali (netto, IVA, lordo) già calcolati per la UI.
+  // Ogni fattura con i suoi totali (netto, IVA, lordo) e il dettaglio riga-per-riga (parsato
+  // dal JSON) già pronti per la UI.
   const lista = fatture.map(f => {
     const netto = f.righe.reduce((s, r) => s + r.imponibile, 0)
     const iva = f.righe.reduce((s, r) => s + r.imponibile * r.aliquota, 0)
-    return { ...f, netto, iva, lordo: netto + iva }
+    let dettaglio: unknown[] = []
+    if (f.dettaglioLinee) { try { const d = JSON.parse(f.dettaglioLinee); if (Array.isArray(d)) dettaglio = d } catch {} }
+    const { dettaglioLinee, ...resto } = f
+    void dettaglioLinee
+    return { ...resto, netto, iva, lordo: netto + iva, dettaglio }
   })
   const totali = {
     netto: lista.reduce((s, f) => s + f.netto, 0),
@@ -55,6 +60,22 @@ export async function POST(req: Request) {
       Number.isFinite(r.imponibile) && r.imponibile > 0 && ALIQUOTE.includes(r.aliquota))
   if (righe.length === 0) return NextResponse.json({ error: 'Inserisci almeno una riga con imponibile e aliquota' }, { status: 400 })
 
+  const origine = ['manuale', 'foto', 'xml'].includes(b.origine) ? b.origine : 'manuale'
+
+  // Dettaglio righe prodotto (facoltativo, da OCR/XML): sanificato e serializzato in JSON.
+  // NON entra nei conti (che usano `righe` = castelletto IVA): serve solo alla vista dettaglio.
+  const dettaglioIn = Array.isArray(b.dettaglio) ? b.dettaglio : []
+  const dettaglio = dettaglioIn
+    .map((d: { descrizione?: unknown; quantita?: unknown; unita?: unknown; prezzoTotale?: unknown; aliquota?: unknown }) => ({
+      descrizione: typeof d.descrizione === 'string' ? d.descrizione.slice(0, 200) : '',
+      quantita: Number.isFinite(Number(d.quantita)) ? Number(d.quantita) : null,
+      unita: typeof d.unita === 'string' ? d.unita.slice(0, 12) : null,
+      prezzoTotale: Number.isFinite(Number(d.prezzoTotale)) ? Math.round(Number(d.prezzoTotale) * 100) / 100 : null,
+      aliquota: [0, 0.04, 0.1, 0.22].includes(Number(d.aliquota)) ? Number(d.aliquota) : null,
+    }))
+    .filter((d: { descrizione: string }) => d.descrizione)
+    .slice(0, 100)
+
   const fattura = await prisma.fattura.create({
     data: {
       userId: user.id,
@@ -64,6 +85,8 @@ export async function POST(req: Request) {
       data,
       categoria,
       note: typeof b.note === 'string' && b.note.trim() ? b.note.trim() : null,
+      origine,
+      dettaglioLinee: dettaglio.length > 0 ? JSON.stringify(dettaglio) : null,
       righe: { create: righe },
     },
     select: { id: true },

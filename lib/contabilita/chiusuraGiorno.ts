@@ -5,7 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { scorpora, risolviAliquotaVendita } from './iva'
 import { costoOrarioReale, costoTurno, oreTraOrari, oreDaTimbrature, tariffaAllaData, MOLTIPLICATORE_DEFAULT, type TariffaStorica } from './labor'
-import { quotaPeriodo, ivaCreditoMensile } from './costiFissi'
+import { quotaPeriodo, ivaCreditoMensile, importoMensile, lordoCosto } from './costiFissi'
 import { calcolaContoEconomico, statoSemaforo, type ContoEconomico, type StatoSemaforo } from './spendibile'
 import { WHERE_CONTO_CHIUSO } from '@/lib/ordini/contoChiuso'
 
@@ -258,8 +258,8 @@ export async function riepilogoContabile(
 
   const perCategoriaCostoMap = new Map<string, number>()
   for (const c of costiFissi) {
-    // normalizzato al periodo mostrato
-    const mensile = c.periodicita === 'annuale' ? c.importoNetto / 12 : c.periodicita === 'trimestrale' ? c.importoNetto / 3 : c.importoNetto
+    // LORDO normalizzato al periodo mostrato (quello che esce davvero dal conto).
+    const mensile = importoMensile(c)
     perCategoriaCostoMap.set(c.categoria, (perCategoriaCostoMap.get(c.categoria) ?? 0) + (mensile / 30) * giorni)
   }
 
@@ -268,11 +268,12 @@ export async function riepilogoContabile(
   let quotaUnaTantumTot = 0
   let ivaCreditoUnaTantum = 0
   for (const c of costiUnaTantum) {
-    const q = quotaUnaTantum(c, inizio, fine)
-    if (q <= 0) continue
-    quotaUnaTantumTot += q
-    if (!forfettario) ivaCreditoUnaTantum += q * c.aliquota
-    perCategoriaCostoMap.set(c.categoria, (perCategoriaCostoMap.get(c.categoria) ?? 0) + q)
+    const qNetto = quotaUnaTantum(c, inizio, fine)
+    if (qNetto <= 0) continue
+    const qLordo = lordoCosto(qNetto, c.aliquota) // vista di cassa: quota LORDA del periodo
+    quotaUnaTantumTot += qLordo
+    if (!forfettario) ivaCreditoUnaTantum += qNetto * c.aliquota
+    perCategoriaCostoMap.set(c.categoria, (perCategoriaCostoMap.get(c.categoria) ?? 0) + qLordo)
   }
 
   const conto = calcolaContoEconomico({
