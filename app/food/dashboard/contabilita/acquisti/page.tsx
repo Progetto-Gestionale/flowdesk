@@ -202,6 +202,26 @@ export default function AcquistiPage() {
           </div>
         )}
 
+        {/* Anteprima degli articoli rilevati da foto/XML: vengono salvati col dettaglio della
+            bolla e riappaiono cliccandola nell'elenco. Se qui è vuoto, il file non aveva le
+            singole righe prodotto leggibili (resta comunque il totale per aliquota qui sotto). */}
+        {dettaglioNuovo.length > 0 && (
+          <div className="rounded-xl border border-ink-navy/10 bg-white px-3 py-2.5">
+            <p className="text-xs font-medium text-ink-navy/70 mb-1.5">📦 {dettaglioNuovo.length} articoli rilevati — verranno salvati col dettaglio della bolla</p>
+            <ul className="text-xs text-ink-navy/55 space-y-0.5 max-h-44 overflow-auto">
+              {dettaglioNuovo.map((d, i) => (
+                <li key={i} className="flex justify-between gap-3 border-b border-ink-navy/5 last:border-0 py-0.5">
+                  <span className="truncate">{d.descrizione}</span>
+                  <span className="tabular-nums shrink-0 text-ink-navy/45">
+                    {d.quantita != null ? `${d.quantita}${d.unita ? ' ' + d.unita : ''}` : ''}
+                    {d.prezzoTotale != null ? `${d.quantita != null ? ' · ' : ''}${eur(d.prezzoTotale)}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <label className="text-xs text-ink-navy/55 sm:col-span-2">
             Fornitore
