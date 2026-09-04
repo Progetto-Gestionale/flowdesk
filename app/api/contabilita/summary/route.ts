@@ -2,8 +2,9 @@ import { getAuthUser } from '@/lib/getAuthUser'
 import { NextResponse } from 'next/server'
 import { calcolaPeriodo } from '@/lib/contabilita/periodo'
 import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
+import { vistaCassa, semaforoCassa } from '@/lib/contabilita/cassa'
 
-// Conto economico gestionale + Semaforo per il periodo richiesto. Owner-only: gira
+// Vista di CASSA semplificata + Semaforo per il periodo richiesto. Owner-only: gira
 // dietro getAuthUser (Clerk = titolare); i dipendenti non raggiungono questa rotta.
 export async function GET(req: Request) {
   const user = await getAuthUser()
@@ -13,11 +14,10 @@ export async function GET(req: Request) {
   const p = calcolaPeriodo(searchParams.get('periodo') ?? 'mese', searchParams.get('riferimento'))
   const r = await riepilogoContabile(user.id, p.inizio, p.fine)
 
-  // Saldo IVA progressivo da inizio anno (riporto del credito): la liquidazione IVA cumulata
-  // dal 1° gennaio fino alla fine del periodo mostrato. Negativo = credito che si porta avanti.
-  const inizioAnno = new Date(p.inizio.getFullYear(), 0, 1)
-  const rAnno = await riepilogoContabile(user.id, inizioAnno, p.fine)
-  const saldoIvaAnno = rAnno.conto.ivaNetta
+  // Vista di cassa (incassi − personale − materie prime − costi fissi) e semaforo su di essa:
+  // è ciò che mostra la pagina, non più il conto economico formale con IVA e imposte.
+  const cassa = vistaCassa(r.conto)
+  const semaforo = semaforoCassa(cassa.cassaPct)
 
-  return NextResponse.json({ periodo: p.periodo, label: p.label, ...r, saldoIvaAnno })
+  return NextResponse.json({ periodo: p.periodo, label: p.label, ...r, cassa, semaforo })
 }
