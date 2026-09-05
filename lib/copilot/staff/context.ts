@@ -4,38 +4,14 @@
 // racconta soltanto. Così il suggerimento sull'organico entra nell'UNICO canale di
 // suggerimenti del Copilota (insight card "Analisi AI" + brief), non come banner a sé.
 
-import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { calcolaPeriodo, type Periodo } from '@/lib/contabilita/periodo'
 import { attribuzioneCoperti, type AttribuzioneCoperti } from './attribuzione'
 import { baselineOrganico, valutaGiornata, type Baseline } from './baseline'
+import { calcolaAvanzamento, chiavePeriodo, costruisciHash, periodoToTimeframe } from '@/lib/copilot/context/base'
 import type { AllowedAction, BriefContext, HealthStatus, Metric } from '@/lib/copilot/ai'
 
 const round1 = (n: number) => Math.round(n * 10) / 10
-
-function periodoToTimeframe(periodo: string): 'daily' | 'weekly' | 'monthly' {
-  if (periodo === 'oggi') return 'daily'
-  if (periodo === 'settimana') return 'weekly'
-  return 'monthly'
-}
-
-function chiavePeriodo(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-// Avanzamento del periodo rispetto a ORA (identico al financial context): se il
-// periodo è in corso, i totali sono parziali e il verdetto va rigenerato ogni giorno.
-function calcolaAvanzamento(inizio: Date, fine: Date): BriefContext['periodProgress'] {
-  const ora = new Date()
-  const GIORNO = 86_400_000
-  const totalDays = Math.max(1, Math.round((fine.getTime() - inizio.getTime()) / GIORNO))
-  const inProgress = ora >= inizio && ora < fine
-  if (!inProgress) return undefined
-  const elapsedMs = ora.getTime() - inizio.getTime()
-  const elapsedDays = Math.min(totalDays, Math.max(1, Math.ceil(elapsedMs / GIORNO)))
-  const pct = Math.min(100, Math.max(1, Math.round((elapsedMs / (fine.getTime() - inizio.getTime())) * 100)))
-  return { inProgress, elapsedDays, totalDays, pct }
-}
 
 const AZIONI: AllowedAction[] = [
   { id: 'apri_staff', kind: 'link', target: { href: '/food/dashboard/staff' }, description: 'Apri Staff per rivedere i turni e l’organico (aggiungere/togliere una persona su un certo giorno, rigenerare i turni).' },
@@ -133,13 +109,7 @@ export async function buildStaffContext(
     periodProgress,
   }
 
-  const impronta = JSON.stringify({
-    periodo, riferimentoKey,
-    m: metrics.map((x) => [x.key, x.value]),
-    status: statusHint,
-    avanzamento: periodProgress ? periodProgress.elapsedDays : null,
-  })
-  const hash = createHash('sha1').update(impronta).digest('hex')
+  const hash = costruisciHash(periodo, riferimentoKey, metrics, statusHint, periodProgress)
 
   return { context, hash, label: p.label, riferimentoKey, vuoto: attr.totaleCoperti <= 0, corrente: !!periodProgress?.inProgress }
 }
@@ -212,13 +182,7 @@ async function buildOggi(
     statusHint,
     periodProgress,
   }
-  const impronta = JSON.stringify({
-    periodo: 'oggi', riferimentoKey,
-    m: metrics.map((x) => [x.key, x.value]),
-    status: statusHint,
-    avanzamento: periodProgress ? periodProgress.elapsedDays : null,
-  })
-  const hash = createHash('sha1').update(impronta).digest('hex')
+  const hash = costruisciHash('oggi', riferimentoKey, metrics, statusHint, periodProgress)
   // Vuoto solo se non c'è NULLA: né turni pianificati, né coperti, né storico del giorno.
   const vuoto = orePianificate <= 0 && attr.totaleCoperti <= 0 && gg.copertiMediani <= 0
   return { context, hash, label: p.label, riferimentoKey, vuoto, corrente: !!periodProgress?.inProgress }

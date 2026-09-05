@@ -1,10 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/getAuthUser'
-import { prisma } from '@/lib/prisma'
 import { buildCopilotPrompt } from '@/lib/copilot/prompt'
 import { copilotTools, eseguiCopilotTool } from '@/lib/copilot/tools'
-import { USD_TO_EUR, meseCorrente } from '@/lib/copilot/spesa'
+import { registraSpesa, stimaCostoUsd, type TokenUsage as Uso } from '@/lib/copilot/pricing'
 import { buildBriefContext } from '@/lib/copilot/brief'
 import { buildFinancialContext } from '@/lib/copilot/financial/context'
 import { briefSystemBlock } from '@/lib/copilot/briefContextText'
@@ -23,20 +22,6 @@ const MODEL_SMART = 'claude-sonnet-5'   // escalation qualità
 const MAX_GIRI_BASE = 6      // giri di tool-use su Haiku prima di arrendersi/salire
 const MAX_GIRI_SMART = 4     // giri extra concessi a Sonnet dopo l'escalation
 
-// Prezzi in $ per 1 milione di token (fonte: reference Anthropic — verificare su
-// fattura). Servono solo a stimare la spesa: input, output, cache-read (0,1x),
-// cache-write (1,25x). Costo calcolato col modello EFFETTIVAMENTE usato a ogni giro.
-const PRICING: Record<string, { in: number; out: number; cr: number; cw: number }> = {
-  'claude-haiku-4-5': { in: 1, out: 5, cr: 0.1, cw: 1.25 },
-  'claude-sonnet-5': { in: 2, out: 10, cr: 0.2, cw: 2.5 },
-  'claude-opus-4-8': { in: 5, out: 25, cr: 0.5, cw: 6.25 },
-}
-type Uso = { input: number; output: number; cacheRead: number; cacheCreation: number }
-function stimaCostoUsd(u: Uso, model: string): number {
-  const p = PRICING[model] ?? PRICING['claude-sonnet-5']
-  return (u.input * p.in + u.output * p.out + u.cacheRead * p.cr + u.cacheCreation * p.cw) / 1_000_000
-}
-
 // Euristica leggera "domanda complessa" → parte subito su Sonnet (salta il giro Haiku
 // che quasi certamente non basterebbe). Conservativa: nel dubbio resta Haiku e in caso
 // l'escalation a fine giri fa da rete. Tunabile.
@@ -50,29 +35,6 @@ function domandaComplessa(testo: string): boolean {
   const domini = ['incass', 'coperti', 'personale', 'turni', 'timbrat', 'piatt', 'menu', 'prenotaz', 'clienti', 'ritard', 'costi']
   if (domini.filter((d) => t.includes(d)).length >= 2) return true
   return false
-}
-
-// Registra la spesa di questo messaggio nel totale del mese del locale (somma di
-// tutti i dispositivi dell'account) e restituisce il totale aggiornato in euro.
-// In try/catch: se la tabella non c'è ancora o il DB fallisce, la chat funziona
-// comunque, semplicemente il contatore non si aggiorna.
-async function registraSpesa(userId: string, uso: Uso, costoUsd: number): Promise<{ costoEur: number } | null> {
-  try {
-    const mese = meseCorrente()
-    const row = await prisma.copilotUsage.upsert({
-      where: { userId_mese: { userId, mese } },
-      create: { userId, mese, costoUsd, tokenInput: uso.input, tokenOutput: uso.output },
-      update: {
-        costoUsd: { increment: costoUsd },
-        tokenInput: { increment: uso.input },
-        tokenOutput: { increment: uso.output },
-      },
-    })
-    return { costoEur: row.costoUsd * USD_TO_EUR }
-  } catch (e) {
-    console.error('[COPILOT] registrazione spesa fallita:', e)
-    return null
-  }
 }
 
 type MsgIn = { role: 'user' | 'assistant'; content: string }
@@ -187,7 +149,7 @@ export async function POST(req: Request) {
           .map((b) => (b.type === 'text' ? b.text : ''))
           .join('\n')
           .trim()
-        const spesaMese = await registraSpesa(user.id, uso, costoUsd)
+        const spesaMese = await registraSpesa(user.id, costoUsd, uso.input, uso.output)
         return NextResponse.json({ text, spesaMese })
       }
 
@@ -213,7 +175,7 @@ export async function POST(req: Request) {
     }
 
     // Esauriti i giri (anche dopo l'escalation a Sonnet) senza risposta testuale.
-    const spesaMese = await registraSpesa(user.id, uso, costoUsd)
+    const spesaMese = await registraSpesa(user.id, costoUsd, uso.input, uso.output)
     return NextResponse.json({
       text: 'Ho fatto un po\' di analisi ma non sono riuscito a concludere. Prova a riformulare la domanda in modo più specifico.',
       spesaMese,

@@ -3,11 +3,11 @@
 // brief RISTRETTO a una schermata + periodo. Nessun numero lo calcola l'AI: qui produciamo
 // un BriefContext con metriche già pronte + un HASH dei numeri (per la cache/costo).
 
-import { createHash } from 'crypto'
 import { calcolaPeriodo } from '@/lib/contabilita/periodo'
 import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
 import { vistaCassa, semaforoCassa } from '@/lib/contabilita/cassa'
-import type { AllowedAction, BriefContext, HealthStatus, Metric, Timeframe } from '@/lib/copilot/ai'
+import { calcolaAvanzamento, chiavePeriodo, costruisciHash, periodoToTimeframe } from '@/lib/copilot/context/base'
+import type { AllowedAction, BriefContext, HealthStatus, Metric } from '@/lib/copilot/ai'
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
@@ -16,19 +16,6 @@ const SEMAFORO_TO_STATUS: Record<'verde' | 'giallo' | 'rosso', HealthStatus> = {
 }
 const SEMAFORO_LABEL: Record<'verde' | 'giallo' | 'rosso', string> = {
   verde: 'cassa in salute', giallo: 'cassa da tenere d’occhio', rosso: 'cassa in sofferenza',
-}
-
-// I periodi della Contabilità (oggi/settimana/mese/anno) mappati sul Timeframe del brief.
-function periodoToTimeframe(periodo: string): Timeframe {
-  if (periodo === 'oggi') return 'daily'
-  if (periodo === 'settimana') return 'weekly'
-  return 'monthly'
-}
-
-// Ancora del periodo come "YYYY-MM-DD" in componenti locali (coerente con calcolaPeriodo,
-// che costruisce le date in orario locale). Serve da chiave di cache stabile.
-function chiavePeriodo(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 // Deep-link che l'AI può proporre come pulsanti (sola lettura / navigazione).
@@ -47,21 +34,6 @@ export interface FinancialContext {
   riferimentoKey: string // ancora del periodo per la cache
   vuoto: boolean // true se non c'è venduto: niente da interpretare
   corrente: boolean // true se il periodo mostrato è quello in corso (oggi/settimana/mese/anno correnti)
-}
-
-// Avanzamento di un periodo di calendario rispetto a ORA. Serve a dichiarare che i
-// totali sono parziali quando il periodo non è ancora concluso (mese/settimana/anno
-// correnti). `fine` è esclusiva (inizio del periodo successivo).
-function calcolaAvanzamento(inizio: Date, fine: Date): BriefContext['periodProgress'] {
-  const ora = new Date()
-  const GIORNO = 86_400_000
-  const totalDays = Math.max(1, Math.round((fine.getTime() - inizio.getTime()) / GIORNO))
-  const inProgress = ora >= inizio && ora < fine
-  if (!inProgress) return undefined
-  const elapsedMs = ora.getTime() - inizio.getTime()
-  const elapsedDays = Math.min(totalDays, Math.max(1, Math.ceil(elapsedMs / GIORNO)))
-  const pct = Math.min(100, Math.max(1, Math.round((elapsedMs / (fine.getTime() - inizio.getTime())) * 100)))
-  return { inProgress, elapsedDays, totalDays, pct }
 }
 
 // Costruisce il contesto della Contabilità per un periodo. `riferimento` è una data ISO
@@ -129,16 +101,7 @@ export async function buildFinancialContext(
     periodProgress,
   }
 
-  // Hash dei numeri che l'AI interpreta: se non cambiano, serviamo la cache (no chiamata AI).
-  // Includiamo l'avanzamento del periodo: se il periodo è in corso e passa un giorno,
-  // il verdetto va rigenerato (i totali parziali sono cambiati di significato).
-  const impronta = JSON.stringify({
-    periodo, riferimentoKey,
-    m: metrics.map((x) => [x.key, x.value]),
-    status: context.statusHint,
-    avanzamento: periodProgress ? periodProgress.elapsedDays : null,
-  })
-  const hash = createHash('sha1').update(impronta).digest('hex')
+  const hash = costruisciHash(periodo, riferimentoKey, metrics, context.statusHint, periodProgress)
 
   return { context, hash, label: p.label, riferimentoKey, vuoto: cassa.incassi <= 0, corrente: !!periodProgress?.inProgress }
 }
