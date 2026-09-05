@@ -89,9 +89,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
   }
 
-  // Genera SOLO su richiesta esplicita del titolare (tasto "Genera analisi") per i
-  // periodi passati. Per il periodo in corso la card genera in automatico (auto=1).
+  // Richiesta esplicita del titolare (tasto "Genera analisi" / "Aggiorna").
   const genera = searchParams.get('genera') === '1'
+
+  // Auto-generazione automatica SOLO per "oggi". settimana/mese/anno — anche se in
+  // corso — si generano solo su richiesta esplicita: il verdetto su orizzonti lunghi
+  // cambia poco giorno per giorno, e rigenerarlo ogni notte moltiplicava i costi
+  // (fino a 8 generazioni/locale/giorno). Una volta generato resta mostrato finché
+  // il titolare non preme "Aggiorna". (P0.2)
+  const autoGenera = periodo === 'oggi'
 
   // Numeri (sempre dal codice) + hash per la cache. Lo scope sceglie il motore dati;
   // il resto del flusso (cache, budget, narratore, fallback) è identico.
@@ -107,10 +113,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ brief: JSON.parse(cached.brief) as Brief, label, cached: true, generatedAt: cached.generatedAt, corrente })
   }
 
-  // 2. RISPARMIO TOKEN: se il periodo è PASSATO e non c'è una richiesta esplicita di
-  //    generazione, non chiamiamo l'AI. Restituiamo un placeholder "generabile" e la
-  //    card mostra un tasto "Genera analisi AI per questo periodo".
-  if (!corrente && !genera) {
+  // 2. RISPARMIO TOKEN: fuori da "oggi" e senza richiesta esplicita, non chiamiamo
+  //    l'AI. Se esiste già un verdetto salvato (anche con numeri un filo cambiati) lo
+  //    mostriamo ancora — così, una volta generato, mese/anno restano visibili senza
+  //    rigenerarsi ogni notte. Se non c'è nulla di salvato, la card mostra il tasto
+  //    "Genera analisi". In entrambi i casi: zero chiamate AI.
+  if (!autoGenera && !genera) {
+    if (cached) {
+      return NextResponse.json({
+        brief: JSON.parse(cached.brief) as Brief,
+        label, cached: true, generatedAt: cached.generatedAt, corrente,
+        rigenerabile: true, // il frontend può offrire "Aggiorna"
+      })
+    }
     return NextResponse.json({ brief: null, label, generabile: true, corrente })
   }
 

@@ -1,8 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
-import { vistaCassa, semaforoCassa, type StatoSemaforoCassa } from '@/lib/contabilita/cassa'
+import { vistaCassa, semaforoCassa } from '@/lib/contabilita/cassa'
 import { attribuzioneCoperti } from '@/lib/copilot/staff/attribuzione'
 import { baselineOrganico, valutaGiornata } from '@/lib/copilot/staff/baseline'
+import { azioni } from '@/lib/copilot/context/azioni'
+import { SEMAFORO_LABEL, SEMAFORO_TO_STATUS } from '@/lib/copilot/context/base'
 import type { AllowedAction, BriefContext, ContextSection, HealthStatus, Metric, Timeframe } from '@/lib/copilot/ai'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,16 +240,7 @@ function buildMenuMetrics(dishes: DishAgg[]): { metrics: Metric[]; azioni: Allow
 // che resta) → pilota lo status del brief, non l'AI. Così il brief non parla più solo
 // di incasso, ma di quanto resta davvero in cassa. La "cassa che resta" è al lordo di
 // tasse e saldo IVA: non è utile netto. Se non c'è incasso nel periodo, si omette.
-const SEMAFORO_TO_STATUS: Record<StatoSemaforoCassa, HealthStatus> = {
-  verde: 'green',
-  giallo: 'yellow',
-  rosso: 'red',
-}
-const SEMAFORO_LABEL: Record<StatoSemaforoCassa, string> = {
-  verde: 'cassa in salute',
-  giallo: 'cassa da tenere d’occhio',
-  rosso: 'cassa in sofferenza',
-}
+// (SEMAFORO_TO_STATUS / SEMAFORO_LABEL ora sono condivisi in context/base.ts.)
 
 async function buildEconomicSection(
   userId: string,
@@ -391,53 +384,9 @@ async function buildOrganicoSection(
   return { key: 'organico', title: 'Organico e coperti', metrics }
 }
 
-// Azioni consentite per questi brief. In Fase A (sola lettura) sono deep-link a
-// sezioni REALI del gestionale: il frontend le trasforma in pulsanti che portano
-// lì. In Fase 2 alcune diventeranno azioni di scrittura (con conferma).
-const AZIONI: AllowedAction[] = [
-  {
-    id: 'apri_contabilita',
-    kind: 'link',
-    target: { href: '/food/dashboard/contabilita' },
-    description: 'Apri la Contabilità per vedere la cassa del locale (incassi, costi principali, quanto resta).',
-  },
-  {
-    id: 'apri_acquisti',
-    kind: 'link',
-    target: { href: '/food/dashboard/contabilita/acquisti' },
-    description: 'Apri Acquisti/Bolle per registrare quanto spendi dai fornitori e confrontarlo col consumato.',
-  },
-  {
-    id: 'apri_menu',
-    kind: 'link',
-    target: { href: '/food/dashboard/menu' },
-    description: 'Apri la sezione Menu per intervenire su un piatto (prezzo, disponibilità, ordine nel menu).',
-  },
-  {
-    id: 'apri_costi',
-    kind: 'link',
-    target: { href: '/food/dashboard/contabilita/costi' },
-    description: 'Apri Costi & Personale per registrare costi fissi (affitto, utenze, servizi) o rivedere le paghe del personale.',
-  },
-  {
-    id: 'apri_staff',
-    kind: 'link',
-    target: { href: '/food/dashboard/staff' },
-    description: 'Apri Staff per rivedere i turni e il costo del personale (aggiungere/togliere una persona, rigenerare i turni).',
-  },
-  {
-    id: 'apri_analytics',
-    kind: 'link',
-    target: { href: '/food/dashboard/analytics' },
-    description: 'Apri Analytics per approfondire i numeri (Analisi Menu / Ordini / Tavoli).',
-  },
-  {
-    id: 'apri_prenotazioni',
-    kind: 'link',
-    target: { href: '/food/dashboard/clienti/preventivi' },
-    description: 'Apri Prenotazioni tavoli per gestire le prenotazioni.',
-  },
-]
+// Azioni consentite per questi brief: deep-link dal catalogo unico (vedi azioni.ts).
+// Il frontend le trasforma in pulsanti che portano alla sezione reale del gestionale.
+const AZIONI = azioni('apri_contabilita', 'apri_acquisti', 'apri_menu', 'apri_costi', 'apri_staff', 'apri_analytics', 'apri_prenotazioni')
 
 // ── Costruzione del contesto ─────────────────────────────────────────────────
 export async function buildBriefContext(userId: string, timeframe: Timeframe): Promise<BriefContext> {

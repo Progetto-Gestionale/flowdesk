@@ -36,12 +36,17 @@ const ACTION_HREF: Record<string, string> = {
 export default function AiInsightCard({ periodo, riferimento, label, corrente, scope = 'contabilita' }: { periodo: string; riferimento: Date; label?: string; corrente: boolean; scope?: string }) {
   const [brief, setBrief] = useState<Brief | null>(null)
   const [loading, setLoading] = useState(true)
-  // Periodo passato senza verdetto salvato: mostriamo il tasto "Genera" invece di
-  // chiamare l'AI. Diventa true quando la GET risponde { generabile: true }.
+  // Nessun verdetto salvato per un periodo che non si auto-genera (tutto tranne
+  // "oggi"): mostriamo il tasto "Genera" invece di chiamare l'AI. Diventa true
+  // quando la GET risponde { generabile: true }.
   const [generabile, setGenerabile] = useState(false)
+  // Verdetto salvato mostrato ma aggiornabile su richiesta (mese/anno correnti): la
+  // GET risponde { rigenerabile: true } e offriamo un tasto "Aggiorna".
+  const [rigenerabile, setRigenerabile] = useState(false)
 
-  // Carica il verdetto. `forza` = richiesta esplicita del titolare (tasto Genera):
-  // aggiunge &genera=1, così la route chiama l'AI anche per un periodo passato.
+  // Carica il verdetto. `forza` = richiesta esplicita del titolare (tasto Genera /
+  // Aggiorna): aggiunge &genera=1, così la route chiama l'AI anche per i periodi
+  // che non si auto-generano.
   const carica = (forza: boolean) => {
     let vivo = true
     setLoading(true)
@@ -51,7 +56,7 @@ export default function AiInsightCard({ periodo, riferimento, label, corrente, s
       .then((r) => r.json())
       .then((d) => {
         if (!vivo) return
-        if (d.brief) setBrief(d.brief as Brief)
+        if (d.brief) { setBrief(d.brief as Brief); setRigenerabile(!!d.rigenerabile) }
         else if (d.generabile) { setBrief(null); setGenerabile(true) }
       })
       .catch(() => {})
@@ -101,7 +106,7 @@ export default function AiInsightCard({ periodo, riferimento, label, corrente, s
             // la chiedi tu. Un clic genera (e salva) l'analisi solo per questo periodo.
             <div>
               <p className="text-sm text-ink-navy/50 leading-relaxed">
-                Nessuna analisi AI salvata per questo periodo passato. Generala solo se ti serve — così non consumi token inutilmente.
+                Nessuna analisi AI salvata per questo periodo. Generala quando ti serve — così non consumi token inutilmente.
               </p>
               <button
                 onClick={() => carica(true)}
@@ -135,6 +140,14 @@ export default function AiInsightCard({ periodo, riferimento, label, corrente, s
                   className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/15 transition-colors inline-flex items-center gap-1.5">
                   <span className="w-3.5 h-3.5"><IconBot /></span> Approfondisci con l&apos;AI
                 </Link>
+                {/* Verdetto di un periodo in corso (mese/anno): i numeri sono cambiati
+                    da quando è stato generato → il titolare può aggiornarlo a mano. */}
+                {rigenerabile && (
+                  <button onClick={() => carica(true)}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg border border-ink-navy/15 text-ink-navy/60 hover:border-electric-blue hover:text-electric-blue transition-colors">
+                    Aggiorna
+                  </button>
+                )}
               </div>
             </>
           ) : (
