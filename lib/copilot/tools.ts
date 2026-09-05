@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { attribuzioneCoperti } from './staff/attribuzione'
+import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
+import { vistaCassa, semaforoCassa } from '@/lib/contabilita/cassa'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Strumenti dell'Assistente AI — SOLA LETTURA.
@@ -96,6 +98,47 @@ export const copilotTools = [
       required: ['dal', 'al'],
     },
   },
+  {
+    name: 'cassa_periodo',
+    description:
+      'Vista di CASSA del locale in un intervallo: incassi, costo del personale, materie prime (food cost), costi fissi e la CASSA CHE RESTA (incassi meno quei costi) con la sua percentuale e il semaforo. È il dato più richiesto da un titolare. Usalo per "quanto mi resta in cassa questo mese", "quanto ho speso di personale", "che food cost ho", "sto in salute?". La cassa che resta è al lordo di tasse e saldo IVA: non è utile netto.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        dal: { type: 'string', description: 'Data inizio inclusa, YYYY-MM-DD' },
+        al: { type: 'string', description: 'Data fine inclusa, YYYY-MM-DD' },
+      },
+      required: ['dal', 'al'],
+    },
+  },
+  {
+    name: 'margini_piatti',
+    description:
+      'Food cost e MARGINE per piatto in un intervallo (solo i piatti che hanno il food cost impostato). Per piatto: quantità venduta, prezzo medio, food cost medio, margine %. Usalo per "quali piatti rendono di più/di meno", "margini del menu", "cosa mi conviene spingere", "quali piatti perdo". Se nessun piatto ha il food cost, non posso calcolare i margini.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        dal: { type: 'string', description: 'Data inizio inclusa, YYYY-MM-DD' },
+        al: { type: 'string', description: 'Data fine inclusa, YYYY-MM-DD' },
+        ordine: { type: 'string', enum: ['alto', 'basso'], description: '"alto" = margine più alto prima (default), "basso" = margine più basso prima' },
+        limite: { type: 'number', description: 'Quanti piatti restituire (default 10)' },
+      },
+      required: ['dal', 'al'],
+    },
+  },
+  {
+    name: 'acquisti_fornitori',
+    description:
+      'Spesa dai FORNITORI in un intervallo, dalle bolle/fatture registrate: totale netto, numero bolle e dettaglio per fornitore. Usalo per "quanto ho speso di merce a settembre", "quanto ho speso dal fornitore X", "chi mi costa di più". Netto = imponibile (IVA esclusa). Riguarda ciò che hai COMPRATO (non necessariamente consumato).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        dal: { type: 'string', description: 'Data inizio inclusa, YYYY-MM-DD' },
+        al: { type: 'string', description: 'Data fine inclusa, YYYY-MM-DD' },
+      },
+      required: ['dal', 'al'],
+    },
+  },
 ] as const
 
 // ── Helper date/orari ────────────────────────────────────────────────────────
@@ -110,6 +153,7 @@ function intervallo(dal: string, al: string) {
   return { from, to }
 }
 const euro = (n: number) => `${n.toFixed(2)} €`
+const pct1 = (n: number) => `${Math.round(n * 10) / 10}%`
 // Orari in fuso Italia (turni in ora locale, timbrature in UTC) → confronto corretto.
 const dayRome = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
 const oraRome = (d: Date) =>
@@ -287,6 +331,112 @@ async function copertiPerDipendente(userId: string, dal: string, al: string) {
   }
 }
 
+// Vista di CASSA del periodo (il buco "contabilità in chat"): riusa lo stesso motore
+// della pagina Contabilità (riepilogoContabile + vistaCassa). Numeri esatti, non stime.
+async function cassaPeriodo(userId: string, dal: string, al: string) {
+  const { from, to } = intervallo(dal, al)
+  const r = await riepilogoContabile(userId, from, to)
+  const c = vistaCassa(r.conto)
+  const foodPct = c.incassi > 0 ? (c.materiePrime / c.incassi) * 100 : 0
+  const laborPct = c.incassi > 0 ? (c.personale / c.incassi) * 100 : 0
+  return {
+    periodo: `dal ${dal} al ${al}`,
+    incassi: euro(c.incassi),
+    cassa_che_resta: euro(c.cassaResta),
+    cassa_che_resta_pct: pct1(c.cassaPct * 100),
+    semaforo: semaforoCassa(c.cassaPct), // verde | giallo | rosso
+    costo_personale: c.personale > 0 ? euro(c.personale) : 'non impostato',
+    personale_sugli_incassi: c.personale > 0 ? pct1(laborPct) : undefined,
+    materie_prime: euro(c.materiePrime),
+    food_cost_sugli_incassi: pct1(foodPct),
+    costi_fissi: c.costiFissi > 0 ? euro(c.costiFissi) : 'non registrati',
+    acquisti_fornitori_netto: r.acquisti.numero > 0 ? euro(r.acquisti.nettoTotale) : undefined,
+    nota:
+      c.incassi <= 0
+        ? 'Nessun incasso nel periodo.'
+        : 'La cassa che resta è al lordo di tasse e saldo IVA: non è utile netto. Se il costo del personale o i costi fissi non sono impostati, la cassa che resta è sovrastimata.',
+  }
+}
+
+// Food cost e margine per piatto: stessa logica del menu engineering del brief, ma
+// come strumento interrogabile. Solo i piatti col food cost impostato hanno un margine.
+async function marginiPiatti(userId: string, dal: string, al: string, ordine: 'alto' | 'basso', limite: number) {
+  const { from, to } = intervallo(dal, al)
+  const righe = await prisma.rigaOrdine.findMany({
+    where: { ordine: { userId, createdAt: { gte: from, lt: to } } },
+    select: { nome: true, prezzo: true, foodCost: true, quantita: true },
+  })
+  const map = new Map<string, { qty: number; cost: number; costedRevenue: number; withCost: boolean }>()
+  for (const r of righe) {
+    const cur = map.get(r.nome) ?? { qty: 0, cost: 0, costedRevenue: 0, withCost: false }
+    cur.qty += r.quantita
+    if (r.foodCost != null) {
+      cur.cost += r.foodCost * r.quantita
+      cur.costedRevenue += r.prezzo * r.quantita // stesso perimetro del costo → margine coerente
+      cur.withCost = true
+    }
+    map.set(r.nome, cur)
+  }
+  const conFoodCost = [...map.entries()]
+    .filter(([, d]) => d.withCost && d.costedRevenue > 0)
+    .map(([nome, d]) => {
+      const marginePct = ((d.costedRevenue - d.cost) / d.costedRevenue) * 100
+      return {
+        piatto: nome,
+        quantita: d.qty,
+        prezzo_medio: euro(d.costedRevenue / d.qty),
+        food_cost_medio: euro(d.cost / d.qty),
+        margine_pct: Math.round(marginePct),
+      }
+    })
+    .sort((a, b) => (ordine === 'basso' ? a.margine_pct - b.margine_pct : b.margine_pct - a.margine_pct))
+    .slice(0, limite)
+  const senzaFoodCost = [...map.values()].filter((d) => !d.withCost).length
+  return {
+    periodo: `dal ${dal} al ${al}`,
+    criterio: ordine === 'basso' ? 'margine più basso prima' : 'margine più alto prima',
+    piatti: conFoodCost,
+    nota:
+      conFoodCost.length === 0
+        ? 'Nessun piatto ha il food cost impostato nel periodo: senza food cost non posso calcolare i margini. Impostalo dal Menu.'
+        : senzaFoodCost > 0
+          ? `${senzaFoodCost} piatti venduti senza food cost impostato non sono nel calcolo.`
+          : undefined,
+  }
+}
+
+// Spesa dai fornitori dalle bolle/fatture registrate (netto = imponibile IVA esclusa),
+// con dettaglio per fornitore. È ciò che hai COMPRATO, non necessariamente consumato.
+async function acquistiFornitori(userId: string, dal: string, al: string) {
+  const { from, to } = intervallo(dal, al)
+  const fatture = await prisma.fattura.findMany({
+    where: { userId, data: { gte: from, lt: to } },
+    select: { fornitore: true, categoria: true, righe: { select: { imponibile: true } } },
+    orderBy: { data: 'desc' },
+  })
+  const perFornitore = new Map<string, { netto: number; bolle: number }>()
+  let totale = 0
+  for (const f of fatture) {
+    const netto = f.righe.reduce((s, r) => s + r.imponibile, 0)
+    totale += netto
+    const key = f.fornitore || 'fornitore non indicato'
+    const cur = perFornitore.get(key) ?? { netto: 0, bolle: 0 }
+    cur.netto += netto
+    cur.bolle += 1
+    perFornitore.set(key, cur)
+  }
+  const fornitori = [...perFornitore.entries()]
+    .sort((a, b) => b[1].netto - a[1].netto)
+    .map(([nome, v]) => ({ fornitore: nome, spesa_netta: euro(v.netto), bolle: v.bolle }))
+  return {
+    periodo: `dal ${dal} al ${al}`,
+    spesa_netta_totale: euro(totale),
+    numero_bolle: fatture.length,
+    per_fornitore: fornitori,
+    nota: fatture.length === 0 ? 'Nessuna bolla/fattura fornitore registrata nel periodo.' : undefined,
+  }
+}
+
 // ── Dispatcher: esegue lo strumento richiesto. Sempre scoped su userId. ───────
 export async function eseguiCopilotTool(name: string, input: Record<string, unknown>, userId: string): Promise<unknown> {
   try {
@@ -306,6 +456,17 @@ export async function eseguiCopilotTool(name: string, input: Record<string, unkn
     }
     if (name === 'coperti_per_dipendente') {
       return await copertiPerDipendente(userId, String(input.dal), String(input.al))
+    }
+    if (name === 'cassa_periodo') {
+      return await cassaPeriodo(userId, String(input.dal), String(input.al))
+    }
+    if (name === 'margini_piatti') {
+      const ordine = input.ordine === 'basso' ? 'basso' : 'alto'
+      const limite = Number.isFinite(Number(input.limite)) ? Math.max(1, Math.min(30, Number(input.limite))) : 10
+      return await marginiPiatti(userId, String(input.dal), String(input.al), ordine, limite)
+    }
+    if (name === 'acquisti_fornitori') {
+      return await acquistiFornitori(userId, String(input.dal), String(input.al))
     }
     return { errore: `Strumento sconosciuto: ${name}` }
   } catch (e) {
