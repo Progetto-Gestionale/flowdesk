@@ -43,6 +43,34 @@ function formatValue(m: Metric): string {
   return num
 }
 
+// MOTORE DI RILEVANZA (deterministico): riordina le sezioni per priorità invece di
+// mostrarle sempre nello stesso ordine. Niente si nasconde — cambia solo cosa viene
+// prima. Priorità per: gravità (semaforo rosso), azionabilità (piatto in perdita,
+// costi non tracciati), e contesto (di mattina l'outlook di oggi conta di più).
+function ordinaSezioni(context: BriefContext, tf: Timeframe): BriefContext['sections'] {
+  const red = context.statusHint === 'red'
+  const has = (sec: BriefContext['sections'][number], k: string) => sec.metrics.some((m) => m.key === k)
+  // Base per orizzonte: di giorno guardi l'oggi (prenotazioni/organico); su settimana/
+  // mese pesa di più la cassa.
+  const base: Record<string, number> = tf === 'daily'
+    ? { prenotazioni: 50, organico: 46, vendite: 42, economia: 38, menu: 34 }
+    : { economia: 50, vendite: 46, menu: 42, organico: 38, prenotazioni: 34 }
+  const score = (sec: BriefContext['sections'][number]) => {
+    let s = base[sec.key] ?? 20
+    if (sec.key === 'menu' && has(sec, 'menu_in_perdita')) s += 100 // in perdita = azionabile critico
+    if (sec.key === 'economia' && red) s += 80 // cassa in sofferenza sale in cima
+    if (sec.key === 'economia' && (has(sec, 'labor_non_tracciato') || has(sec, 'costi_fissi_mancanti') || has(sec, 'bolle_mancanti'))) s += 25
+    if (sec.key === 'organico' && has(sec, 'organico_verdetto')) s += 35 // sotto/sopra organico
+    if (sec.key === 'menu' && has(sec, 'menu_palla_al_piede')) s += 20
+    if (sec.key === 'prenotazioni' && tf === 'daily') s += 20
+    return s
+  }
+  return context.sections
+    .map((sec, i) => ({ sec, i, s: score(sec) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i) // punteggio desc, stabile sull'ordine originale
+    .map((x) => x.sec)
+}
+
 // Etichetta leggibile del PERIODO a cui si riferisce il brief. Il brief usa finestre
 // mobili GIÀ CHIUSE: daily = ieri, weekly = ultimi 7 giorni fino a ieri, monthly =
 // ultimi 30 giorni fino a ieri. Mostrarlo toglie l'ambiguità ("a che settimana si
@@ -350,103 +378,106 @@ export default function BriefPanel({ onActive, onSpesa, embedded }: BriefPanelPr
         </div>
       )}
 
-      {brief && context && (
-        <div className="space-y-6">
-          {/* BLOCCO 1 — Semaforo + headline */}
-          <div className={`rounded-2xl border px-4 py-4 flex items-start gap-3 ${sem.sfondo}`}>
-            <span className={`w-3 h-3 rounded-full mt-1 shrink-0 ${sem.dot}`} />
-            <div className="min-w-0">
-              <p className={`text-sm font-semibold leading-relaxed ${sem.testo}`}>{brief.headline}</p>
-              {formatGenerato(attuale?.generatedAt) && (
-                <p className={`text-[11px] mt-1 ${sem.testo} opacity-60`}>{formatGenerato(attuale?.generatedAt)}</p>
-              )}
+      {brief && context && (() => {
+        const ordered = ordinaSezioni(context, timeframe)
+        const nPrimary = Math.min(2, ordered.length)
+        const primary = ordered.slice(0, nPrimary)
+        const rest = ordered.slice(nPrimary)
+        const renderSezione = (s: BriefContext['sections'][number], evidenza: boolean) => (
+          <div key={s.key}>
+            <p className={`font-mono text-[10px] font-semibold uppercase tracking-wider mb-2 ${evidenza ? 'text-electric-blue' : 'text-ink-navy/40'}`}>
+              {s.title}
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {s.metrics.map((m) => (
+                <div key={m.key} className={`rounded-xl border border-ink-navy/10 px-3 py-2 ${evidenza ? 'bg-mist' : 'bg-white'}`}>
+                  <p className="text-[11px] text-ink-navy/50 leading-tight">{m.label}</p>
+                  <p className="text-sm font-bold text-ink-navy tabular-nums mt-0.5">{formatValue(m)}</p>
+                  {m.deltaLabel && (
+                    <p className={`text-[11px] mt-0.5 ${
+                      m.delta != null && m.delta < 0 ? 'text-red-600' : m.delta != null && m.delta > 0 ? 'text-emerald-600' : 'text-ink-navy/40'
+                    }`}>
+                      {m.deltaLabel}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* I NUMERI (dal context, non dal testo AI) */}
-          <div className="space-y-4">
-            {context.sections.map((s) => (
-              <div key={s.key}>
-                <p className="font-mono text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider mb-2">
-                  {s.title}
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {s.metrics.map((m) => (
-                    <div key={m.key} className="rounded-xl border border-ink-navy/10 px-3 py-2">
-                      <p className="text-[11px] text-ink-navy/50 leading-tight">{m.label}</p>
-                      <p className="text-sm font-bold text-ink-navy tabular-nums mt-0.5">{formatValue(m)}</p>
-                      {m.deltaLabel && (
-                        <p
-                          className={`text-[11px] mt-0.5 ${
-                            m.delta != null && m.delta < 0 ? 'text-red-600' : m.delta != null && m.delta > 0 ? 'text-emerald-600' : 'text-ink-navy/40'
-                          }`}
-                        >
-                          {m.deltaLabel}
-                        </p>
-                      )}
+        )
+        return (
+          <div className="space-y-5">
+            {/* VERDETTO (hero): semaforo + sintesi + perché + azioni. L'AI dice cosa conta ORA;
+                i numeri restano sotto, calcolati dal codice. */}
+            <div className={`rounded-2xl border px-4 py-4 ${sem.sfondo}`}>
+              <div className="flex items-start gap-3">
+                <span className={`w-3 h-3 rounded-full mt-1.5 shrink-0 ${sem.dot}`} />
+                <div className="min-w-0 flex-1">
+                  <p className={`text-[15px] font-semibold leading-relaxed ${sem.testo}`}>{brief.headline}</p>
+                  {formatGenerato(attuale?.generatedAt) && (
+                    <p className={`text-[11px] mt-1 ${sem.testo} opacity-60`}>{formatGenerato(attuale?.generatedAt)}</p>
+                  )}
+                  {brief.why.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {brief.why.map((w, i) => (
+                        <div key={i} className="rounded-xl bg-white/60 border border-white/50 px-3 py-2">
+                          <p className="text-xs font-semibold text-ink-navy">{w.title}</p>
+                          <p className="text-[13px] text-ink-navy/70 leading-relaxed mt-0.5">{w.detail}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  {brief.actions.length > 0 && (
+                    <div className="mt-3 flex flex-col gap-1.5">
+                      {brief.actions.map((a, i) => {
+                        const def = context.allowedActions.find((x) => x.id === a.id)
+                        const esito = azioniEsito[a.id]
+                        const inCorso = azioneInCorso === a.id
+                        const scrive = def?.kind === 'sposta_in_cima' || def?.kind === 'cambia_prezzo' || def?.kind === 'imposta_disponibilita' || def?.kind === 'imposta_aliquota'
+                        return (
+                          <div key={i} className="flex flex-col gap-1">
+                            <button
+                              onClick={() => eseguiAzione(a)}
+                              disabled={inCorso || !def || (esito?.ok ?? false)}
+                              className={`inline-flex items-center gap-1.5 self-start text-sm font-medium px-3 py-2 rounded-lg border bg-white/70 transition-colors disabled:opacity-50 ${
+                                URGENZA[a.urgency] ?? URGENZA.medium
+                              }`}
+                            >
+                              {inCorso ? 'Attendi…' : a.label}
+                              <span className="w-[14px] h-[14px]">{scrive ? <IconBolt /> : <IconArrowRight />}</span>
+                            </button>
+                            {esito && (
+                              <p className={`text-[11px] ${esito.ok ? 'text-emerald-600' : 'text-red-600'}`}>{esito.msg}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* SEZIONI — riordinate per rilevanza. Le prime due in evidenza, il resto sotto
+                (sempre presente: nulla si nasconde). */}
+            <div className="space-y-4">{primary.map((s) => renderSezione(s, true))}</div>
+            {rest.length > 0 && (
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="h-px bg-ink-navy/10 flex-1" />
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-ink-navy/35 shrink-0">Il resto, sempre qui</span>
+                  <span className="h-px bg-ink-navy/10 flex-1" />
+                </div>
+                <div className="space-y-4">{rest.map((s) => renderSezione(s, false))}</div>
+              </>
+            )}
+
+            <p className="text-[10px] text-ink-navy/40 text-center pt-1">
+              Analisi generata dall&apos;AI sui tuoi dati. Verifica sempre prima di decisioni importanti.
+            </p>
           </div>
-
-          {/* BLOCCO 2 — Il perché */}
-          {brief.why.length > 0 && (
-            <div>
-              <p className="font-mono text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider mb-2">
-                Perché
-              </p>
-              <div className="space-y-2">
-                {brief.why.map((w, i) => (
-                  <div key={i} className="rounded-xl bg-mist px-4 py-3">
-                    <p className="text-sm font-semibold text-ink-navy">{w.title}</p>
-                    <p className="text-sm text-ink-navy/70 leading-relaxed mt-0.5">{w.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* BLOCCO 3 — Cosa fare */}
-          {brief.actions.length > 0 && (
-            <div>
-              <p className="font-mono text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider mb-2">
-                Cosa fare
-              </p>
-              <div className="flex flex-col gap-2">
-                {brief.actions.map((a, i) => {
-                  const def = context.allowedActions.find((x) => x.id === a.id)
-                  const esito = azioniEsito[a.id]
-                  const inCorso = azioneInCorso === a.id
-                  const scrive = def?.kind === 'sposta_in_cima' || def?.kind === 'cambia_prezzo' || def?.kind === 'imposta_disponibilita' || def?.kind === 'imposta_aliquota'
-                  return (
-                    <div key={i} className="flex flex-col gap-1">
-                      <button
-                        onClick={() => eseguiAzione(a)}
-                        disabled={inCorso || !def || (esito?.ok ?? false)}
-                        className={`inline-flex items-center gap-1.5 self-start text-sm font-medium px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
-                          URGENZA[a.urgency] ?? URGENZA.medium
-                        }`}
-                      >
-                        {inCorso ? 'Attendi…' : a.label}
-                        <span className="w-[14px] h-[14px]">{scrive ? <IconBolt /> : <IconArrowRight />}</span>
-                      </button>
-                      {esito && (
-                        <p className={`text-[11px] ${esito.ok ? 'text-emerald-600' : 'text-red-600'}`}>{esito.msg}</p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          <p className="text-[10px] text-ink-navy/40 text-center pt-2">
-            Analisi generata dall'AI sui tuoi dati. Verifica sempre prima di decisioni importanti.
-          </p>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

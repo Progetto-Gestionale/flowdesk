@@ -64,9 +64,6 @@ export default function CopilotaPage() {
   // così le domande di chiarimento usano i numeri del brief senza rifare i tool.
   const [briefTf, setBriefTf] = useState<Timeframe>('daily')
   const [briefReady, setBriefReady] = useState(false)
-  // Il brief resta ancorato in cima alla chat (sticky) e si può ridurre: così non
-  // sparisce dopo tante domande e lo si riapre con un clic, senza scorrere all'inizio.
-  const [briefAperto, setBriefAperto] = useState(true)
   // Se il titolare vuole fare domande fuori dal brief, sgancia la chat: non passa più
   // il periodo del brief → l'assistente risponde a tutto tramite i suoi strumenti.
   const [libera, setLibera] = useState(false)
@@ -218,24 +215,10 @@ export default function CopilotaPage() {
             />
           </div>
         ) : (
-          /* BRIEF — ancorato in cima e comprimibile, così resta sempre a portata */
-          <div className="sticky top-0 z-20 bg-white pt-6 pb-3 -mx-4 sm:-mx-6 px-4 sm:px-6">
-            <div className="rounded-2xl border border-ink-navy/10 bg-white shadow-sm">
-              <button
-                type="button"
-                onClick={() => setBriefAperto(v => !v)}
-                className="w-full flex items-center gap-2 px-4 sm:px-5 py-3 text-left"
-                aria-expanded={briefAperto}>
-                <span className="w-4 h-4 text-electric-blue shrink-0"><IconBot /></span>
-                <span className="text-sm font-semibold text-ink-navy">Brief del locale</span>
-                <span className="ml-auto text-xs font-medium text-ink-navy/40">{briefAperto ? 'Riduci ▲' : 'Apri ▼'}</span>
-              </button>
-              <div className={briefAperto ? 'px-4 sm:px-5 pb-4 border-t border-ink-navy/8' : 'hidden'}>
-                <div className="pt-4">
-                  <BriefPanel embedded onActive={onBriefActive} onSpesa={onBriefSpesa} />
-                </div>
-              </div>
-            </div>
+          /* SUPERFICIE UNIFICATA — verdetto del locale + sezioni riordinate per rilevanza.
+             Ha sostituito il vecchio brief a schede. La chat sotto è l'approfondimento. */
+          <div className="pt-6">
+            <BriefPanel embedded onActive={onBriefActive} onSpesa={onBriefSpesa} />
           </div>
         )}
 
