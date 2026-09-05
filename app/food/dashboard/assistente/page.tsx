@@ -1,40 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconBot, IconSend } from '@/app/components/icons'
-import BriefPanel from '@/app/food/dashboard/components/BriefPanel'
-import AiInsightCard from '@/app/food/dashboard/contabilita/AiInsightCard'
-import type { Timeframe } from '@/lib/copilot/ai'
+import CopilotaSurface from '@/app/food/dashboard/components/CopilotaSurface'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
-// Il periodo indicato (riferimento) cade in quello CORRENTE? Serve alla card per
-// sapere se auto-generare (solo "oggi") o mostrare "Genera analisi" (Fase A / P0.2).
-function isCorrentePeriodo(periodo: string, rif: Date): boolean {
-  const now = new Date()
-  if (periodo === 'anno') return rif.getFullYear() === now.getFullYear()
-  if (periodo === 'mese') return rif.getFullYear() === now.getFullYear() && rif.getMonth() === now.getMonth()
-  if (periodo === 'settimana') {
-    const lun = (d: Date) => { const x = new Date(d); const g = (x.getDay() + 6) % 7; x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - g); return x.getTime() }
-    return lun(rif) === lun(now)
-  }
-  return rif.toDateString() === now.toDateString() // oggi
+// Suggerimenti in base a da dove sei entrato (contabilità/personale) o generici.
+const SUGG: Record<string, string[]> = {
+  contabilita: ['Perché mi resta così poco?', 'Quanto pesa il personale?', 'Quanto ho speso dai fornitori?'],
+  personale: ['Chi ha servito più coperti?', 'Sono coperto abbastanza nel weekend?', 'Com’è cambiato l’organico dal mese scorso?'],
+  default: ['Quanto ho incassato ieri?', 'Qual è il piatto più venduto?', 'Quali piatti vendo di meno questo mese?', 'Come aggiungo un allergene a un piatto?'],
 }
-
-const TF_LABEL: Record<Timeframe, string> = { daily: 'oggi', weekly: 'settimana', monthly: 'mese' }
-
-// Suggerimenti diversi se c'è un brief attivo (chiarimenti) o no (domande generiche).
-const SUGGERIMENTI_BRIEF = [
-  'Perché è andata così?',
-  'Cosa mi conviene fare?',
-  'Spiegami il margine del menu',
-]
-const SUGGERIMENTI_GENERICI = [
-  'Quanto ho incassato ieri?',
-  'Qual è il piatto più venduto questa settimana?',
-  'Come aggiungo un allergene a un piatto?',
-  'Quali piatti vendo di meno questo mese?',
-]
 
 // Memoria locale della chat (per-dispositivo): resta ~24h.
 const STORAGE_KEY = 'food:copilot-chat'
@@ -60,21 +37,11 @@ export default function CopilotaPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [costoEur, setCostoEur] = useState(0)
-  // Brief attivo (dal BriefPanel): guida i suggerimenti e viene passato alla chat
-  // così le domande di chiarimento usano i numeri del brief senza rifare i tool.
-  const [briefTf, setBriefTf] = useState<Timeframe>('daily')
-  const [briefReady, setBriefReady] = useState(false)
-  // Se il titolare vuole fare domande fuori dal brief, sgancia la chat: non passa più
-  // il periodo del brief → l'assistente risponde a tutto tramite i suoi strumenti.
-  const [libera, setLibera] = useState(false)
-  // Contesto Contabilità arrivato da "Approfondisci" (deep-link ?scope=contabilita…):
-  // le domande usano i numeri di quella schermata/periodo invece del brief operativo.
-  const [financial, setFinancial] = useState<{ periodo: string; riferimento: string } | null>(null)
-  // Verdetto d'ingresso: arrivando dal tasto "Analisi AI" (deep-link scope+periodo)
-  // atterriamo sul VERDETTO strutturato di quella schermata/periodo (card riusata),
-  // non su una domanda di chat: più utile e più economico (niente giro tool-use auto).
-  const [entryVerdetto, setEntryVerdetto] = useState<{ scope: string; periodo: string; riferimento: string } | null>(null)
-  const agganciato = briefReady && !libera && !financial
+  // Periodo/riferimento correnti della superficie: aggancia la chat a QUEI numeri
+  // (contesto piccolo e coerente → domande economiche).
+  const [scope, setScope] = useState<{ periodo: string; riferimento: string } | null>(null)
+  // Deep-link iniziale dal tasto "Analisi AI" di Contabilità/Personale.
+  const [entry, setEntry] = useState<{ periodo?: string; riferimento?: string; focus?: string }>({})
   const scrollRef = useRef<HTMLDivElement>(null)
   const idratato = useRef(false)
 
@@ -84,26 +51,11 @@ export default function CopilotaPage() {
       .then((d) => { if (typeof d.costoEur === 'number') setCostoEur(d.costoEur) })
       .catch(() => {})
 
-    // Deep-link da "Approfondisci" nella Contabilità: apre una chat FRESCA sul periodo,
-    // col contesto finanziario, e fa da sola la prima domanda.
+    // Deep-link: apri la superficie già sul periodo/scope giusto, chat fresca.
     const sp = new URLSearchParams(window.location.search)
-    if (sp.get('scope') === 'contabilita' && sp.get('periodo')) {
-      const periodo = sp.get('periodo') as string
-      const riferimento = sp.get('riferimento') ?? ''
-      setFinancial({ periodo, riferimento }) // scoping della chat a quei numeri
-      setEntryVerdetto({ scope: 'contabilita', periodo, riferimento })
-      try { localStorage.removeItem(STORAGE_KEY) } catch {}
-      window.history.replaceState({}, '', '/food/dashboard/assistente') // niente re-seed al refresh
-      idratato.current = true
-      return
-    }
-
-    // Deep-link da "Approfondisci" sulla card Organico: atterra sul verdetto Organico,
-    // chat in modalità libera (usa lo strumento coperti_per_dipendente sui dati veri).
-    if (sp.get('scope') === 'personale' && sp.get('periodo')) {
-      const periodo = sp.get('periodo') as string
-      setLibera(true)
-      setEntryVerdetto({ scope: 'personale', periodo, riferimento: sp.get('riferimento') ?? '' })
+    const scopeParam = sp.get('scope')
+    if ((scopeParam === 'contabilita' || scopeParam === 'personale') && sp.get('periodo')) {
+      setEntry({ periodo: sp.get('periodo') as string, riferimento: sp.get('riferimento') ?? undefined, focus: scopeParam })
       try { localStorage.removeItem(STORAGE_KEY) } catch {}
       window.history.replaceState({}, '', '/food/dashboard/assistente')
       idratato.current = true
@@ -114,45 +66,28 @@ export default function CopilotaPage() {
     idratato.current = true
   }, [])
 
-  useEffect(() => {
-    if (idratato.current && messages.length > 0) salvaChat(messages)
-  }, [messages])
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, loading])
-
-  const onBriefActive = useCallback((tf: Timeframe, hasBrief: boolean) => {
-    setBriefTf(tf); setBriefReady(hasBrief)
-  }, [])
-  const onBriefSpesa = useCallback((eur: number) => setCostoEur(eur), [])
+  useEffect(() => { if (idratato.current && messages.length > 0) salvaChat(messages) }, [messages])
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }) }, [messages, loading])
 
   function nuovaChat() {
     setMessages([])
     try { localStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
-  async function invia(testo: string, finOverride?: { periodo: string; riferimento: string }) {
+  async function invia(testo: string) {
     const domanda = testo.trim()
     if (!domanda || loading) return
     const nuoviMessaggi: Msg[] = [...messages, { role: 'user', content: domanda }]
     setMessages(nuoviMessaggi)
     setInput('')
     setLoading(true)
-    // Priorità al contesto Contabilità (da "Approfondisci"); altrimenti quello del brief.
-    const fin = finOverride ?? financial
     try {
       const res = await fetch('/api/copilot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        // Contesto agganciato (numeri già visti → meno token, coerenza con la schermata):
-        // financial = Contabilità, altrimenti briefTimeframe = brief operativo.
-        body: JSON.stringify({
-          messages: nuoviMessaggi,
-          financial: fin ?? undefined,
-          briefTimeframe: !fin && agganciato ? briefTf : undefined,
-        }),
+        // Aggancio la chat al periodo mostrato dalla superficie (numeri già visti → meno token).
+        body: JSON.stringify({ messages: nuoviMessaggi, financial: scope ?? undefined }),
       })
       const data = await res.json()
       const risposta = res.ok ? (data.text || 'Non ho una risposta per questa domanda.') : `⚠️ ${data.error || 'Si è verificato un errore.'}`
@@ -160,30 +95,24 @@ export default function CopilotaPage() {
       if (res.ok && typeof data.spesaMese?.costoEur === 'number') setCostoEur(data.spesaMese.costoEur)
     } catch {
       setMessages([...nuoviMessaggi, { role: 'assistant', content: '⚠️ Errore di connessione. Riprova.' }])
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  const suggerimenti = entryVerdetto
-    ? (entryVerdetto.scope === 'personale'
-        ? ['Chi ha servito più coperti?', 'Sono coperto abbastanza nel weekend?', 'Com’è cambiato l’organico dal mese scorso?']
-        : ['Perché mi resta così poco?', 'Quanto pesa il personale?', 'Quanto ho speso dai fornitori?'])
-    : agganciato ? SUGGERIMENTI_BRIEF : SUGGERIMENTI_GENERICI
+  const suggerimenti = SUGG[entry.focus ?? 'default'] ?? SUGG.default
 
   return (
     <div className="h-full flex flex-col max-w-3xl mx-auto w-full">
-      {/* Intestazione unica */}
+      {/* Intestazione */}
       <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-ink-navy/10">
         <div className="w-9 h-9 rounded-[28%] bg-electric-blue flex items-center justify-center shrink-0 text-white">
           <span className="w-[20px] h-[20px]"><IconBot /></span>
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-base font-extrabold text-ink-navy leading-tight">Copilota AI</h1>
-          <p className="text-xs text-ink-navy/50">Il brief del locale e le tue domande, nello stesso posto</p>
+          <p className="text-xs text-ink-navy/50">Il quadro del locale e le tue domande, in un posto solo</p>
         </div>
         <div className="text-right shrink-0 leading-tight"
-          title="Spesa stimata dell'AI in questo mese (brief + chat), su tutti i dispositivi del locale. Stima: fatturazione reale in $ nella Console.">
+          title="Spesa stimata dell'AI in questo mese (verdetti + chat), su tutti i dispositivi del locale.">
           <p className="font-mono text-sm font-bold text-ink-navy tabular-nums">
             €{costoEur < 0.01 && costoEur > 0 ? costoEur.toFixed(4) : costoEur.toFixed(2)}
           </p>
@@ -197,41 +126,24 @@ export default function CopilotaPage() {
         )}
       </div>
 
-      {/* Corpo scrollabile: brief in alto, poi conversazione */}
+      {/* Corpo scrollabile: la superficie unica in cima, la chat sotto */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-6 pb-6">
-        {entryVerdetto ? (
-          /* VERDETTO D'INGRESSO — arrivi da "Analisi AI" di Contabilità/Personale:
-             l'analisi strutturata di quella schermata e di quel periodo, in cima.
-             La chat sotto è l'approfondimento (usa già i numeri di questo periodo). */
-          <div className="pt-6 pb-1">
-            <p className="font-mono text-[10px] font-semibold text-ink-navy/40 uppercase tracking-wider mb-2 px-0.5">
-              {entryVerdetto.scope === 'personale' ? 'Analisi organico' : 'Analisi contabilità'}
-            </p>
-            <AiInsightCard
-              scope={entryVerdetto.scope}
-              periodo={entryVerdetto.periodo}
-              riferimento={entryVerdetto.riferimento ? new Date(entryVerdetto.riferimento) : new Date()}
-              corrente={isCorrentePeriodo(entryVerdetto.periodo, entryVerdetto.riferimento ? new Date(entryVerdetto.riferimento) : new Date())}
-            />
-          </div>
-        ) : (
-          /* SUPERFICIE UNIFICATA — verdetto del locale + sezioni riordinate per rilevanza.
-             Ha sostituito il vecchio brief a schede. La chat sotto è l'approfondimento. */
-          <div className="pt-6">
-            <BriefPanel embedded onActive={onBriefActive} onSpesa={onBriefSpesa} />
-          </div>
-        )}
+        <div className="pt-6">
+          <CopilotaSurface
+            initialPeriodo={entry.periodo}
+            initialRiferimento={entry.riferimento}
+            focus={entry.focus}
+            onSpesa={setCostoEur}
+            onScope={(periodo, riferimento) => setScope({ periodo, riferimento })}
+          />
+        </div>
 
-        {/* CHAT */}
-        <div className="pt-3">
+        {/* CHAT — l'approfondimento sui numeri qui sopra */}
+        <div className="pt-6 mt-6 border-t border-ink-navy/10">
           {messages.length === 0 ? (
-            <div className="text-center pt-2">
+            <div className="text-center">
               <p className="text-ink-navy/70 text-sm mb-4 max-w-sm mx-auto">
-                {entryVerdetto
-                  ? 'Ecco l’analisi qui sopra. Chiedimi un approfondimento: ho già i numeri di questo periodo.'
-                  : agganciato
-                    ? 'Fai una domanda su questo brief: ho già i numeri sotto mano.'
-                    : 'Fammi una domanda sul tuo locale o su come usare Flowest.'}
+                Chiedimi un approfondimento su questo periodo, o qualsiasi cosa sul tuo locale.
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
                 {suggerimenti.map((s) => (
@@ -272,30 +184,10 @@ export default function CopilotaPage() {
 
       {/* Input */}
       <div className="px-4 sm:px-6 py-4 border-t border-ink-navy/10">
-        {financial && (
+        {scope && (
           <div className="mb-2 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full inline-block shrink-0 bg-electric-blue" />
-            <p className="text-[11px] text-ink-navy/50">Chat sulla <b>Contabilità</b> ({TF_LABEL[financial.periodo === 'settimana' ? 'weekly' : financial.periodo === 'oggi' ? 'daily' : 'monthly']}): le domande usano quei numeri.</p>
-          </div>
-        )}
-        {briefReady && !financial && (
-          <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-[11px] text-ink-navy/50 flex items-center gap-1.5 min-w-0">
-              <span className={`w-1.5 h-1.5 rounded-full inline-block shrink-0 ${agganciato ? 'bg-electric-blue' : 'bg-ink-navy/25'}`} />
-              {agganciato
-                ? <>Chat sul brief di {TF_LABEL[briefTf]}: le domande usano quei numeri.</>
-                : <>Domande libere: chiedo a tutti i dati del locale.</>}
-            </p>
-            <div className="inline-flex bg-mist rounded-lg p-0.5 shrink-0">
-              <button onClick={() => setLibera(false)}
-                className={`text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors ${agganciato ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy'}`}>
-                Sul brief
-              </button>
-              <button onClick={() => setLibera(true)}
-                className={`text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors ${!agganciato ? 'bg-white text-ink-navy shadow-sm' : 'text-ink-navy/50 hover:text-ink-navy'}`}>
-                Domande libere
-              </button>
-            </div>
+            <p className="text-[11px] text-ink-navy/50">Le domande usano i numeri del periodo mostrato qui sopra.</p>
           </div>
         )}
         <form onSubmit={(e) => { e.preventDefault(); invia(input) }} className="flex items-end gap-2">
@@ -304,7 +196,7 @@ export default function CopilotaPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(input) } }}
             rows={1}
-            placeholder={agganciato ? 'Chiedi un chiarimento sul brief…' : 'Scrivi una domanda…'}
+            placeholder="Scrivi una domanda…"
             className="flex-1 resize-none rounded-xl border border-ink-navy/15 px-4 py-2.5 text-sm text-ink-navy focus:outline-none focus:border-electric-blue max-h-32"
           />
           <button type="submit" disabled={loading || !input.trim()}
