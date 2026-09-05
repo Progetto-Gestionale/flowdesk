@@ -4,7 +4,8 @@ import { vistaCassa, semaforoCassa } from '@/lib/contabilita/cassa'
 import { attribuzioneCoperti } from '@/lib/copilot/staff/attribuzione'
 import { baselineOrganico, valutaGiornata } from '@/lib/copilot/staff/baseline'
 import { azioni } from '@/lib/copilot/context/azioni'
-import { SEMAFORO_LABEL, SEMAFORO_TO_STATUS } from '@/lib/copilot/context/base'
+import { calcolaPeriodo } from '@/lib/contabilita/periodo'
+import { SEMAFORO_LABEL, SEMAFORO_TO_STATUS, calcolaAvanzamento, chiavePeriodo, costruisciHash, periodoToTimeframe } from '@/lib/copilot/context/base'
 import type { AllowedAction, BriefContext, ContextSection, HealthStatus, Metric, Timeframe } from '@/lib/copilot/ai'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -545,4 +546,133 @@ export async function buildBriefContext(userId: string, timeframe: Timeframe): P
     // Semaforo deterministico dal margine netto: se c'è, pilota lo status del brief.
     statusHint,
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPERFICIE UNICA (Copilota): contesto a TUTTE le sezioni per un PERIODO DI
+// CALENDARIO (oggi/settimana/mese/anno + navigazione passato), coerente con la
+// Contabilità (date locali via calcolaPeriodo, non finestre mobili). Riusa i motori
+// cassa/organico (Date-based); vendite/menu/prenotazioni su Date qui sotto. È la base
+// della pagina Copilota unificata: verdetto + numeri per QUALSIASI periodo scelto.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Vendite su [from, to) con date (createdAt) — coerente coi motori della contabilità.
+async function salesAggD(userId: string, from: Date, to: Date): Promise<Sales> {
+  const ordini = await prisma.ordine.findMany({
+    where: { userId, createdAt: { gte: from, lt: to } },
+    select: { tipo: true, totale: true, coperti: true },
+  })
+  let incasso = 0
+  let coperti = 0
+  const perTipo: Record<string, number> = {}
+  for (const o of ordini) {
+    incasso += o.totale ?? 0
+    coperti += o.coperti ?? 0
+    const t = o.tipo || 'tavolo'
+    perTipo[t] = (perTipo[t] ?? 0) + (o.totale ?? 0)
+  }
+  return { incasso: round2(incasso), ordini: ordini.length, coperti, scontrino: ordini.length ? round2(incasso / ordini.length) : 0, perTipo }
+}
+
+// Aggregazione menu su [from, to) con date (per il menu engineering).
+async function menuAggD(userId: string, from: Date, to: Date): Promise<DishAgg[]> {
+  const righe = await prisma.rigaOrdine.findMany({
+    where: { ordine: { userId, createdAt: { gte: from, lt: to } } },
+    select: { nome: true, prezzo: true, foodCost: true, quantita: true, piattoId: true },
+  })
+  const map = new Map<string, DishAgg>()
+  for (const r of righe) {
+    const cur = map.get(r.nome) ?? { nome: r.nome, qty: 0, revenue: 0, cost: 0, costedRevenue: 0, withCost: false }
+    if (r.piattoId) cur.piattoId = r.piattoId
+    cur.qty += r.quantita
+    cur.revenue += r.prezzo * r.quantita
+    if (r.foodCost != null) { cur.cost += r.foodCost * r.quantita; cur.costedRevenue += r.prezzo * r.quantita; cur.withCost = true }
+    map.set(r.nome, cur)
+  }
+  return [...map.values()]
+}
+
+export interface CopilotaContext {
+  context: BriefContext
+  hash: string
+  label: string
+  riferimentoKey: string
+  vuoto: boolean // niente venduto nel periodo
+  corrente: boolean // periodo in corso (oggi/settimana/mese/anno correnti)
+}
+
+export async function buildCopilotaContext(userId: string, periodo: string, riferimento?: string | null): Promise<CopilotaContext> {
+  const p = calcolaPeriodo(periodo, riferimento)
+  const tf = periodoToTimeframe(periodo)
+  const from = p.inizio
+  const to = p.fine
+  // Periodo precedente (stesso tipo) per i delta delle vendite: un istante prima
+  // dell'inizio cade nel periodo precedente, e calcolaPeriodo ne dà i confini esatti.
+  const pv = calcolaPeriodo(periodo, new Date(from.getTime() - 1).toISOString())
+
+  const [cur, prev] = await Promise.all([salesAggD(userId, from, to), salesAggD(userId, pv.inizio, pv.fine)])
+  const sections: ContextSection[] = []
+
+  // ── Vendite ──
+  const dInc = pctDelta(cur.incasso, prev.incasso)
+  const dSc = pctDelta(cur.scontrino, prev.scontrino)
+  const venMetrics: Metric[] = [
+    { key: 'incasso', label: 'Incasso', value: cur.incasso, unit: 'EUR', delta: dInc?.delta, deltaLabel: dInc ? `${dInc.label} vs ${tf === 'daily' ? 'ieri' : 'periodo prec.'}` : undefined },
+    { key: 'coperti', label: 'Coperti', value: cur.coperti, unit: 'coperti' },
+    { key: 'scontrino_medio', label: 'Scontrino medio', value: cur.scontrino, unit: 'EUR', delta: dSc?.delta, deltaLabel: dSc ? `${dSc.label} vs periodo prec.` : undefined },
+    { key: 'numero_ordini', label: 'Ordini', value: cur.ordini },
+  ]
+  const tipi = Object.keys(cur.perTipo)
+  if (tipi.length > 1) for (const t of tipi) venMetrics.push({ key: `incasso_${t}`, label: `Incasso ${t}`, value: round2(cur.perTipo[t]), unit: 'EUR' })
+  sections.push({ key: 'vendite', title: `Vendite · ${p.label}`, metrics: venMetrics })
+
+  // ── Cassa (motore contabilità, Date-based) ──
+  let statusHint: HealthStatus | undefined
+  try {
+    const eco = await buildEconomicSection(userId, from, to, tf)
+    if (eco) { sections.push(eco.section); statusHint = eco.statusHint }
+  } catch (e) { console.error('[COPILOTA] sezione cassa non disponibile:', e) }
+
+  // ── Organico (motore staff, Date-based) ──
+  try {
+    const giornoYmd = periodo === 'oggi' ? dayRome(from) : undefined
+    const organico = await buildOrganicoSection(userId, from, to, tf, giornoYmd)
+    if (organico) sections.push(organico)
+  } catch (e) { console.error('[COPILOTA] sezione organico non disponibile:', e) }
+
+  // ── Prenotazioni del periodo ──
+  try {
+    const pren = await prisma.appuntamento.findMany({ where: { userId, data: { gte: from, lt: to } }, select: { coperti: true } })
+    if (pren.length > 0) {
+      const copertiPren = pren.reduce((s, a) => s + (a.coperti ?? 0), 0)
+      sections.push({ key: 'prenotazioni', title: 'Prenotazioni del periodo', metrics: [
+        { key: 'prenotazioni_periodo', label: 'Prenotazioni', value: pren.length },
+        { key: 'coperti_prenotati', label: 'Coperti prenotati', value: copertiPren, unit: 'coperti' },
+      ] })
+    }
+  } catch (e) { console.error('[COPILOTA] sezione prenotazioni non disponibile:', e) }
+
+  // ── Menu engineering (serve volume: non su "oggi") ──
+  let azioniMenu: AllowedAction[] = []
+  if (periodo !== 'oggi') {
+    const dishes = await menuAggD(userId, from, to)
+    const { metrics, azioni: azM } = buildMenuMetrics(dishes)
+    if (metrics.length) sections.push({ key: 'menu', title: 'Menu engineering', metrics })
+    azioniMenu = azM
+  }
+
+  const periodProgress = calcolaAvanzamento(from, to)
+  const context: BriefContext = {
+    restaurantId: userId,
+    timeframe: tf,
+    period: { start: from.toISOString().slice(0, 10), end: to.toISOString().slice(0, 10) },
+    locale: 'it-IT',
+    sections,
+    allowedActions: [...azioniMenu, ...azioni('apri_contabilita', 'apri_menu', 'apri_costi', 'apri_staff', 'apri_acquisti', 'apri_analytics')],
+    statusHint,
+    periodProgress,
+  }
+  const riferimentoKey = chiavePeriodo(from)
+  const hash = costruisciHash(periodo, riferimentoKey, sections.flatMap((s) => s.metrics), statusHint, periodProgress)
+  return { context, hash, label: p.label, riferimentoKey, vuoto: cur.incasso <= 0, corrente: !!periodProgress?.inProgress }
 }
