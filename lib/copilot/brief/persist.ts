@@ -47,6 +47,12 @@ export async function caricaBrief(userId: string, timeframe: Timeframe): Promise
       where: { userId_timeframe: { userId, timeframe } },
     })
     if (!row) return null
+    // Freschezza: senza il cron del mattino, un brief salvato IERI resterebbe servito
+    // per sempre (headline "Ieri, <data>" ormai vecchia). Se il brief è di un giorno
+    // passato lo trattiamo come non-pronto → il frontend lo rigenera al primo accesso
+    // di oggi (generazione lazy on-access). Vale per tutti i periodi: anche "ultimi 7
+    // giorni"/"ultimi 30 giorni" sono finestre mobili che cambiano ogni giorno.
+    if (row.data.getTime() !== giornoRiferimento().getTime()) return null
     return {
       brief: JSON.parse(row.brief) as Brief,
       context: JSON.parse(row.context) as BriefContext,

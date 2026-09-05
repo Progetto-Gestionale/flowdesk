@@ -37,7 +37,7 @@ export const copilotTools = [
         entita: { type: 'string', enum: ENTITA as unknown as string[], description: 'Quale tabella leggere' },
         dal: { type: 'string', description: 'Opzionale. Data inizio inclusa, YYYY-MM-DD (per le entità con una data)' },
         al: { type: 'string', description: 'Opzionale. Data fine inclusa, YYYY-MM-DD' },
-        limite: { type: 'number', description: 'Quante righe al massimo (default 100, max 300)' },
+        limite: { type: 'number', description: 'Quante righe al massimo (default 50, max 150). Alza solo se ti servono davvero più righe.' },
       },
       required: ['entita'],
     },
@@ -118,8 +118,8 @@ const hhmmToMin = (h: string) => { const [hh, mm] = h.split(':').map(Number); re
 const minToHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
 // ── Accesso generale ai dati ─────────────────────────────────────────────────
-async function interrogaDati(userId: string, entita: string, dal?: string, al?: string, limite = 100) {
-  const take = Math.max(1, Math.min(300, Math.floor(limite) || 100))
+async function interrogaDati(userId: string, entita: string, dal?: string, al?: string, limite = 50) {
+  const take = Math.max(1, Math.min(150, Math.floor(limite) || 50))
   const range = dal && al ? intervallo(dal, al) : null
   const dr = (col: string) => (range ? { [col]: { gte: range.from, lt: range.to } } : {})
 
@@ -291,7 +291,7 @@ async function copertiPerDipendente(userId: string, dal: string, al: string) {
 export async function eseguiCopilotTool(name: string, input: Record<string, unknown>, userId: string): Promise<unknown> {
   try {
     if (name === 'interroga_dati') {
-      return await interrogaDati(userId, String(input.entita), input.dal ? String(input.dal) : undefined, input.al ? String(input.al) : undefined, Number(input.limite) || 100)
+      return await interrogaDati(userId, String(input.entita), input.dal ? String(input.dal) : undefined, input.al ? String(input.al) : undefined, Number(input.limite) || 50)
     }
     if (name === 'incasso_periodo') {
       return await incassoPeriodo(userId, String(input.dal), String(input.al))
