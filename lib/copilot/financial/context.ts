@@ -6,26 +6,14 @@
 import { calcolaPeriodo } from '@/lib/contabilita/periodo'
 import { riepilogoContabile } from '@/lib/contabilita/chiusuraGiorno'
 import { vistaCassa, semaforoCassa } from '@/lib/contabilita/cassa'
-import { calcolaAvanzamento, chiavePeriodo, costruisciHash, periodoToTimeframe } from '@/lib/copilot/context/base'
-import type { AllowedAction, BriefContext, HealthStatus, Metric } from '@/lib/copilot/ai'
+import { calcolaAvanzamento, chiavePeriodo, costruisciHash, periodoToTimeframe, SEMAFORO_LABEL, SEMAFORO_TO_STATUS } from '@/lib/copilot/context/base'
+import { azioni } from '@/lib/copilot/context/azioni'
+import type { BriefContext, Metric } from '@/lib/copilot/ai'
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-const SEMAFORO_TO_STATUS: Record<'verde' | 'giallo' | 'rosso', HealthStatus> = {
-  verde: 'green', giallo: 'yellow', rosso: 'red',
-}
-const SEMAFORO_LABEL: Record<'verde' | 'giallo' | 'rosso', string> = {
-  verde: 'cassa in salute', giallo: 'cassa da tenere d’occhio', rosso: 'cassa in sofferenza',
-}
-
-// Deep-link che l'AI può proporre come pulsanti (sola lettura / navigazione).
-const AZIONI: AllowedAction[] = [
-  { id: 'apri_menu', kind: 'link', target: { href: '/food/dashboard/menu' }, description: 'Apri il Menu per ritoccare prezzo/food cost di un piatto.' },
-  { id: 'apri_acquisti', kind: 'link', target: { href: '/food/dashboard/contabilita/acquisti' }, description: 'Apri Acquisti/Bolle per registrare quanto spendi dai fornitori e confrontarlo col consumato.' },
-  { id: 'apri_costi', kind: 'link', target: { href: '/food/dashboard/contabilita/costi' }, description: 'Apri Costi & Personale per registrare costi fissi (affitto, utenze) o rivedere le paghe.' },
-  { id: 'apri_staff', kind: 'link', target: { href: '/food/dashboard/staff' }, description: 'Apri Staff per rivedere i turni e il costo del personale (aggiungere/togliere una persona, rigenerare i turni).' },
-  { id: 'apri_impostazioni', kind: 'link', target: { href: '/food/dashboard/contabilita/impostazioni' }, description: 'Apri Impostazioni contabili (moltiplicatore costo personale).' },
-]
+// Deep-link che l'AI può proporre come pulsanti (dal catalogo unico, vedi azioni.ts).
+const AZIONI = azioni('apri_menu', 'apri_acquisti', 'apri_costi', 'apri_staff', 'apri_impostazioni')
 
 export interface FinancialContext {
   context: BriefContext

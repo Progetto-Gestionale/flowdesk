@@ -9,14 +9,12 @@ import { calcolaPeriodo, type Periodo } from '@/lib/contabilita/periodo'
 import { attribuzioneCoperti, type AttribuzioneCoperti } from './attribuzione'
 import { baselineOrganico, valutaGiornata, type Baseline } from './baseline'
 import { calcolaAvanzamento, chiavePeriodo, costruisciHash, periodoToTimeframe } from '@/lib/copilot/context/base'
-import type { AllowedAction, BriefContext, HealthStatus, Metric } from '@/lib/copilot/ai'
+import { azioni } from '@/lib/copilot/context/azioni'
+import type { BriefContext, HealthStatus, Metric } from '@/lib/copilot/ai'
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 
-const AZIONI: AllowedAction[] = [
-  { id: 'apri_staff', kind: 'link', target: { href: '/food/dashboard/staff' }, description: 'Apri Staff per rivedere i turni e l’organico (aggiungere/togliere una persona su un certo giorno, rigenerare i turni).' },
-  { id: 'apri_analitica_personale', kind: 'link', target: { href: '/food/dashboard/analytics' }, description: 'Apri Analytics · Personale per vedere i coperti serviti per dipendente e lo storico dell’organico per giorno della settimana.' },
-]
+const AZIONI = azioni('apri_staff', 'apri_analitica_personale')
 
 export interface StaffContextResult {
   context: BriefContext

@@ -7,7 +7,21 @@
 // (stesse chiavi, stesso ordine) → la cache delle insight NON si invalida.
 
 import { createHash } from 'crypto'
+import type { StatoSemaforoCassa } from '@/lib/contabilita/cassa'
 import type { BriefContext, HealthStatus, Metric, Timeframe } from '@/lib/copilot/ai'
+
+// Semaforo cassa → stato del brief + etichetta. Erano duplicati identici in
+// brief/context.ts e financial/context.ts (Dup.1, parte verbatim).
+export const SEMAFORO_TO_STATUS: Record<StatoSemaforoCassa, HealthStatus> = {
+  verde: 'green',
+  giallo: 'yellow',
+  rosso: 'red',
+}
+export const SEMAFORO_LABEL: Record<StatoSemaforoCassa, string> = {
+  verde: 'cassa in salute',
+  giallo: 'cassa da tenere d’occhio',
+  rosso: 'cassa in sofferenza',
+}
 
 // I periodi della Contabilità/Organico (oggi/settimana/mese/anno) → Timeframe del brief.
 export function periodoToTimeframe(periodo: string): Timeframe {
